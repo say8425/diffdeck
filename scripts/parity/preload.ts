@@ -1,8 +1,9 @@
-// bunfig.toml `[test] preload` entry: registers the reusable css-inline plugin
-// (scripts/css-inline-plugin.ts) with the Bun runtime so `bun test` can resolve
+// bunfig.toml `[test] preload` entry: registers the runtime css-inline plugin
+// (scripts/css-inline-plugin.ts) with the Bun runtime so `bun test` resolves
 // the forked packages' `import styles from '../style.css?inline'` imports to the
-// real stylesheet text. Same plugin the build (scripts/parity/build.ts) uses.
+// real stylesheet text. The build (scripts/parity/build.ts) uses the bundler
+// variant from the same module.
 import { plugin } from "bun";
-import { cssInlinePlugin } from "../css-inline-plugin.ts";
+import { cssInlineRuntimePlugin } from "../css-inline-plugin.ts";
 
-await plugin(cssInlinePlugin);
+await plugin(cssInlineRuntimePlugin);
