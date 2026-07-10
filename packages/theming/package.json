@@ -5,6 +5,9 @@
 	"main": "./src/index.ts",
 	"exports": {
 		".": "./src/index.ts",
+		"./color": "./src/color.ts",
+		"./themes": "./src/themes.ts",
+		"./react": "./src/react.ts",
 		"./themes/*": "./themes/*"
 	},
 	"dependencies": {

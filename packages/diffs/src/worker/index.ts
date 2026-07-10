@@ -1,0 +1,7 @@
+import type { AllWorkerTasks, DiffRendererInstance, FileRendererInstance, InitializeSuccessResponse, InitializeWorkerRequest, InitializeWorkerTask, RegisterThemeSuccessResponse, RenderDiffRequest, RenderDiffSuccessResponse, RenderDiffTask, RenderErrorResponse, RenderFileRequest, RenderFileSuccessResponse, RenderFileTask, RenderSuccessResponse, ResolvedLanguage, SetRenderOptionsWorkerRequest, SetRenderOptionsWorkerTask, SubmitRequest, WorkerInitializationRenderOptions, WorkerPoolOptions, WorkerRenderingOptions, WorkerRequest, WorkerRequestId, WorkerResponse, WorkerStats } from './types';
+import { WorkerPoolManager } from './WorkerPoolManager';
+import { getOrCreateWorkerPoolSingleton, terminateWorkerPoolSingleton } from './getOrCreateWorkerPoolSingleton';
+import type { SetupWorkerPoolProps } from './getOrCreateWorkerPoolSingleton';
+
+export { WorkerPoolManager, getOrCreateWorkerPoolSingleton, terminateWorkerPoolSingleton };
+export type { AllWorkerTasks, DiffRendererInstance, FileRendererInstance, InitializeSuccessResponse, InitializeWorkerRequest, InitializeWorkerTask, RegisterThemeSuccessResponse, RenderDiffRequest, RenderDiffSuccessResponse, RenderDiffTask, RenderErrorResponse, RenderFileRequest, RenderFileSuccessResponse, RenderFileTask, RenderSuccessResponse, ResolvedLanguage, SetRenderOptionsWorkerRequest, SetRenderOptionsWorkerTask, SetupWorkerPoolProps, SubmitRequest, WorkerInitializationRenderOptions, WorkerPoolOptions, WorkerRenderingOptions, WorkerRequest, WorkerRequestId, WorkerResponse, WorkerStats };

@@ -1,0 +1,36 @@
+{
+	"name": "@diffdeck/diffs",
+	"version": "0.0.0",
+	"type": "module",
+	"main": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"dependencies": {
+		"@diffdeck/theming": "workspace:*",
+		"@shikijs/transformers": "4.3.0",
+		"diff": "9.0.0",
+		"hast-util-to-html": "9.0.5",
+		"lru_map": "0.4.1",
+		"shiki": "4.3.0"
+	},
+	"devDependencies": {
+		"@types/hast": "3.0.4",
+		"@types/react": "19.2.7",
+		"@types/react-dom": "19.2.3",
+		"react": "19.2.7",
+		"react-dom": "19.2.7"
+	},
+	"peerDependencies": {
+		"react": "^18.3.1 || ^19.0.0",
+		"react-dom": "^18.3.1 || ^19.0.0"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": true
+		},
+		"react-dom": {
+			"optional": true
+		}
+	}
+}
