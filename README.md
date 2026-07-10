@@ -6,13 +6,29 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
-> **Status: Foundation.** The four forked packages compile, type-check, and render a diff + file tree in the browser. The viewer/server app, de-preact, and CLI are tracked as follow-on work (see [Roadmap](#roadmap)).
+> **Status: Foundation.** The four forked packages compile, type-check, and render a diff + file tree in the browser (shown below). The viewer/server app, de-preact, and CLI are follow-on work.
+
+![diffdeck rendering a diff with syntax highlighting and a file tree](docs/screenshot.png)
 
 ## What is this?
 
 diffdeck is the local diff viewer originally embedded in [cc-statusline](https://github.com/say8425/cc-statusline), extracted into its own product. Instead of depending on the upstream Pierre packages — which move fast (`@pierre/diffs` churns heavily; `@pierre/trees` is pre-1.0 beta) and whose internal markup we had already coupled to heavily — diffdeck **recovers the original TypeScript from the packages' source maps and vendors it**, so we own the rendering engine outright.
 
 The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, ~27k lines) is kept as-is, while the parts we customize live in our own code.
+
+## Features
+
+What the diff-rendering engine provides (all demonstrated by the render above):
+
+- **Syntax-highlighted diffs** via [Shiki](https://shiki.style/) with TextMate themes (light + dark).
+- **Full old/new file diffs**, not just patches — so unchanged context can be collapsed and **expanded on demand**.
+- **Unified and split** layouts.
+- **File-tree sidebar** with git-status badges, natural sort, and **flatten** (compacting single-child folder chains).
+- **Image diffs** — changed binary images render inline with old/new panels.
+- **Virtualized rendering** that stays smooth on large diffs, with sticky file headers.
+- **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
+
+The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and is being migrated into diffdeck's `apps/`.
 
 ## Architecture
 
@@ -22,8 +38,8 @@ packages/
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (preact render skin, for now)
-apps/           viewer + server app (Roadmap: Plan 2)
-bin/            diffdeck CLI (Roadmap: Plan 5)
+apps/           viewer + server app (in progress)
+bin/            diffdeck CLI (in progress)
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
 ```
 
@@ -43,23 +59,13 @@ bun run format      # oxfmt
 
 ### Render-parity harness
 
-Confirms the forked `CodeView` + `FileTree` actually render:
+Reproduces the screenshot above — confirms the forked `CodeView` + `FileTree` actually render:
 
 ```bash
 bun run scripts/parity/build.ts
 cd scripts/parity && python3 -m http.server 8099
 # open http://127.0.0.1:8099/index.html
 ```
-
-## Roadmap
-
-| Plan | Scope | Status |
-| ---- | ----- | ------ |
-| 1 — Foundation | Fork the four packages from source maps; type-check + render parity | ✅ Done |
-| 2 — Viewer + server app | Migrate cc-statusline's `viewer`/`diff-server` into `apps/` | Planned |
-| 3 — De-preact | Port `trees`' preact render skin to vanilla; drop preact | Planned |
-| 4 — Coupling hardening | Promote internal markup to a stable contract; unify sort; canary tests | Planned |
-| 5 — CLI + cutover | `bin/diffdeck.ts`, publish `@say8425/diffdeck`, cc-statusline switches to `bunx` | Planned |
 
 ## Provenance & License
 
