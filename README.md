@@ -8,7 +8,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 
 > **Status: Foundation.** The four forked packages compile, type-check, and render a diff + file tree in the browser (shown below). The viewer/server app, de-preact, and CLI are follow-on work.
 
-![diffdeck rendering a diff with syntax highlighting and a file tree](docs/screenshot.png)
+![diffdeck rendering a large multi-file diff with syntax highlighting and a deep, flattened file tree](docs/screenshot.png)
 
 ## What is this?
 

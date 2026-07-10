@@ -1,16 +1,205 @@
 [
 	{
-		"name": "src/greet.ts",
+		"name": "src/core/engine/renderer/pipeline/tokenizer.ts",
 		"status": "modified",
 		"binary": false,
-		"oldContents": "export function greet(name: string): string {\n\treturn \"Hello, \" + name + \"!\";\n}\n",
-		"newContents": "export function greet(name: string): string {\n\tconst trimmed = name.trim();\n\treturn `Hello, ${trimmed}!`;\n}\n"
+		"oldContents": "export function tokenize(input: string, pos: number) {\nimport { GrammarState } from '../grammar';\n  buffer.push(normalize(chunk[1]));\n  buffer.push(normalize(chunk[2]));\n  const token3 = scan(input, pos + 3);\n  buffer.push(normalize(chunk[4]));\n  emit(token5);\n  const token6 = scan(input, pos + 6);\n  buffer.push(normalize(chunk[7]));\n  buffer.push(normalize(chunk[8]));\n  const token9 = scan(input, pos + 9);\n  emit(token10);\n  buffer.push(normalize(chunk[11]));\n  const token12 = scan(input, pos + 12);\n  buffer.push(normalize(chunk[13]));\n  buffer.push(normalize(chunk[14]));\n  const token15 = scan(input, pos + 15);\n  buffer.push(normalize(chunk[16]));\n  buffer.push(normalize(chunk[17]));\n  const token18 = scan(input, pos + 18);\n  buffer.push(normalize(chunk[19]));\n  emit(token20);\n  const token21 = scan(input, pos + 21);\n  buffer.push(normalize(chunk[22]));\n  buffer.push(normalize(chunk[23]));\n  const token24 = scan(input, pos + 24);\n  emit(token25);\n  buffer.push(normalize(chunk[26]));\n  const token27 = scan(input, pos + 27);\n  buffer.push(normalize(chunk[28]));\n  buffer.push(normalize(chunk[29]));\n  const token30 = scan(input, pos + 30);\n  buffer.push(normalize(chunk[31]));\n  buffer.push(normalize(chunk[32]));\n  const token33 = scan(input, pos + 33);\n  return buffer.flush();\n}\n",
+		"newContents": "export function tokenize(input: string, pos: number, state: GrammarState) {\nimport { GrammarState, ThemeCtx } from '../grammar';\n  buffer.push(normalize(chunk[1]));\n  buffer.push(normalize(chunk[2]));\n  const token3 = scanFast(input, pos + 3, state);\n  buffer.push(normalize(chunk[4]));\n  emit(token5, theme.resolve(token5.scope));\n  const token6 = scanFast(input, pos + 6, state);\n  buffer.push(normalize(chunk[7]));\n  buffer.push(normalize(chunk[8]));\n  const token9 = scanFast(input, pos + 9, state);\n  emit(token10, theme.resolve(token10.scope));\n  buffer.push(normalize(chunk[11]));\n  const token12 = scanFast(input, pos + 12, state);\n  buffer.push(normalize(chunk[13]));\n  buffer.push(normalize(chunk[14]));\n  const token15 = scanFast(input, pos + 15, state);\n  buffer.push(normalize(chunk[16]));\n  buffer.push(normalize(chunk[17]));\n  const token18 = scanFast(input, pos + 18, state);\n  buffer.push(normalize(chunk[19]));\n  emit(token20, theme.resolve(token20.scope));\n  const token21 = scanFast(input, pos + 21, state);\n  buffer.push(normalize(chunk[22]));\n  buffer.push(normalize(chunk[23]));\n  const token24 = scanFast(input, pos + 24, state);\n  emit(token25, theme.resolve(token25.scope));\n  buffer.push(normalize(chunk[26]));\n  const token27 = scanFast(input, pos + 27, state);\n  buffer.push(normalize(chunk[28]));\n  buffer.push(normalize(chunk[29]));\n  const token30 = scanFast(input, pos + 30, state);\n  buffer.push(normalize(chunk[31]));\n  buffer.push(normalize(chunk[32]));\n  const token33 = scanFast(input, pos + 33, state);\n  return buffer.flush(theme);\n}\n"
 	},
 	{
-		"name": "src/farewell.ts",
+		"name": "src/core/engine/renderer/pipeline/stages/lex.ts",
 		"status": "added",
 		"binary": false,
 		"oldContents": "",
-		"newContents": "export function farewell(name: string): string {\n\treturn `Goodbye, ${name}.`;\n}\n"
+		"newContents": "export const lex = (s: string) => s.split(/(\\s+)/).filter(Boolean);\n"
+	},
+	{
+		"name": "src/core/engine/renderer/pipeline/stages/parse.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "import { lex } from './lex';\nexport const parse = (s: string) => build(lex(s));\n"
+	},
+	{
+		"name": "src/core/engine/renderer/pipeline/stages/emit.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const emit = (t: Token, scope?: string) => sink.write(t, scope);\n"
+	},
+	{
+		"name": "src/core/engine/renderer/pipeline/highlighter.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export class Highlighter {\n  run(code: string) {\n    return this.theme.apply(code);\n  }\n}\n",
+		"newContents": "export class Highlighter {\n  run(code: string, lang: string) {\n    const tokens = this.grammar(lang).tokenize(code);\n    return this.theme.apply(tokens);\n  }\n}\n"
+	},
+	{
+		"name": "src/core/engine/renderer/layout/virtualizer.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export function windowRange(scroll: number, h: number) {\n  return { start: Math.floor(scroll / h), end: 0 };\n}\n",
+		"newContents": "export function windowRange(scroll: number, h: number, overscan = 4) {\n  const start = Math.max(0, Math.floor(scroll / h) - overscan);\n  return { start, end: start + Math.ceil(vh / h) + overscan * 2 };\n}\n"
+	},
+	{
+		"name": "src/core/engine/renderer/layout/measure.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const measure = (el: HTMLElement) => el.getBoundingClientRect().height;\n"
+	},
+	{
+		"name": "src/core/state/store/atoms/session.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export const session = atom({ user: null });\n",
+		"newContents": "export const session = atom({ user: null, token: '', expiresAt: 0 });\n"
+	},
+	{
+		"name": "src/core/state/store/atoms/user.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const user = atom<User | null>(null);\n"
+	},
+	{
+		"name": "src/core/state/store/selectors/derived.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const isAuthed = select((g) => g(session).token !== '');\n"
+	},
+	{
+		"name": "src/api/v2/handlers/users/controller.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const getUser = (req: Req) => svc.find(req.params.id);\n"
+	},
+	{
+		"name": "src/api/v2/handlers/users/service.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const find = (id: string) => db.users.byId(id);\n"
+	},
+	{
+		"name": "src/api/v2/handlers/auth/controller.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export const login = (req: Req) => svc.auth(req.body);\n",
+		"newContents": "export const login = (req: Req) => svc.auth(req.body, req.ip);\n"
+	},
+	{
+		"name": "src/api/v2/middleware/rateLimit.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const rateLimit = (n: number) => (req, res, next) => bucket.take(req.ip, n) ? next() : res.status(429).end();\n"
+	},
+	{
+		"name": "src/ui/components/Button/Button.tsx",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export const Button = (p: Props) => <button className=\"btn\">{p.label}</button>;\n",
+		"newContents": "export const Button = (p: Props) => (\n  <button className={cx('btn', p.variant)} disabled={p.loading}>\n    {p.loading ? <Spinner /> : p.label}\n  </button>\n);\n"
+	},
+	{
+		"name": "src/ui/components/Button/Button.module.css",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": ".btn { padding: 8px 16px; border-radius: 6px; }\n.btn:hover { filter: brightness(1.1); }\n"
+	},
+	{
+		"name": "src/ui/components/Modal/Modal.tsx",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const Modal = (p: Props) => createPortal(<div className=\"modal\">{p.children}</div>, root);\n"
+	},
+	{
+		"name": "src/ui/hooks/useStore.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export const useStore = () => useContext(StoreCtx);\n",
+		"newContents": "export const useStore = <T,>(sel: (s: State) => T) => useSyncExternalStore(sub, () => sel(get()));\n"
+	},
+	{
+		"name": "src/utils/format/date.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const fmtDate = (d: Date) => d.toISOString().slice(0, 10);\n"
+	},
+	{
+		"name": "src/utils/format/number.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "export const fmtNum = (n: number) => n.toLocaleString();\n",
+		"newContents": "export const fmtNum = (n: number, opts?: Intl.NumberFormatOptions) => new Intl.NumberFormat(undefined, opts).format(n);\n"
+	},
+	{
+		"name": "src/utils/collections/deepMerge.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export const deepMerge = (a: object, b: object): object => merge(a, b);\n"
+	},
+	{
+		"name": "config/webpack/plugins/optimize.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "export default new OptimizePlugin({ minify: true, treeshake: true });\n"
+	},
+	{
+		"name": "docs/architecture/decisions/0001-fork-pierre.md",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "# 0001 \u2014 Fork @pierre/diffs\n\nStatus: accepted\n\nWe vendor the recovered source instead of tracking upstream.\n"
+	},
+	{
+		"name": "tests/e2e/flows/checkout.spec.ts",
+		"status": "added",
+		"binary": false,
+		"oldContents": "",
+		"newContents": "test('checkout', async ({ page }) => {\n  await page.goto('/cart');\n  await page.click('#pay');\n  await expect(page).toHaveURL('/done');\n});\n"
+	},
+	{
+		"name": "tests/unit/core/tokenizer.test.ts",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "test('tokenize', () => {\n  expect(tokenize('a b', 0)).toHaveLength(3);\n});\n",
+		"newContents": "test('tokenize', () => {\n  const state = new GrammarState('ts');\n  expect(tokenize('a b', 0, state)).toHaveLength(3);\n});\n"
+	},
+	{
+		"name": "src/legacy/oldRenderer.ts",
+		"status": "deleted",
+		"binary": false,
+		"oldContents": "export function oldRender(code: string) {\n  return code.replace(/</g, '&lt;');\n}\n",
+		"newContents": ""
+	},
+	{
+		"name": "src/legacy/shim.js",
+		"status": "deleted",
+		"binary": false,
+		"oldContents": "module.exports = require('./oldRenderer');\n",
+		"newContents": ""
+	},
+	{
+		"name": "package.json",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "{\n  \"name\": \"app\",\n  \"version\": \"1.4.0\"\n}\n",
+		"newContents": "{\n  \"name\": \"app\",\n  \"version\": \"2.0.0\",\n  \"type\": \"module\"\n}\n"
+	},
+	{
+		"name": "README.md",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "# app\n\nv1 renderer.\n",
+		"newContents": "# app\n\nv2 renderer with streaming tokenizer and virtualized layout.\n"
 	}
 ]
