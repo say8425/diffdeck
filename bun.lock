@@ -60,6 +60,26 @@
         "react",
       ],
     },
+    "packages/trees": {
+      "name": "@diffdeck/trees",
+      "version": "0.0.0",
+      "dependencies": {
+        "@diffdeck/path-store": "workspace:*",
+        "@diffdeck/theming": "workspace:*",
+        "preact": "11.0.0-beta.0",
+        "preact-render-to-string": "6.6.5",
+      },
+      "devDependencies": {
+        "@types/react": "19.2.7",
+        "react": "19.2.7",
+      },
+      "peerDependencies": {
+        "react": "19.2.7",
+      },
+      "optionalPeers": [
+        "react",
+      ],
+    },
   },
   "packages": {
     "@diffdeck/diffs": ["@diffdeck/diffs@workspace:packages/diffs"],
@@ -67,6 +87,8 @@
     "@diffdeck/path-store": ["@diffdeck/path-store@workspace:packages/path-store"],
 
     "@diffdeck/theming": ["@diffdeck/theming@workspace:packages/theming"],
+
+    "@diffdeck/trees": ["@diffdeck/trees@workspace:packages/trees"],
 
     "@oxfmt/binding-android-arm-eabi": ["@oxfmt/binding-android-arm-eabi@0.57.0", "https://nexus.mng.musinsa.io/repository/npm-all/@oxfmt/binding-android-arm-eabi/-/binding-android-arm-eabi-0.57.0.tgz", { "os": "android", "cpu": "arm" }, "sha512-qVBsEO+KugOsCmUHcO8iqNnqc65p7PCKpCs8M66mPZ+Ri+CWbcpoQOEJBg2OTu03+0qu++NK1jj6IzvQVs0Sig=="],
 
@@ -223,6 +245,10 @@
     "oxfmt": ["oxfmt@0.57.0", "https://nexus.mng.musinsa.io/repository/npm-all/oxfmt/-/oxfmt-0.57.0.tgz", { "dependencies": { "tinypool": "2.1.0" }, "optionalDependencies": { "@oxfmt/binding-android-arm-eabi": "0.57.0", "@oxfmt/binding-android-arm64": "0.57.0", "@oxfmt/binding-darwin-arm64": "0.57.0", "@oxfmt/binding-darwin-x64": "0.57.0", "@oxfmt/binding-freebsd-x64": "0.57.0", "@oxfmt/binding-linux-arm-gnueabihf": "0.57.0", "@oxfmt/binding-linux-arm-musleabihf": "0.57.0", "@oxfmt/binding-linux-arm64-gnu": "0.57.0", "@oxfmt/binding-linux-arm64-musl": "0.57.0", "@oxfmt/binding-linux-ppc64-gnu": "0.57.0", "@oxfmt/binding-linux-riscv64-gnu": "0.57.0", "@oxfmt/binding-linux-riscv64-musl": "0.57.0", "@oxfmt/binding-linux-s390x-gnu": "0.57.0", "@oxfmt/binding-linux-x64-gnu": "0.57.0", "@oxfmt/binding-linux-x64-musl": "0.57.0", "@oxfmt/binding-openharmony-arm64": "0.57.0", "@oxfmt/binding-win32-arm64-msvc": "0.57.0", "@oxfmt/binding-win32-ia32-msvc": "0.57.0", "@oxfmt/binding-win32-x64-msvc": "0.57.0" }, "peerDependencies": { "svelte": "^5.0.0", "vite-plus": "*" }, "optionalPeers": ["svelte", "vite-plus"], "bin": { "oxfmt": "bin/oxfmt" } }, "sha512-ZB7Bi+rGDSqmVIo9jwcLyFgjxXvQhDdU+jx+ZrVy6VRiVXK2+CHc4hO3J4dUQjHe7V0ymHB+MDuv5z+NhK07HA=="],
 
     "oxlint": ["oxlint@1.72.0", "https://nexus.mng.musinsa.io/repository/npm-all/oxlint/-/oxlint-1.72.0.tgz", { "optionalDependencies": { "@oxlint/binding-android-arm-eabi": "1.72.0", "@oxlint/binding-android-arm64": "1.72.0", "@oxlint/binding-darwin-arm64": "1.72.0", "@oxlint/binding-darwin-x64": "1.72.0", "@oxlint/binding-freebsd-x64": "1.72.0", "@oxlint/binding-linux-arm-gnueabihf": "1.72.0", "@oxlint/binding-linux-arm-musleabihf": "1.72.0", "@oxlint/binding-linux-arm64-gnu": "1.72.0", "@oxlint/binding-linux-arm64-musl": "1.72.0", "@oxlint/binding-linux-ppc64-gnu": "1.72.0", "@oxlint/binding-linux-riscv64-gnu": "1.72.0", "@oxlint/binding-linux-riscv64-musl": "1.72.0", "@oxlint/binding-linux-s390x-gnu": "1.72.0", "@oxlint/binding-linux-x64-gnu": "1.72.0", "@oxlint/binding-linux-x64-musl": "1.72.0", "@oxlint/binding-openharmony-arm64": "1.72.0", "@oxlint/binding-win32-arm64-msvc": "1.72.0", "@oxlint/binding-win32-ia32-msvc": "1.72.0", "@oxlint/binding-win32-x64-msvc": "1.72.0" }, "peerDependencies": { "oxlint-tsgolint": ">=0.22.1", "vite-plus": "*" }, "optionalPeers": ["oxlint-tsgolint", "vite-plus"], "bin": { "oxlint": "bin/oxlint" } }, "sha512-1rhdZIP/EvoI91ABIwNU5Q8+bWf8mjrS5UzIOZld4d4bXxJvtlUhlQvaoTogIGin/qdErMOrwaIJvCSIAKTLhA=="],
+
+    "preact": ["preact@11.0.0-beta.0", "https://nexus.mng.musinsa.io/repository/npm-all/preact/-/preact-11.0.0-beta.0.tgz", {}, "sha512-IcODoASASYwJ9kxz7+MJeiJhvLriwSb4y4mHIyxdgaRZp6kPUud7xytrk/6GZw8U3y6EFJaRb5wi9SrEK+8+lg=="],
+
+    "preact-render-to-string": ["preact-render-to-string@6.6.5", "https://nexus.mng.musinsa.io/repository/npm-all/preact-render-to-string/-/preact-render-to-string-6.6.5.tgz", { "peerDependencies": { "preact": ">=10 || >= 11.0.0-0" } }, "sha512-O6MHzYNIKYaiSX3bOw0gGZfEbOmlIDtDfWwN1JJdc/T3ihzRT6tGGSEWE088dWrEDGa1u7101q+6fzQnO9XCPA=="],
 
     "property-information": ["property-information@7.2.0", "https://nexus.mng.musinsa.io/repository/npm-all/property-information/-/property-information-7.2.0.tgz", {}, "sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg=="],
 
