@@ -1,0 +1,5 @@
+/* diffdeck parity harness stub: the forked @diffdeck/diffs and @diffdeck/trees
+   packages reference a `style.css` sibling that source-map extraction could
+   not recover (see scripts/parity/css-stub.ts). This stub only lets module
+   resolution succeed for the smoke test / dev build; it carries no real
+   styling, so this harness is not a visual reference for CSS parity. */

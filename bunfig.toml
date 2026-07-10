@@ -1,2 +1,7 @@
 [test]
 root = "."
+# scripts/parity/css-stub.ts redirects the *.css / *.css?inline imports that
+# @diffdeck/diffs and @diffdeck/trees ship (style.css was never recovered by
+# source-map extraction) to a content-free stub so `bun test` can resolve the
+# module graph. See scripts/parity/css-stub.ts for the full rationale.
+preload = ["./scripts/parity/css-stub.ts"]
