@@ -1,0 +1,28 @@
+{
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"types": ["bun"],
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"verbatimModuleSyntax": true,
+		"jsx": "react-jsx",
+		"jsxImportSource": "preact",
+		"paths": {
+			"@diffdeck/path-store": ["./packages/path-store/src/index.ts"],
+			"@diffdeck/theming": ["./packages/theming/src/index.ts"],
+			"@diffdeck/diffs": ["./packages/diffs/src/index.ts"],
+			"@diffdeck/trees": ["./packages/trees/src/index.ts"]
+		}
+	},
+	"include": [
+		"packages/**/*.ts",
+		"packages/**/*.tsx",
+		"apps/**/*.ts",
+		"bin/**/*.ts"
+	]
+}

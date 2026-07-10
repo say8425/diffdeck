@@ -1,0 +1,5 @@
+diffdeck bundles source recovered from and derived from:
+  @pierre/diffs, @pierre/trees, @pierre/theming, @pierre/theme (Apache-2.0)
+  Copyright The Pierre Computer Company.
+Files under packages/ are modified from the originals.
+See packages/*/LICENSE and packages/trees/NOTICE.md for full terms.
