@@ -164,6 +164,31 @@ test("gitLaneActive=false: no git section at all", () => {
 	expect(button.querySelector('[data-item-section="git"]')).toBeNull();
 });
 
+test('git lane active: an empty decoration lane is re-emitted immediately before the git lane (grow-spacer that right-aligns the git badge, per style.css\'s [data-item-section="decoration"] { flex: 1 1 0 })', () => {
+	const row = baseRow({});
+	const button = buildRow(
+		row,
+		baseCtx({
+			features: { gitLaneActive: true },
+			state: { effectiveGitStatus: "modified", containsGitChange: false },
+		}),
+	);
+
+	const decorationSection = button.querySelector(
+		'[data-item-section="decoration"]',
+	);
+	const gitSection = button.querySelector('[data-item-section="git"]');
+	expect(decorationSection).not.toBeNull();
+	expect(gitSection).not.toBeNull();
+
+	// Decoration lane is empty -- it's a pure flex spacer, not a content lane.
+	expect(decorationSection?.children.length).toBe(0);
+
+	// Order: decoration lane comes immediately before the git lane, matching
+	// the original's `decoration -> git` lane order.
+	expect(decorationSection?.nextElementSibling).toBe(gitSection);
+});
+
 test("flattened row: content wraps segments in data-item-flattened-subitems with ' / ' separators", () => {
 	const row = baseRow({
 		isFlattened: true,

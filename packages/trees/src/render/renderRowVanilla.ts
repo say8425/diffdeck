@@ -222,6 +222,16 @@ export const buildRowContent = (
 	);
 
 	if (ctx.features.gitLaneActive) {
+		// Empty `data-item-section="decoration"` lane, re-emitted immediately
+		// before the git lane to match the original (FileTreeView.tsx
+		// `decorationLaneEnabled`). In style.css it is the row's only
+		// `flex: 1 1 0` child -- the grow-spacer that pushes the git-status
+		// badge to the row's right edge. This read-only view never has a
+		// caller-supplied decoration or action lane, so gating on
+		// `gitLaneActive` alone faithfully reproduces
+		// `decorationLaneEnabled` for every case this view hits.
+		fragment.appendChild(el("div", { "data-item-section": "decoration" }, []));
+
 		const gitDecoration = getBuiltInGitStatusDecoration(
 			ctx.state.effectiveGitStatus,
 			ctx.state.containsGitChange,
