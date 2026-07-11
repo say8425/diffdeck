@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { isLargeFile, LARGE_FILE_LINE_THRESHOLD } from "../browser/largeFile.ts";
+import {
+	isLargeFile,
+	LARGE_FILE_LINE_THRESHOLD,
+} from "../browser/largeFile.ts";
 
 describe("isLargeFile", () => {
 	test("known lockfile (by basename) is large regardless of size", () => {
