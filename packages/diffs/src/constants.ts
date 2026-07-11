@@ -8,6 +8,9 @@ import type {
 } from './types';
 
 export const DIFFS_TAG_NAME = 'diffs-container' as const;
+export const DIFFS_HEADER_ATTR = 'data-diffs-header' as const;
+export const DIFFS_TITLE_ATTR = 'data-title' as const;
+export const DIFFS_CHANGE_ICON_ATTR = 'data-change-icon' as const;
 
 // Keep this as a NODE_ENV read so app builds can hard-disable development-only
 // checks unless they are explicitly built for development.

@@ -2,6 +2,9 @@ import type { ElementContent, Element as HASTElement, Properties } from 'hast';
 
 import {
   CUSTOM_HEADER_SLOT_ID,
+  DIFFS_CHANGE_ICON_ATTR,
+  DIFFS_HEADER_ATTR,
+  DIFFS_TITLE_ATTR,
   HEADER_METADATA_SLOT_ID,
   HEADER_PREFIX_SLOT_ID,
 } from '../constants';
@@ -31,7 +34,7 @@ export function createFileHeaderElement({
 }: CreateFileHeaderElementProps): HASTElement {
   const fileDiff = 'type' in fileOrDiff ? fileOrDiff : undefined;
   const properties: Properties = {
-    'data-diffs-header': mode,
+    [DIFFS_HEADER_ATTR]: mode,
     'data-change-type': fileDiff?.type,
     'data-sticky': stickyHeader ? '' : undefined,
   };
@@ -74,7 +77,7 @@ function createHeaderElement({
     }),
     createIconElement({
       name: getIconForType(iconType),
-      properties: { 'data-change-icon': iconType },
+      properties: { [DIFFS_CHANGE_ICON_ATTR]: iconType },
     }),
   ];
   if (prevName != null) {
@@ -110,7 +113,7 @@ function createHeaderElement({
           children: [createTextNodeElement(name)],
         }),
       ],
-      properties: { 'data-title': '' },
+      properties: { [DIFFS_TITLE_ATTR]: '' },
     })
   );
   return createHastElement({
