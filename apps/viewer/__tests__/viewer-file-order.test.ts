@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { compareTreePaths, sortFilesLikeTree } from "../browser/fileOrder.ts";
+import { comparePathsInTreeOrder } from "@diffdeck/path-store";
 
+// Mirrors renderPatch's sort: DiffFile[] ordered by `.name` in tree order.
 const names = (paths: string[]): string[] =>
-	sortFilesLikeTree(paths.map((name) => ({ name }))).map((f) => f.name);
+	paths
+		.map((name) => ({ name }))
+		.toSorted((a, b) => comparePathsInTreeOrder(a.name, b.name))
+		.map((f) => f.name);
 
-describe("sortFilesLikeTree", () => {
+describe("viewer file ordering (unified with path-store)", () => {
 	test("directories sort before files at every level (like the file tree)", () => {
 		expect(
 			names([
@@ -43,15 +47,5 @@ describe("sortFilesLikeTree", () => {
 		expect(names(["zz.txt", "docs/new.png", "aa.txt", "docs/old.png"])).toEqual(
 			["docs/new.png", "docs/old.png", "aa.txt", "zz.txt"],
 		);
-	});
-});
-
-describe("compareTreePaths", () => {
-	test("deeper hierarchy compared segment by segment", () => {
-		expect(compareTreePaths("src/a/b.ts", "src/a/b.ts")).toBe(0);
-		expect(
-			compareTreePaths("src/__tests__/x.ts", "src/diff-server/y.ts"),
-		).toBeLessThan(0);
-		expect(compareTreePaths("src/viewer/z.ts", "src/index.ts")).toBeLessThan(0);
 	});
 });

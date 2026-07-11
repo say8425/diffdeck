@@ -5,6 +5,7 @@
 	"type": "module",
 	"dependencies": {
 		"@diffdeck/diffs": "workspace:*",
+		"@diffdeck/path-store": "workspace:*",
 		"@diffdeck/trees": "workspace:*"
 	}
 }

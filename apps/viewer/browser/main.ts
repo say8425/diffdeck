@@ -5,11 +5,11 @@ import {
 	DIFFS_TITLE_ATTR,
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
+import { comparePathsInTreeOrder } from "@diffdeck/path-store";
 import { FileTree } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
-import { sortFilesLikeTree } from "./fileOrder.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -238,7 +238,9 @@ const restoreAutoExpanded = (): void => {
 
 const renderPatch = (unsorted: DiffFile[]): void => {
 	// 사이드바 트리와 같은 순서(디렉터리 우선·자연 정렬)로 diff 아이템을 배치.
-	const files = sortFilesLikeTree(unsorted);
+	const files = unsorted.toSorted((a, b) =>
+		comparePathsInTreeOrder(a.name, b.name),
+	);
 	if (files.length === 0) {
 		teardownViews();
 		diffMount.replaceChildren();
