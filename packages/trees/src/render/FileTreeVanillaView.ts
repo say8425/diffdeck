@@ -22,7 +22,12 @@
 //   - keydown: ArrowDown/Up/Home/End move focus; ArrowRight/Left
 //     expand/collapse a focused directory or move to the next/parent item;
 //     shift+ArrowDown/Up extends the selection from the focused row (source
-//     :2310-2312). Enter/Space are deliberately NOT special-cased: `buildRow`
+//     :2310-2312); ctrl/cmd+Space toggles the focused path's selection
+//     (`toggleFocusedSelection`) and ctrl/cmd+A selects every visible path
+//     (`selectAllVisiblePaths`), matching the source's un-gated dispatch
+//     (:2334-2340). `event.stopPropagation()` is called alongside
+//     `preventDefault()` on every handled key, matching the source. Enter/
+//     Space are deliberately NOT special-cased: `buildRow`
 //     renders a real `<button>`, and activating a focused native button with
 //     Enter/Space already fires a real, trusted `click` event carrying the
 //     live modifier keys (spec'd browser behavior) -- which the delegated
@@ -41,12 +46,20 @@
 //     bookkeeping is needed here, unlike the source's scroll-aware
 //     DOM-focus-sync effect.
 //   - search `<input>` (built in Task 4, previously unwired): `input` ->
-//     `controller.setSearch(value)`; `Escape` (handled in the same delegated
-//     keydown listener, gated on `event.target` being the search input) ->
-//     `controller.closeSearch()`. The full `isSearchOpen` keydown branch
-//     (Enter-to-select-and-close-search, ArrowUp/Down-to-search-match) is
-//     NOT ported -- out of this task's "click/keyboard/selection/search"
-//     scope.
+//     `controller.setSearch(value)`. The full read-only `isSearchOpen`
+//     keydown branch is ported (FileTreeView.tsx:2196-2236, minus the
+//     scroll-restoration bookkeeping noted below): while
+//     `controller.isSearchOpen()` is true, `Escape` -> `closeSearch()`;
+//     `Enter` -> `selectOnlyPath(focusedPath)` + `closeSearch()`;
+//     `ArrowDown`/`ArrowUp` -> `focusNextSearchMatch()`/
+//     `focusPreviousSearchMatch()` (instead of the plain focus-prev/next-item
+//     used when search is closed). This is checked first in `#handleKeyDown`,
+//     regardless of `event.target`, matching the source (which gates purely
+//     on `isSearchOpen`, not on where DOM focus is). When search is CLOSED
+//     and a row has keyboard focus, typing a single printable character
+//     (`isSearchOpenSeedKey`, FileTreeView.tsx:488-496, replicated locally)
+//     opens+seeds search via `controller.openSearch(key)` and moves DOM
+//     focus to the search input (FileTreeView.tsx:2238-2244).
 //   - `onSelectionChange` fires from the same controller subscription that
 //     drives `renderRows()`, gated on `getSelectionVersion()` actually
 //     changing -- mirrors `FileTree.#emitSelectionChange` (FileTree.ts:
@@ -61,10 +74,6 @@
 //     (source :2416+), and the context menu: none of `handleRowClick`'s or
 //     `handleTreeKeyDown`'s branches for these are ported (read-only
 //     interaction only).
-//   - `ctrl/cmd+Space` (`toggleFocusedSelection`) and `ctrl/cmd+A`
-//     (`selectAllVisiblePaths`) are real `handleTreeKeyDown` branches but are
-//     not part of this task's scope; nothing in this task's test surface
-//     exercises them.
 //   - git-status wiring: unchanged from Task 4 -- every row's git ctx is
 //     still hardcoded to "no git status" (see `#buildRowContext` below).
 import type { FileTreeIcons } from "../iconConfig";
@@ -131,6 +140,18 @@ const getFileTreeRootDomId = (
 const isFileTreeDirectoryHandle = (
 	item: FileTreeItemHandle | null,
 ): item is FileTreeDirectoryHandle => item != null && "toggle" in item;
+
+// isSpaceSelectionKey (FileTreeView.tsx:482-486).
+const isSpaceSelectionKey = (event: KeyboardEvent): boolean =>
+	event.code === "Space" || event.key === " " || event.key === "Spacebar";
+
+// isSearchOpenSeedKey (FileTreeView.tsx:488-496).
+const isSearchOpenSeedKey = (event: KeyboardEvent): boolean =>
+	event.key.length === 1 &&
+	/^[\p{L}\p{N}]$/u.test(event.key) &&
+	!event.ctrlKey &&
+	!event.metaKey &&
+	!event.altKey;
 
 export class FileTreeVanillaView {
 	readonly #controller: FileTreeController;
@@ -314,12 +335,26 @@ export class FileTreeVanillaView {
 
 	// The read-only subset of `handleTreeKeyDown` (FileTreeView.tsx:2157-2454)
 	// -- see the module header for exactly what is ported vs dropped (no
-	// sticky-stack branches, no F2/rename, no DnD, no Enter/Space).
+	// sticky-stack branches, no F2/rename, no DnD, no context menu, no
+	// Enter/Space). Checked first, regardless of `event.target`: while
+	// `controller.isSearchOpen()` is true every keydown routes through
+	// `#handleSearchOpenKeyDown` instead of the branches below, matching the
+	// source gating purely on `isSearchOpen` (FileTreeView.tsx:2196).
 	#handleKeyDown = (event: KeyboardEvent): void => {
+		if (this.#controller.isSearchOpen()) {
+			this.#handleSearchOpenKeyDown(event);
+			return;
+		}
+
 		if (event.target === this.#searchInput) {
-			if (event.key === "Escape") {
-				this.#controller.closeSearch();
-			}
+			return;
+		}
+
+		if (this.#searchEnabled && isSearchOpenSeedKey(event)) {
+			this.#controller.openSearch(event.key);
+			event.preventDefault();
+			event.stopPropagation();
+			focusElement(this.#searchInput ?? null);
 			return;
 		}
 
@@ -336,6 +371,13 @@ export class FileTreeVanillaView {
 			this.#controller.extendSelectionFromFocused(1);
 		} else if (event.shiftKey && event.key === "ArrowUp") {
 			this.#controller.extendSelectionFromFocused(-1);
+		} else if ((event.ctrlKey || event.metaKey) && isSpaceSelectionKey(event)) {
+			this.#controller.toggleFocusedSelection();
+		} else if (
+			(event.ctrlKey || event.metaKey) &&
+			event.key.toLowerCase() === "a"
+		) {
+			this.#controller.selectAllVisiblePaths();
 		} else {
 			switch (event.key) {
 				case "ArrowDown":
@@ -380,8 +422,44 @@ export class FileTreeVanillaView {
 		}
 
 		event.preventDefault();
+		event.stopPropagation();
 		this.#moveDomFocusToFocusedRow();
 	};
+
+	// The read-only subset of the `isSearchOpen` keydown branch
+	// (FileTreeView.tsx:2196-2236). The source's scroll-restoration
+	// bookkeeping around Enter (`restoreTreeFocusAfterSearchCloseRef`,
+	// `restoreTreeFocusViewportOffsetRef`) is dropped for the same reason
+	// noted in the module header: this non-virtualized view has no
+	// scroll-into-view bookkeeping to preserve. `Escape` deliberately does
+	// NOT move DOM focus back to a row afterward -- it only closes search,
+	// mirroring the source explicitly clearing
+	// `restoreTreeFocusAfterSearchCloseRef` on that branch.
+	#handleSearchOpenKeyDown(event: KeyboardEvent): void {
+		let shouldSyncDomFocus = true;
+		if (event.key === "Escape") {
+			this.#controller.closeSearch();
+			shouldSyncDomFocus = false;
+		} else if (event.key === "Enter") {
+			const focusedPath = this.#controller.getFocusedPath();
+			if (focusedPath != null) {
+				this.#controller.selectOnlyPath(focusedPath);
+			}
+			this.#controller.closeSearch();
+		} else if (event.key === "ArrowDown") {
+			this.#controller.focusNextSearchMatch();
+		} else if (event.key === "ArrowUp") {
+			this.#controller.focusPreviousSearchMatch();
+		} else {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		if (shouldSyncDomFocus) {
+			this.#moveDomFocusToFocusedRow();
+		}
+	}
 
 	// focusin delegate for the per-row `onFocus` at FileTreeView.tsx:1140-1144.
 	#handleFocusIn = (event: FocusEvent): void => {

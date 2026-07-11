@@ -241,3 +241,88 @@ test("unmount tears down the delegated listeners: a later click no longer change
 
 	expect(controller.getSelectedPaths()).toEqual([]);
 });
+
+test("typing a printable character while a row has keyboard focus opens and seeds search", () => {
+	const controller = createController(["apple.ts", "banana.ts"]);
+	const view = new FileTreeVanillaView({
+		controller,
+		itemHeight: 30,
+		searchEnabled: true,
+	});
+	const host = mountConnected(view);
+
+	expect(controller.isSearchOpen()).toBe(false);
+
+	getRow(host, "apple.ts").dispatchEvent(
+		new KeyboardEvent("keydown", { key: "a", bubbles: true }),
+	);
+
+	expect(controller.isSearchOpen()).toBe(true);
+	expect(controller.getSearchValue()).toBe("a");
+});
+
+test("ctrl/cmd+A selects every visible path", () => {
+	const controller = createController(["a.ts", "b.ts", "c.ts"]);
+	const view = new FileTreeVanillaView({ controller, itemHeight: 30 });
+	const host = mountConnected(view);
+
+	getRow(host, "a.ts").dispatchEvent(
+		new KeyboardEvent("keydown", { key: "a", metaKey: true, bubbles: true }),
+	);
+
+	expect(controller.getSelectedPaths()).toEqual(["a.ts", "b.ts", "c.ts"]);
+});
+
+test("ctrl/cmd+Space toggles the focused path's selection", () => {
+	const controller = createController(["a.ts", "b.ts"]);
+	const view = new FileTreeVanillaView({ controller, itemHeight: 30 });
+	const host = mountConnected(view);
+	expect(controller.getFocusedPath()).toBe("a.ts");
+
+	getRow(host, "a.ts").dispatchEvent(
+		new KeyboardEvent("keydown", { key: " ", metaKey: true, bubbles: true }),
+	);
+	expect(controller.getSelectedPaths()).toEqual(["a.ts"]);
+
+	getRow(host, "a.ts").dispatchEvent(
+		new KeyboardEvent("keydown", { key: " ", metaKey: true, bubbles: true }),
+	);
+	expect(controller.getSelectedPaths()).toEqual([]);
+});
+
+test("with search open, ArrowDown navigates matches and Enter selects the focused match and closes search", () => {
+	const controller = createController(["apple.ts", "banana.ts", "cherry.ts"]);
+	const view = new FileTreeVanillaView({
+		controller,
+		itemHeight: 30,
+		searchEnabled: true,
+	});
+	const host = mountConnected(view);
+
+	controller.openSearch("a");
+	expect(controller.isSearchOpen()).toBe(true);
+	const matchingPaths = controller.getSearchMatchingPaths();
+	expect(matchingPaths.length).toBeGreaterThan(1);
+	const focusedBeforeArrowDown = controller.getFocusedPath();
+
+	const input = host.querySelector(
+		"[data-file-tree-search-input]",
+	) as HTMLInputElement;
+	input.dispatchEvent(
+		new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+	);
+
+	const focusedAfterArrowDown = controller.getFocusedPath();
+	expect(focusedAfterArrowDown).not.toBeNull();
+	expect(focusedAfterArrowDown).not.toBe(focusedBeforeArrowDown);
+	expect(matchingPaths).toContain(focusedAfterArrowDown as string);
+
+	input.dispatchEvent(
+		new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+	);
+
+	expect(controller.isSearchOpen()).toBe(false);
+	expect(controller.getSelectedPaths()).toEqual([
+		focusedAfterArrowDown as string,
+	]);
+});
