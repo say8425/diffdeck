@@ -270,3 +270,26 @@ export function getSegmentSortKey(
   segmentTable.sortKeyById[segmentId] = nextKey;
   return nextKey;
 }
+
+// Compare two paths as leaf files in file-tree order (directories before files
+// at each depth, case-insensitive natural sort, raw-string tiebreak). This is
+// the public comparator apps sort flat file-path lists with; it reuses the same
+// segment/kind machinery as the store's projection so tree order and file-list
+// order can never drift.
+function toFileCompareEntry(path: string): PathStoreCompareEntry {
+  const segments = path.split('/');
+  return {
+    path,
+    segments,
+    basename: segments[segments.length - 1],
+    depth: segments.length - 1,
+    isDirectory: false,
+  };
+}
+
+export function comparePathsInTreeOrder(left: string, right: string): number {
+  return compareCompareEntries(
+    toFileCompareEntry(left),
+    toFileCompareEntry(right)
+  );
+}
