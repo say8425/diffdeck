@@ -12,16 +12,6 @@
 	},
 	"devDependencies": {
 		"@happy-dom/global-registrator": "20.0.11",
-		"@types/react": "19.2.7",
-		"happy-dom": "20.0.11",
-		"react": "19.2.7"
-	},
-	"peerDependencies": {
-		"react": "19.2.7"
-	},
-	"peerDependenciesMeta": {
-		"react": {
-			"optional": true
-		}
+		"happy-dom": "20.0.11"
 	}
 }

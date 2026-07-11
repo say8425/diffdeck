@@ -1,5 +1,4 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"compilerOptions": { "jsxImportSource": "react" },
-	"include": ["src/**/*.ts", "src/**/*.tsx"]
+	"include": ["src/**/*.ts"]
 }

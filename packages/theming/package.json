@@ -7,23 +7,10 @@
 		".": "./src/index.ts",
 		"./color": "./src/color.ts",
 		"./themes": "./src/themes.ts",
-		"./react": "./src/react.ts",
 		"./themes/*": "./themes/*"
 	},
 	"dependencies": {
 		"@shikijs/themes": "4.3.0",
 		"shiki": "4.3.0"
-	},
-	"devDependencies": {
-		"@types/react": "19.2.7",
-		"react": "19.2.7"
-	},
-	"peerDependencies": {
-		"react": "19.2.7"
-	},
-	"peerDependenciesMeta": {
-		"react": {
-			"optional": true
-		}
 	}
 }

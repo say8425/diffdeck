@@ -3,7 +3,7 @@ import type { CreatePatchOptionsNonabortable } from 'diff';
 import type { CodeViewOptions } from '../components/CodeView';
 import type { FileDiffOptions } from '../components/FileDiff';
 import { DEFAULT_THEMES } from '../constants';
-import type { FileOptions } from '../react';
+import type { FileOptions } from '../components/File';
 import { areObjectsEqual } from './areObjectsEqual';
 import { areThemesEqual } from './areThemesEqual';
 
