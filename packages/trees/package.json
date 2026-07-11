@@ -8,9 +8,7 @@
 	},
 	"dependencies": {
 		"@diffdeck/path-store": "workspace:*",
-		"@diffdeck/theming": "workspace:*",
-		"preact": "11.0.0-beta.0",
-		"preact-render-to-string": "6.6.5"
+		"@diffdeck/theming": "workspace:*"
 	},
 	"devDependencies": {
 		"@happy-dom/global-registrator": "20.0.11",
