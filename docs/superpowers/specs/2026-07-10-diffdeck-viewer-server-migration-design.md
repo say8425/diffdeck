@@ -45,8 +45,7 @@ apps/viewer/
 ├── index.html         ← src/viewer/index.html (script src="/main.js" 유지)
 ├── build.ts           ← browser 번들(css-inline 플러그인) + 정적 자산 복사
 ├── serve.ts           ← 검증·수동 실행용 최소 dev 엔트리
-├── css-inline.d.ts    ← `declare module "*.css?inline"` ambient 선언
-├── tsconfig.json      ← @diffdeck/* 소비, css-inline.d.ts 포함
+├── tsconfig.json      ← server/·serve.ts·build.ts만 typecheck (browser/ 제외)
 └── package.json       ← @diffdeck/viewer, deps: @diffdeck/{diffs,trees}
 ```
 
@@ -75,10 +74,17 @@ viewer 번들을 서빙하는 단일 프로세스 관계다. 두 디렉터리를
    빌드와 달리 `scripts/css-inline-plugin.ts`의 `cssInlineBundlerPlugin`을 반드시 attach한다
    (패리티 하니스 build.ts가 이미 검증한 패턴). 산출: `browser/main.ts` → `dist/main.js`(browser
    target, minify) + `index.html`을 dist 루트로 복사. 서버의 `viewerDir`은 이 dist를 가리킴.
-4. **`*.css?inline` ambient 선언 (day-1)**: 앱 tsconfig가 포크 패키지 `src/**`를 include하지
-   않으므로 ambient 선언이 안 보인다. `apps/viewer/css-inline.d.ts`에
-   `declare module "*.css?inline" { const css: string; export default css; }`를 두고 tsconfig에
-   포함시킨다.
+4. **typecheck 범위 = server/·serve.ts·build.ts만 (browser/ 제외)**: 애초 설계는 앱 전체를
+   typecheck하며 `*.css?inline` ambient 선언만 배선하면 될 것으로 봤으나, 실증 결과 앱이
+   `@diffdeck/diffs`·`@diffdeck/trees`를 import한 채 앱 tsconfig로 typecheck하면 vendored 엔진의
+   react/preact JSX(`preact/jsx-runtime` 부재)와 `Window.__INSTANCE` 같은 전역 augmentation이 앱
+   config로 끌려와 실패한다(패키지 자기 tsconfig에서만 해소되는 에러). ambient 선언으로는 못 고친다.
+   이는 기존 `scripts/parity/` 하니스가 typecheck 루프에서 빠진 것과 **동일한 벽**이므로 선례를
+   따른다 — 앱 tsconfig는 vendored 의존이 없는 `server/`·`serve.ts`·`build.ts`만 include(clean
+   통과), `browser/`는 제외한다. browser/의 타입 안전성은 (a) cc-statusline에서 이미 `@pierre`
+   선언 대비 typecheck됐던 코드의 verbatim 복사, (b) 이식 유닛 테스트로 담보. 선언 기반 앱
+   typecheck는 패키지 빌드가 생기는 Plan 4/5로 미룬다. (browser/를 typecheck하지 않으므로
+   `*.css?inline` ambient 선언도 불필요.)
 5. **serve.ts (검증용 dev 엔트리)**: `startDiffServer({ port, viewerDir })`만 부트스트랩하는 최소
    엔트리. 정식 데몬·스폰·토큰·URL CLI는 Plan 5. `ensure.ts`/`link.ts`/`config.ts`는 verbatim
    이관하되 실제 재배선(`--diff-server` 플래그·`Bun.main` → diffdeck 엔트리로 re-point)은 Plan 5.
@@ -97,11 +103,11 @@ blob)·경로 탐색 가드 전부 유지.
 1. **유닛 테스트 이식** — 14개 전부 diffdeck로 이관, import 경로를 앱 구조(`../server/`,
    `../browser/`)로 조정, `bun test` 전부 green. `diff-server.test.ts`는 이미 403·경로 탐색 가드를
    커버.
-2. **서버 스모크 통합 테스트 (신규)** — 실제 서버를 기동해 새 앱 구조에서 서빙이 동작함을 증명:
-   - `startDiffServer` → `GET /api/diff`(실 git repo fixture) → 200 + JSON + `x-diff-base` 헤더.
-   - `GET /api/blob`(이미지 경로) → 200 + 올바른 content-type; 비이미지 → 404.
-   - `GET /` → index.html 200; `GET /main.js` → 번들 200 (빌드 산출물 서빙 경로 검증).
-   - 토큰 불일치 → 403.
+2. **빌드-번들 서빙 통합 테스트 (신규)** — 엔드포인트 로직(`/api/diff`·`/api/blob`·`/`·403·404·경로
+   탐색·base 모드)은 이식된 `diff-server.test.ts`가 이미 광범위하게 커버하므로 중복하지 않는다.
+   이 신규 테스트는 **유일하게 새로운 표면** — 빌드된 실제 브라우저 번들을 서버가 서빙하는지 —
+   에 집중한다: `build.ts` 실행 → dist를 `viewerDir`로 `startDiffServer` → `GET /main.js` 200 +
+   실 번들 바디, `GET /` 200 + 빌드된 index.html, `GET /missing.js` 404.
 3. **패리티 하니스 유지** — `scripts/parity/`는 포크 패키지 렌더 회귀 감지용으로 존치(변경 없음).
 
 ## 태스크 분해 (개략 — 상세는 writing-plans)
@@ -123,7 +129,8 @@ blob)·경로 탐색 가드 전부 유지.
 
 ## 리스크 & 완화
 
-- **css?inline 미배선 → 빈 렌더**: Foundation에서 겪은 실패. build.ts의 css-inline 플러그인 +
-  ambient 선언을 태스크 1·4에서 명시적으로 배선하고, 서버 스모크가 `/main.js` 서빙을 검증.
+- **css?inline 미배선 → 빈 렌더**: Foundation에서 겪은 실패. build.ts에 css-inline **번들러**
+  플러그인을 명시적으로 attach하고(Bun.build), 빌드-번들 서빙 통합 테스트가 `/main.js`가 실제로
+  서빙됨을 검증. (tsc용 ambient 선언은 browser/ 미-typecheck로 불필요.)
 - **`DiffFile` 타입 경로 어긋남**: 앱 내 상대 import(`../server/diff.ts`)로 단순화, typecheck가 잡음.
 - **브랜딩 문자열 혼재**: verbatim 유지로 테스트 정합 보장, 리브랜딩은 후속 Plan으로 명확히 분리.
