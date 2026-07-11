@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveDiffPort } from "../server/config.ts";
 import { startDiffServer } from "../server/server.ts";
 
 // build.ts를 한 번 돌려 실제 dist를 만든 뒤, 그 dist를 viewerDir로 서빙한다.

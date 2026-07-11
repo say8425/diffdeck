@@ -11,7 +11,8 @@ diffdeck/
 │   ├── theming/            # @diffdeck/theming — 테마 시스템 + 테마 데이터, 15 src + themes/*.json 10개
 │   ├── diffs/              # @diffdeck/diffs — CodeView diff 렌더 엔진, 170 src (CodeView.ts 3,563줄)
 │   └── trees/              # @diffdeck/trees — FileTree 엔진, 52 src (preact 렌더 스킨 포함)
-├── apps/                   # (Plan 2) viewer + server 앱 이관 예정
+├── apps/
+│   └── viewer/             # @diffdeck/viewer — server/(데이터 API) + browser/(뷰어 프론트) + build.ts·serve.ts
 ├── bin/                    # (Plan 5) diffdeck CLI 엔트리 예정
 ├── scripts/
 │   ├── extract-sources.ts       # 소스맵 sourcesContent → 원본 TS 복원 도구 (Foundation 일회성)
@@ -80,7 +81,7 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 ### 로드맵 (각각 별도 sub-plan)
 
 - **Plan 1 — Foundation** ✅: 4패키지 포크, 타입체크·렌더 검증.
-- **Plan 2 — viewer + server 앱**: cc-statusline의 `src/viewer`·`src/diff-server`를 `apps/`로 이관, 기능 동등성.
+- **Plan 2 — viewer + server 앱** ✅: `apps/viewer`로 이관(server/·browser/), 14 유닛 테스트 + 빌드-번들 서빙 통합 테스트로 동등성 검증. browser/는 vendored JSX 벽 때문에 typecheck 루프 제외(패리티 하니스와 동일, Plan 4/5서 선언 기반으로 해소).
 - **Plan 3 — de-preact 실용판**: trees preact 6파일 → vanilla (가상화·DnD·rename·sticky·SSR 제외, read-only 대응), preact 제거.
 - **Plan 4 — 커플링 하드닝**: 내부 마크업 계약화, 정렬 comparator 단일화, canary 테스트, 상수 export.
 - **Plan 5 — CLI + 컷오버 + 배포**: `bin/diffdeck.ts`(데몬·토큰·URL), npm `@say8425/diffdeck` 배포, cc-statusline이 `bunx @say8425/diffdeck`로 전환.

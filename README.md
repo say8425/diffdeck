@@ -28,7 +28,7 @@ What the diff-rendering engine provides (all demonstrated by the render above):
 - **Virtualized rendering** that stays smooth on large diffs, with sticky file headers.
 - **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
 
-The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and is being migrated into diffdeck's `apps/`.
+The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
 
 ## Architecture
 
@@ -38,7 +38,7 @@ packages/
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (preact render skin, for now)
-apps/           viewer + server app (in progress)
+apps/viewer/    diff-server (data API) + browser viewer, built with the css-inline plugin
 bin/            diffdeck CLI (in progress)
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
 ```
