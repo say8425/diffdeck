@@ -113,9 +113,9 @@ test('aria-expanded and data-item-selected are stringified "true"/"false", not e
 	// raw booleans. Real preact's setProperty (diff/props.js) special-cases
 	// `aria-*`/`data-*` names to always `setAttribute(name, String(value))`
 	// (never the HTML-boolean-attribute "true -> empty string, false -> omit"
-	// convention `el()` uses for everything else) -- verified by rendering the
-	// real preact source into happy-dom (see renderRowVanilla.ts's
-	// `stringifyBooleanAriaAndDataAttrs` comment).
+	// convention used for every other attribute) -- verified by rendering the
+	// real preact source into happy-dom, and now handled directly by `el()`
+	// itself (see el.ts).
 	const collapsedDir = baseRow({
 		kind: "directory",
 		name: "src",
@@ -179,6 +179,9 @@ test("flattened row: content wraps segments in data-item-flattened-subitems with
 	const content = button.querySelector('[data-item-section="content"]');
 	const wrapper = content?.querySelector("[data-item-flattened-subitems]");
 	expect(wrapper).not.toBeNull();
+	// Boolean `true` on a `data-*` key is stringified by `el()`, not rendered
+	// as an empty-string presence attribute.
+	expect(wrapper?.getAttribute("data-item-flattened-subitems")).toBe("true");
 
 	const subitems = wrapper?.querySelectorAll("[data-item-flattened-subitem]");
 	expect(subitems?.length).toBe(2);

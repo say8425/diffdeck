@@ -5,8 +5,17 @@
 // assignment, `tabIndex` -> DOM property (not an attribute). String children
 // are appended as text nodes only -- never via `innerHTML` -- so untrusted
 // content can never be interpreted as markup.
+//
+// Exception: `aria-*`/`data-*` attributes have no boolean representation in
+// the DOM, and real preact's `setProperty` (preact/src/diff/props.js)
+// special-cases exactly those two prefixes to always
+// `dom.setAttribute(name, value)` (coerced to "true"/"false"), never omitting
+// on `false`. So a boolean value on a key matching `^(aria|data)-` is always
+// stringified and set -- `true` -> `"true"`, `false` -> `"false"` -- rather
+// than following the present/omit convention used for every other attribute.
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const ARIA_OR_DATA_PREFIX = /^(aria|data)-/;
 
 export type ElAttrs = Record<string, unknown>;
 export type ElChild = Node | string;
@@ -39,6 +48,10 @@ const applyAttrs = (
 		return;
 	}
 	for (const [key, value] of Object.entries(attrs)) {
+		if (typeof value === "boolean" && ARIA_OR_DATA_PREFIX.test(key)) {
+			element.setAttribute(key, String(value));
+			continue;
+		}
 		if (value === false || value === null || value === undefined) {
 			continue;
 		}

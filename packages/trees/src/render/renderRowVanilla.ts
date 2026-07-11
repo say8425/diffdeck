@@ -241,41 +241,6 @@ export const buildRowContent = (
 	return fragment;
 };
 
-// `el()` (Task 1) treats a boolean `true` as a presence-only attribute
-// (empty string) and `false`/`null`/`undefined` as "omit the attribute" --
-// correct for real HTML boolean attributes (disabled, hidden, ...), which
-// preact reflects through a DOM IDL property. But `aria-*`/`data-*`
-// attributes have no boolean representation in the DOM: preact's own
-// `setProperty` (preact/src/diff/props.js) special-cases exactly those two
-// prefixes (`name[4] == '-'`) to always `dom.setAttribute(name, value)`
-// (coerced to "true"/"false"), and deliberately never removes them on
-// `false`. Verified empirically by rendering
-// `<button aria-expanded aria-selected={false} data-item-focused
-// data-item-dragging={false} />` via real preact into happy-dom: the DOM
-// shows `aria-expanded="true"`, `aria-selected="false"`,
-// `data-item-focused="true"`, `data-item-dragging="false"` -- never the
-// empty-string/omitted form `el()` would otherwise produce for a raw
-// boolean. `computeFileTreeRowElementAttributes` already pre-stringifies
-// *most* of its aria-/data- fields (e.g. `aria-selected: 'true' | 'false'`),
-// but hands a few through as raw booleans (`aria-expanded`,
-// `data-item-focused`, `data-item-selected`, `data-item-drag-target`,
-// `data-item-dragging`) -- this stringifies exactly those, without
-// reimplementing or patching `el.ts` itself.
-const stringifyBooleanAriaAndDataAttrs = (
-	attrs: Record<string, unknown>,
-): Record<string, unknown> => {
-	const normalized: Record<string, unknown> = { ...attrs };
-	for (const [key, value] of Object.entries(normalized)) {
-		if (
-			typeof value === "boolean" &&
-			(key.startsWith("aria-") || key.startsWith("data-"))
-		) {
-			normalized[key] = String(value);
-		}
-	}
-	return normalized;
-};
-
 // The read-only `<button role="treeitem">` branch of renderStyledRow
 // (FileTreeView.tsx:1156-1192), carrying the attribute bag from
 // `computeFileTreeRowElementAttributes` with `mode: "flow"` and every
@@ -304,19 +269,22 @@ export const buildRow = (
 		containsGitChange: ctx.state.containsGitChange,
 	};
 
-	const attrs = stringifyBooleanAriaAndDataAttrs(
-		computeFileTreeRowElementAttributes({
-			row,
-			mode: "flow",
-			targetPath,
-			ariaLabel: ctx.ariaLabel,
-			domId: ctx.domId,
-			isParked: false,
-			itemHeight: ctx.itemHeight,
-			features,
-			state,
-		}),
-	);
+	// `el()` is the single substrate for aria-*/data-* boolean stringification
+	// (see el.ts), so the raw attribute bag from
+	// `computeFileTreeRowElementAttributes` -- which hands some fields through
+	// as booleans (`aria-expanded`, `data-item-focused`, `data-item-selected`,
+	// `data-item-drag-target`, `data-item-dragging`) -- is applied directly.
+	const attrs = computeFileTreeRowElementAttributes({
+		row,
+		mode: "flow",
+		targetPath,
+		ariaLabel: ctx.ariaLabel,
+		domId: ctx.domId,
+		isParked: false,
+		itemHeight: ctx.itemHeight,
+		features,
+		state,
+	});
 
 	return el("button", { ...attrs, type: "button" }, [
 		buildRowContent(row, ctx),

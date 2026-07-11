@@ -2,17 +2,37 @@ import { expect, test } from "bun:test";
 import "./happydom";
 import { el, svgEl } from "../render/el";
 
-test("el sets string + boolean attrs, omits false/undefined", () => {
+test("el sets string attrs and non-aria/data boolean true as present, omits undefined", () => {
 	const n = el("button", {
 		role: "treeitem",
-		"data-item-selected": true,
-		"data-x": false,
+		disabled: true,
+		hidden: false,
 		"data-y": undefined,
 	});
 	expect(n.getAttribute("role")).toBe("treeitem");
-	expect(n.hasAttribute("data-item-selected")).toBe(true);
-	expect(n.hasAttribute("data-x")).toBe(false);
+	// Non-aria/data boolean: true -> present (empty string), false -> omitted.
+	expect(n.hasAttribute("disabled")).toBe(true);
+	expect(n.getAttribute("disabled")).toBe("");
+	expect(n.hasAttribute("hidden")).toBe(false);
 	expect(n.hasAttribute("data-y")).toBe(false);
+});
+
+test("el stringifies aria-*/data-* booleans instead of using HTML-boolean presence/omission semantics", () => {
+	// Real preact's setProperty (preact/src/diff/props.js) special-cases
+	// `aria-*`/`data-*` names to always `setAttribute(name, String(value))`,
+	// never omitting on `false` -- unlike every other boolean attribute.
+	const n = el("button", {
+		"data-item-selected": true,
+		"data-item-dragging": false,
+		"aria-expanded": true,
+		"aria-selected": false,
+	});
+	expect(n.getAttribute("data-item-selected")).toBe("true");
+	expect(n.getAttribute("data-item-dragging")).toBe("false");
+	expect(n.hasAttribute("data-item-dragging")).toBe(true);
+	expect(n.getAttribute("aria-expanded")).toBe("true");
+	expect(n.getAttribute("aria-selected")).toBe("false");
+	expect(n.hasAttribute("aria-selected")).toBe(true);
 });
 
 test("el applies style object per-property", () => {
