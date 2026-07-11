@@ -11,7 +11,11 @@ import {
 } from 'preact/hooks';
 
 import { Icon } from '../components/Icon';
-import { MiddleTruncate, Truncate } from '../components/OverflowText';
+// Explicit `.tsx` extension: with a sibling `OverflowText.ts` now present
+// (Plan 3 de-preact, Task 2 — pure split* helpers), TS's bundler module
+// resolution picks the extensionless `.ts` file first, which doesn't export
+// the preact components below. Verified via `tsc --traceResolution`.
+import { MiddleTruncate, Truncate } from '../components/OverflowText.tsx';
 import {
   CONTEXT_MENU_SLOT_NAME,
   CONTEXT_MENU_TRIGGER_TYPE,
