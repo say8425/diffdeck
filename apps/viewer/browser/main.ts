@@ -1,4 +1,10 @@
-import { CodeView, parseDiffFromFile } from "@diffdeck/diffs";
+import {
+	CodeView,
+	DIFFS_HEADER_ATTR,
+	DIFFS_TAG_NAME,
+	DIFFS_TITLE_ATTR,
+	parseDiffFromFile,
+} from "@diffdeck/diffs";
 import { FileTree } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
 import { createCopyButton } from "./copyButton.ts";
@@ -62,13 +68,15 @@ diffMount.addEventListener("click", (event) => {
 	const path = event.composedPath();
 	const isHeader = path.some(
 		(node): node is HTMLElement =>
-			node instanceof HTMLElement && node.hasAttribute("data-diffs-header"),
+			node instanceof HTMLElement && node.hasAttribute(DIFFS_HEADER_ATTR),
 	);
 	if (!isHeader) return;
 	const container = path.find(
 		(node): node is HTMLElement =>
-			node instanceof HTMLElement && node.tagName === "DIFFS-CONTAINER",
+			node instanceof HTMLElement &&
+			node.tagName === DIFFS_TAG_NAME.toUpperCase(),
 	);
+	// data-fold is the viewer's own id carrier (set in makeFoldButton), not an engine attribute
 	const id = container?.querySelector<HTMLElement>("[data-fold]")?.dataset.fold;
 	if (!id) return;
 	const item = codeView.getItem(id);
@@ -156,7 +164,7 @@ const highlightContainer = (container: HTMLElement): void => {
 };
 
 const highlightAllVisible = (): void => {
-	const containers = diffMount.querySelectorAll<HTMLElement>("diffs-container");
+	const containers = diffMount.querySelectorAll<HTMLElement>(DIFFS_TAG_NAME);
 	for (const container of containers) highlightContainer(container);
 };
 
@@ -168,7 +176,7 @@ const ensureCopyButton = (container: HTMLElement): void => {
 	if (!fileId) return;
 	const root = container.shadowRoot ?? container;
 	if (root.querySelector("[data-copy-name]")) return;
-	const title = root.querySelector("[data-title]");
+	const title = root.querySelector(`[${DIFFS_TITLE_ATTR}]`);
 	if (!title) return;
 	title.after(createCopyButton(fileId));
 };
@@ -202,17 +210,17 @@ const codeViewOptions = (): ConstructorParameters<
 	onPostRender: (node: HTMLElement, _instance: unknown, phase: string) => {
 		if (phase === "unmount") return;
 		const container =
-			(node.closest?.("diffs-container") as HTMLElement | null) ?? node;
+			(node.closest?.(DIFFS_TAG_NAME) as HTMLElement | null) ?? node;
 		highlightContainer(container);
 		ensureCopyButton(container);
 		syncImageCard(container);
 	},
 	unsafeCSS:
-		"[data-diffs-header]{cursor:pointer;transition:background-color .15s}[data-diffs-header]:hover{background-color:rgba(255,255,255,.05)}" +
+		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:rgba(255,255,255,.05)}` +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
 		"[data-copy-name]{opacity:0;transition:opacity .15s;background:transparent;border:0;color:#84848a;cursor:pointer;display:inline-flex;align-items:center;padding:0 4px;margin-left:2px;line-height:1}" +
-		`[data-diffs-header]:hover [data-copy-name]{opacity:1}[data-copy-name]:hover{color:#adadb1}[data-copy-name]:focus-visible{opacity:1}${IMAGE_CARD_CSS}`,
+		`[${DIFFS_HEADER_ATTR}]:hover [data-copy-name]{opacity:1}[data-copy-name]:hover{color:#adadb1}[data-copy-name]:focus-visible{opacity:1}${IMAGE_CARD_CSS}`,
 });
 
 const restoreAutoExpanded = (): void => {

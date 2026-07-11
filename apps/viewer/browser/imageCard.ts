@@ -1,3 +1,4 @@
+import { DIFFS_CHANGE_ICON_ATTR, DIFFS_HEADER_ATTR } from "@diffdeck/diffs";
 import type { ImageEntry } from "./imageDiff.ts";
 
 export type BlobUrlFor = (
@@ -79,7 +80,7 @@ const swapStatusIcon = (
 	if (!symbol) return;
 	if (!root.querySelector(`#diffs-icon-symbol-${symbol}`)) return;
 	const use = root.querySelector<SVGUseElement>(
-		"[data-diffs-header] [data-change-icon] use",
+		`[${DIFFS_HEADER_ATTR}] [${DIFFS_CHANGE_ICON_ATTR}] use`,
 	);
 	use?.setAttribute("href", `#diffs-icon-symbol-${symbol}`);
 };
@@ -113,7 +114,7 @@ export const ensureImageCard = (
 		if (existing.getAttribute("data-image-card") === version) return;
 		existing.remove();
 	}
-	const header = root.querySelector("[data-diffs-header]");
+	const header = root.querySelector(`[${DIFFS_HEADER_ATTR}]`);
 	const card = buildCard(entry, urlFor);
 	if (header) header.after(card);
 	else root.append(card);
