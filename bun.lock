@@ -13,6 +13,14 @@
         "typescript": "6.0.3",
       },
     },
+    "apps/viewer": {
+      "name": "@diffdeck/viewer",
+      "version": "0.0.0",
+      "dependencies": {
+        "@diffdeck/diffs": "workspace:*",
+        "@diffdeck/trees": "workspace:*",
+      },
+    },
     "packages/diffs": {
       "name": "@diffdeck/diffs",
       "version": "0.0.0",
@@ -91,6 +99,8 @@
     "@diffdeck/theming": ["@diffdeck/theming@workspace:packages/theming"],
 
     "@diffdeck/trees": ["@diffdeck/trees@workspace:packages/trees"],
+
+    "@diffdeck/viewer": ["@diffdeck/viewer@workspace:apps/viewer"],
 
     "@oxfmt/binding-android-arm-eabi": ["@oxfmt/binding-android-arm-eabi@0.57.0", "https://nexus.mng.musinsa.io/repository/npm-all/@oxfmt/binding-android-arm-eabi/-/binding-android-arm-eabi-0.57.0.tgz", { "os": "android", "cpu": "arm" }, "sha512-qVBsEO+KugOsCmUHcO8iqNnqc65p7PCKpCs8M66mPZ+Ri+CWbcpoQOEJBg2OTu03+0qu++NK1jj6IzvQVs0Sig=="],
 

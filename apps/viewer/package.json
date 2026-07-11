@@ -1,0 +1,10 @@
+{
+	"name": "@diffdeck/viewer",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@diffdeck/diffs": "workspace:*",
+		"@diffdeck/trees": "workspace:*"
+	}
+}
