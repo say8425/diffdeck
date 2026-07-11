@@ -13,7 +13,9 @@
 		"preact-render-to-string": "6.6.5"
 	},
 	"devDependencies": {
+		"@happy-dom/global-registrator": "20.0.11",
 		"@types/react": "19.2.7",
+		"happy-dom": "20.0.11",
 		"react": "19.2.7"
 	},
 	"peerDependencies": {

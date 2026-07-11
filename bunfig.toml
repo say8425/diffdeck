@@ -3,4 +3,12 @@ root = "."
 # Registers the reusable css-inline Bun plugin (scripts/css-inline-plugin.ts) so
 # `bun test` resolves the forked packages' `import styles from '../style.css?inline'`
 # to the real stylesheet text. Same plugin the build uses (scripts/parity/build.ts).
+#
+# NOTE: packages/trees/src/__tests__/happydom.ts (happy-dom global registration)
+# is intentionally NOT preloaded here. Registering happy-dom globally replaces
+# Node's fetch/http with happy-dom's implementations for the *entire* test run,
+# which broke apps/viewer's real HTTP server tests (diff-server, api/blob,
+# built-serving — 21 failures). Trees view/DOM tests must instead
+# `import "../__tests__/happydom";` at the top of each file that needs a DOM
+# (see happydom-smoke.test.ts).
 preload = ["./scripts/parity/preload.ts"]
