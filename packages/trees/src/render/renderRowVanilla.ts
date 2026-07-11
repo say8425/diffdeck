@@ -71,8 +71,9 @@ export type FileTreeRowVanillaContext = {
 	domId: string | undefined;
 };
 
-// getFileTreeRowPath (FileTreeView.tsx:121-126).
-const getFileTreeRowPath = (row: FileTreeVisibleRow): string =>
+// getFileTreeRowPath (FileTreeView.tsx:121-126). Exported: FileTreeVanillaView.ts
+// imports this instead of keeping its own duplicate copy (Task 6 dedupe).
+export const getFileTreeRowPath = (row: FileTreeVisibleRow): string =>
 	row.isFlattened
 		? (row.flattenedSegments?.findLast((segment) => segment.isTerminal)?.path ??
 			row.path)

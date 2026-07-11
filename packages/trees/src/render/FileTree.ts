@@ -1,6 +1,3 @@
-import { h } from 'preact';
-import { renderToString } from 'preact-render-to-string';
-
 import {
   getBuiltInSpriteSheet,
   isColoredBuiltInIconSet,
@@ -26,12 +23,10 @@ import {
   type FileTreeGitStatusState,
   resolveFileTreeGitStatusState,
 } from '../model/gitStatus';
-import type { FileTreeViewProps } from '../model/internalTypes';
 import type {
   FileTreeBatchOperation,
   FileTreeCompositionOptions,
   FileTreeGitStatusPatch,
-  FileTreeHydrationProps,
   FileTreeItemHandle,
   FileTreeListener,
   FileTreeMoveOptions,
@@ -48,27 +43,19 @@ import type {
   FileTreeScrollToPathOptions,
   FileTreeSearchSessionHandle,
   FileTreeSelectionChangeListener,
-  FileTreeSsrPayload,
 } from '../model/publicTypes';
-import {
-  FILE_TREE_DEFAULT_ITEM_HEIGHT,
-  FILE_TREE_DEFAULT_VIEWPORT_HEIGHT,
-} from '../model/virtualization';
 import fileTreeStyles from '../style.css?inline';
 import {
   escapeStyleTextForHtml,
   wrapCoreCSS,
   wrapUnsafeCSS,
 } from '../utils/cssWrappers';
-import { FileTreeView } from './FileTreeView';
 import {
-  hydrateFileTreeRoot,
-  renderFileTreeRoot,
-  unmountFileTreeRoot,
-} from './runtime';
+  FileTreeVanillaView,
+  type FileTreeVanillaViewProps,
+} from './FileTreeVanillaView';
 import { FileTreeManagedSlotHost } from './slotHost';
 
-let serverInstanceId = 0;
 let clientInstanceId = 0;
 
 function createClientId(explicitId?: string): string {
@@ -80,27 +67,6 @@ function createClientId(explicitId?: string): string {
   return `pst_ft_${clientInstanceId}`;
 }
 
-function createServerId(explicitId?: string): string {
-  if (explicitId != null && explicitId.length > 0) {
-    return explicitId;
-  }
-
-  serverInstanceId += 1;
-  return `pst_srv_${serverInstanceId}`;
-}
-
-// Translates the public row-budget hint into the pixel height shared by SSR and
-// the first client render before the DOM can report a measured scroll viewport.
-function resolveInitialViewportHeight({
-  initialVisibleRowCount,
-  itemHeight,
-}: Pick<FileTreeOptions, 'initialVisibleRowCount' | 'itemHeight'>): number {
-  return initialVisibleRowCount == null
-    ? FILE_TREE_DEFAULT_VIEWPORT_HEIGHT
-    : Math.max(0, initialVisibleRowCount) *
-        (itemHeight ?? FILE_TREE_DEFAULT_ITEM_HEIGHT);
-}
-
 function parseSpriteSheet(spriteSheet: string): SVGElement | undefined {
   if (typeof document === 'undefined') {
     return undefined;
@@ -110,49 +76,6 @@ function parseSpriteSheet(spriteSheet: string): SVGElement | undefined {
   wrapper.innerHTML = spriteSheet;
   const svg = wrapper.querySelector('svg');
   return svg instanceof SVGElement ? svg : undefined;
-}
-
-function getHeaderSlotHtml(
-  composition: FileTreeCompositionOptions | undefined
-): string {
-  const headerHtml = composition?.header?.html?.trim();
-  if (headerHtml == null || headerHtml.length === 0) {
-    return '';
-  }
-
-  return `<div slot="${HEADER_SLOT_NAME}" data-file-tree-managed-slot="${HEADER_SLOT_NAME}">${headerHtml}</div>`;
-}
-
-// Builds the host element opening markup. The optional `hostStyle` string is
-// emitted as an inline `style="..."` so vanilla SSR consumers (who serialize
-// the payload directly) get the resolved density variables on first paint
-// without needing the React wrapper to paint them.
-function getFileTreeOuterStart(
-  id: string,
-  mode: 'declarative' | 'dom',
-  hostStyle: string
-): string {
-  const templateAttr =
-    mode === 'declarative'
-      ? 'shadowrootmode="open"'
-      : 'data-file-tree-shadowrootmode="open"';
-  const styleAttr = hostStyle.length === 0 ? '' : ` style="${hostStyle}"`;
-  return `<file-tree-container id="${id}" data-file-tree-virtualized="true"${styleAttr}><template ${templateAttr}>`;
-}
-
-function getFileTreeOuterEnd(headerSlotHtml: string): string {
-  return `</template>${headerSlotHtml}</file-tree-container>`;
-}
-
-// Reassembles the serializable SSR payload into the full host markup. Use
-// `mode: 'dom'` when the string will be inserted via DOM APIs such as
-// `innerHTML` or `dangerouslySetInnerHTML`; otherwise the default declarative
-// form preserves native declarative shadow DOM parsing.
-export function serializeFileTreeSsrPayload(
-  payload: FileTreeSsrPayload,
-  mode: 'declarative' | 'dom' = 'declarative'
-): string {
-  return `${mode === 'declarative' ? payload.outerStart : payload.domOuterStart}${payload.shadowHtml}${payload.outerEnd}`;
 }
 
 function isBuiltInSpriteSheet(spriteSheet: SVGElement): boolean {
@@ -199,12 +122,13 @@ export class FileTree
   #appliedUnsafeCSS: string | undefined;
   #selectionVersion: number;
   #selectionSubscription: (() => void) | null = null;
+  #view: FileTreeVanillaView | undefined;
   #wrapper: HTMLDivElement | undefined;
   // Per-instance ownership flags for the density CSS variables on the host.
   // Flip true only when `#applyDensityHostStyle` actually wrote the var
   // (i.e. nothing inline was already there); `#unmount()` uses these to strip
   // exactly what we wrote so that hosts reused for a new instance start from
-  // a clean slate while SSR-supplied or caller-set values are left alone.
+  // a clean slate while caller-set values are left alone.
   #wroteHostItemHeight = false;
   #wroteHostDensityFactor = false;
 
@@ -267,7 +191,8 @@ export class FileTree
 
   public unmount(): void {
     if (this.#wrapper != null) {
-      unmountFileTreeRoot(this.#wrapper);
+      this.#view?.unmount();
+      this.#view = undefined;
       delete this.#wrapper.dataset.fileTreeVirtualizedWrapper;
       this.#wrapper = undefined;
     }
@@ -375,7 +300,7 @@ export class FileTree
       return;
     }
 
-    renderFileTreeRoot(mountedTree.wrapper, this.#getViewProps());
+    this.#syncGitStatusToView();
   }
 
   public move(
@@ -466,7 +391,7 @@ export class FileTree
     }
 
     this.#syncHeaderSlotContent();
-    renderFileTreeRoot(mountedTree.wrapper, this.#getViewProps());
+    this.#view?.renderRows();
   }
 
   public setGitStatus(gitStatus?: FileTreeOptions['gitStatus']): void {
@@ -485,7 +410,7 @@ export class FileTree
       return;
     }
 
-    renderFileTreeRoot(mountedTree.wrapper, this.#getViewProps());
+    this.#syncGitStatusToView();
   }
 
   public setIcons(icons?: FileTreeOptions['icons']): void {
@@ -497,14 +422,8 @@ export class FileTree
     }
 
     this.#syncIconSurface(mountedTree.host, mountedTree.wrapper);
-    renderFileTreeRoot(mountedTree.wrapper, this.#getViewProps());
-  }
-
-  public hydrate({ fileTreeContainer }: FileTreeHydrationProps): void {
-    const host = this.#prepareHost(fileTreeContainer);
-    const wrapper = this.#getOrCreateWrapper(host);
-    this.#syncHeaderSlotContent();
-    hydrateFileTreeRoot(wrapper, this.#getViewProps());
+    this.#view?.setIcons(this.#icons);
+    this.#view?.renderRows();
   }
 
   public render({
@@ -517,43 +436,44 @@ export class FileTree
     );
     const wrapper = this.#getOrCreateWrapper(host);
     this.#syncHeaderSlotContent();
-    renderFileTreeRoot(wrapper, this.#getViewProps());
+    this.#view?.unmount();
+    this.#view = new FileTreeVanillaView(this.#getVanillaViewProps());
+    this.#view.mount(wrapper);
   }
 
-  #getInitialViewOptions(): {
-    initialViewportHeight: number;
-    itemHeight?: number;
-    overscan?: number;
-    stickyFolders?: boolean;
-  } {
+  // Builds the (much smaller) prop surface FileTreeVanillaView actually
+  // consumes -- no virtualization (initialViewportHeight/overscan/
+  // stickyFolders: this view is never windowed, unlike the preact one), and
+  // no composition/renderRowDecoration/searchBlurBehavior/searchFakeFocus/
+  // slotHost (context-menu- and header-only concerns the vanilla view never
+  // rendered -- see FileTreeVanillaView.ts's module header). `onSelectionChange`
+  // is deliberately omitted: this class's own constructor-level
+  // `#selectionSubscription` (see `#emitSelectionChange`) is the sole
+  // emitter already, so wiring it here too would double-fire every selection
+  // change.
+  #getVanillaViewProps(): FileTreeVanillaViewProps {
     return {
-      initialViewportHeight: resolveInitialViewportHeight({
-        initialVisibleRowCount: this.#viewOptions.initialVisibleRowCount,
-        itemHeight: this.#viewOptions.itemHeight,
-      }),
-      itemHeight: this.#viewOptions.itemHeight,
-      overscan: this.#viewOptions.overscan,
-      stickyFolders: this.#viewOptions.stickyFolders,
+      controller: this.#controller,
+      directoriesWithGitChanges: this.#gitStatusState?.directoriesWithChanges,
+      gitStatusByPath: this.#gitStatusState?.statusByPath,
+      icons: this.#icons,
+      ignoredGitDirectories: this.#gitStatusState?.ignoredDirectoryPaths,
+      instanceId: this.#id,
+      itemHeight: this.#density.itemHeight,
+      searchEnabled: this.#searchEnabled,
     };
   }
 
-  #getViewProps(): FileTreeViewProps {
-    return {
-      composition: this.#composition,
-      controller: this.#controller,
+  // Pushes the current git-status snapshot into the mounted view and rebuilds
+  // its rows in place -- shared by `applyGitStatusPatch`/`setGitStatus` so
+  // both keep identical update semantics.
+  #syncGitStatusToView(): void {
+    this.#view?.setGitStatus({
+      directoriesWithGitChanges: this.#gitStatusState?.directoriesWithChanges,
       gitStatusByPath: this.#gitStatusState?.statusByPath,
       ignoredGitDirectories: this.#gitStatusState?.ignoredDirectoryPaths,
-      directoriesWithGitChanges: this.#gitStatusState?.directoriesWithChanges,
-      icons: this.#icons,
-      instanceId: this.#id,
-      renamingEnabled: this.#renamingEnabled,
-      renderRowDecoration: this.#renderRowDecoration,
-      searchBlurBehavior: this.#searchBlurBehavior,
-      searchEnabled: this.#searchEnabled,
-      searchFakeFocus: this.#searchFakeFocus,
-      slotHost: this.#slotHost,
-      ...this.#getInitialViewOptions(),
-    };
+    });
+    this.#view?.renderRows();
   }
 
   // Resolves the mounted DOM surfaces so runtime setters can rerender in place.
@@ -595,8 +515,8 @@ export class FileTree
     onSelectionChange(this.#controller.getSelectedPaths());
   }
 
-  // Keeps header slot content attached to the host light DOM so hydration and
-  // later composition surfaces can share one host-managed slot path.
+  // Keeps header slot content attached to the host light DOM so `render()`
+  // and later composition surfaces can share one host-managed slot path.
   #syncHeaderSlotContent(): void {
     const renderHeader = this.#composition?.header?.render;
     if (renderHeader != null) {
@@ -777,16 +697,15 @@ export class FileTree
     return host;
   }
 
-  // Mirrors the React wrapper and `preloadFileTree` SSR path: paint the
-  // resolved row height and density factor onto the host as CSS custom
-  // properties so the painted row height (`--trees-row-height`, derived from
-  // `--trees-item-height` in style.css) stays in sync with the itemHeight
-  // virtualization uses to position rows. Pre-existing inline values win —
-  // that covers SSR-supplied attributes during hydrate and any caller-set
-  // host overrides, matching the React wrapper's "caller style wins via
-  // spread order" semantic. Each branch records ownership so `#unmount()`
-  // can strip exactly what we wrote and host-reuse scenarios start from a
-  // clean slate on the next mount.
+  // Mirrors the React wrapper: paint the resolved row height and density
+  // factor onto the host as CSS custom properties so the painted row height
+  // (`--trees-row-height`, derived from `--trees-item-height` in style.css)
+  // stays in sync with the itemHeight virtualization uses to position rows.
+  // Pre-existing inline values win — that covers any caller-set host
+  // overrides, matching the React wrapper's "caller style wins via spread
+  // order" semantic. Each branch records ownership so `#unmount()` can strip
+  // exactly what we wrote and host-reuse scenarios start from a clean slate
+  // on the next mount.
   #applyDensityHostStyle(host: HTMLElement): void {
     if (host.style.getPropertyValue('--trees-item-height') === '') {
       host.style.setProperty(
@@ -805,10 +724,10 @@ export class FileTree
   }
 
   // Strips just the density vars this instance wrote during `#prepareHost()`,
-  // leaving SSR-supplied or caller-set values untouched. Called from
-  // `#unmount()` so a subsequent `new FileTree({ density }).hydrate({
-  // fileTreeContainer: sameHost })` starts from a clean slate instead of
-  // hitting the empty-check guard above and inheriting stale model values.
+  // leaving caller-set values untouched. Called from `#unmount()` so a
+  // subsequent `new FileTree({ density }).render({ fileTreeContainer:
+  // sameHost })` starts from a clean slate instead of hitting the
+  // empty-check guard above and inheriting stale model values.
   #removeOwnedDensityHostStyle(host: HTMLElement): void {
     if (this.#wroteHostItemHeight) {
       host.style.removeProperty('--trees-item-height');
@@ -819,100 +738,4 @@ export class FileTree
       this.#wroteHostDensityFactor = false;
     }
   }
-}
-
-export function preloadFileTree(options: FileTreeOptions): FileTreeSsrPayload {
-  const {
-    composition,
-    density,
-    fileTreeSearchMode,
-    gitStatus,
-    id,
-    initialSearchQuery,
-    icons,
-    itemHeight,
-    onSearchChange: _onSearchChange,
-    onSelectionChange: _onSelectionChange,
-    overscan,
-    renderRowDecoration,
-    renaming,
-    search,
-    searchBlurBehavior,
-    searchFakeFocus,
-    stickyFolders,
-    unsafeCSS,
-    initialVisibleRowCount,
-    ...controllerOptions
-  } = options;
-  const resolvedDensity = resolveFileTreeDensity(density, itemHeight);
-  const resolvedItemHeight = resolvedDensity.itemHeight;
-  const resolvedId = createServerId(id);
-  const controller = new FileTreeController({
-    ...controllerOptions,
-    fileTreeSearchMode,
-    initialSearchQuery,
-    renaming,
-  });
-  const gitStatusState = resolveFileTreeGitStatusState(gitStatus);
-  const initialViewportHeight = resolveInitialViewportHeight({
-    initialVisibleRowCount,
-    itemHeight: resolvedItemHeight,
-  });
-  const normalizedIcons = normalizeFileTreeIcons(icons);
-  const customSpriteSheet = normalizedIcons.spriteSheet?.trim() ?? '';
-  const coloredIconsAttr =
-    normalizedIcons.colored && isColoredBuiltInIconSet(normalizedIcons.set)
-      ? ' data-file-tree-colored-icons="true"'
-      : '';
-  const wrappedCoreCss = escapeStyleTextForHtml(wrapCoreCSS(fileTreeStyles));
-  const unsafeCssStyle =
-    unsafeCSS == null || unsafeCSS === ''
-      ? ''
-      : `<style ${FILE_TREE_UNSAFE_CSS_ATTRIBUTE}>${escapeStyleTextForHtml(
-          wrapUnsafeCSS(unsafeCSS)
-        )}</style>`;
-
-  const bodyHtml = renderToString(
-    h(FileTreeView, {
-      composition,
-      controller,
-      gitStatusByPath: gitStatusState?.statusByPath,
-      ignoredGitDirectories: gitStatusState?.ignoredDirectoryPaths,
-      directoriesWithGitChanges: gitStatusState?.directoriesWithChanges,
-      icons,
-      instanceId: resolvedId,
-      itemHeight: resolvedItemHeight,
-      overscan,
-      renamingEnabled: renaming != null && renaming !== false,
-      renderRowDecoration,
-      searchBlurBehavior,
-      searchEnabled: search === true,
-      searchFakeFocus: searchFakeFocus === true,
-      stickyFolders,
-      initialViewportHeight,
-    })
-  );
-  controller.destroy();
-
-  const shadowHtml = `${getBuiltInSpriteSheet(normalizedIcons.set)}${customSpriteSheet}<style ${FILE_TREE_STYLE_ATTRIBUTE}>${wrappedCoreCss}</style>${unsafeCssStyle}<div data-file-tree-id="${resolvedId}" data-file-tree-virtualized-wrapper="true"${coloredIconsAttr}>${bodyHtml}</div>`;
-  const headerSlotHtml = getHeaderSlotHtml(composition);
-  // Inline the resolved density on the host so vanilla SSR consumers get the
-  // same first paint as the React wrapper, where the model paints these vars
-  // for them. The two paths must agree because the SSR shadow body was laid
-  // out using the same resolved itemHeight.
-  const hostStyle = `--trees-item-height:${String(resolvedItemHeight)}px;--trees-density-override:${String(resolvedDensity.factor)}`;
-  const outerStart = getFileTreeOuterStart(
-    resolvedId,
-    'declarative',
-    hostStyle
-  );
-  const domOuterStart = getFileTreeOuterStart(resolvedId, 'dom', hostStyle);
-  const outerEnd = getFileTreeOuterEnd(headerSlotHtml);
-  return {
-    domOuterStart,
-    id: resolvedId,
-    outerEnd,
-    outerStart,
-    shadowHtml,
-  };
 }

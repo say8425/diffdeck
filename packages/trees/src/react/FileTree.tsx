@@ -233,7 +233,11 @@ export function FileTree({
     }
 
     if (preloadedData != null && hasExistingPreloadedContent(hostElement)) {
-      model.hydrate({ fileTreeContainer: hostElement });
+      // `FileTree#hydrate` was removed with the preact SSR path (Plan 3
+      // Task 6, de-preact) -- `render()` now handles both branches
+      // identically (there is no longer a declarative-shadow-DOM producer
+      // for it to adopt without a client rebuild).
+      model.render({ fileTreeContainer: hostElement });
     } else {
       model.render({ fileTreeContainer: hostElement });
     }

@@ -63,7 +63,6 @@ import type {
 	FileTreeFileHandle,
 	FileTreeGitStatusPatch,
 	FileTreeHeaderCompositionOptions,
-	FileTreeHydrationProps,
 	FileTreeInitialExpansion,
 	FileTreeItemHandle,
 	FileTreeListener,
@@ -98,7 +97,6 @@ import type {
 	FileTreeSelectionChangeListener,
 	FileTreeSortComparator,
 	FileTreeSortEntry,
-	FileTreeSsrPayload,
 	FileTreeVisibleRow,
 } from "./model/publicTypes";
 import {
@@ -107,11 +105,7 @@ import {
 	preparePresortedFileTreeInput,
 } from "./preparedInput";
 import { FILE_TREE_DEFAULT_ITEM_HEIGHT } from "./model/virtualization";
-import {
-	FileTree,
-	preloadFileTree,
-	serializeFileTreeSsrPayload,
-} from "./render/FileTree";
+import { FileTree } from "./render/FileTree";
 
 export {
 	CONTEXT_MENU_SLOT_NAME,
@@ -148,7 +142,6 @@ export {
 	type FileTreeFileHandle,
 	type FileTreeGitStatusPatch,
 	type FileTreeHeaderCompositionOptions,
-	type FileTreeHydrationProps,
 	type FileTreeIconConfig,
 	type FileTreeIcons,
 	type FileTreeInitialExpansion,
@@ -186,7 +179,6 @@ export {
 	type FileTreeSelectionChangeListener,
 	type FileTreeSortComparator,
 	type FileTreeSortEntry,
-	type FileTreeSsrPayload,
 	type FileTreeVisibleRow,
 	type GitStatus,
 	type GitStatusEntry,
@@ -196,9 +188,7 @@ export {
 	type TreeThemeStyles,
 	createFileTreeIconResolver,
 	getBuiltInSpriteSheet,
-	preloadFileTree,
 	prepareFileTreeInput,
 	preparePresortedFileTreeInput,
-	serializeFileTreeSsrPayload,
 	themeToTreeStyles,
 };

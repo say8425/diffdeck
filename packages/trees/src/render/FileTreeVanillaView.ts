@@ -74,20 +74,35 @@
 //     (source :2416+), and the context menu: none of `handleRowClick`'s or
 //     `handleTreeKeyDown`'s branches for these are ported (read-only
 //     interaction only).
-//   - git-status wiring: unchanged from Task 4 -- every row's git ctx is
-//     still hardcoded to "no git status" (see `#buildRowContext` below).
+//
+// git-status wiring (Task 6): `#buildRowContext` computes each row's
+// `effectiveGitStatus`/`containsGitChange` from the `gitStatusByPath`/
+// `ignoredGitDirectories`/`directoriesWithGitChanges` maps the caller passes
+// in (mirrors renderFileTreeRow, FileTreeView.tsx:1025-1038, including
+// "ignored" inheritance from the nearest ignored ancestor directory via
+// `getInheritedIgnoredGitStatus`, ported to `./gitInheritance.ts`).
+// `features.gitLaneActive` mirrors the source's FileTreeView.tsx:1490-1493
+// gate exactly: the git lane renders whenever ANY of the three git props was
+// passed (even an empty map/set), not only when a row actually has a status.
 import type { FileTreeIcons } from "../iconConfig";
 import type { FileTreeController } from "../model/FileTreeController";
 import type {
 	FileTreeDirectoryHandle,
 	FileTreeItemHandle,
+	FileTreePublicId,
 	FileTreeSelectionChangeListener,
 	FileTreeVisibleRow,
 } from "../model/publicTypes";
+import type { GitStatus } from "../publicTypes";
 import { el } from "./el";
 import { focusElement } from "./focusHelpers";
+import { getInheritedIgnoredGitStatus } from "./gitInheritance";
 import { createFileTreeIconResolver } from "./iconResolver";
-import { buildRow, type FileTreeRowVanillaContext } from "./renderRowVanilla";
+import {
+	buildRow,
+	type FileTreeRowVanillaContext,
+	getFileTreeRowPath,
+} from "./renderRowVanilla";
 import { computeFileTreeRowClickPlan } from "./rowClickPlan";
 
 export type FileTreeVanillaViewProps = {
@@ -97,17 +112,18 @@ export type FileTreeVanillaViewProps = {
 	searchEnabled?: boolean;
 	instanceId?: string;
 	onSelectionChange?: FileTreeSelectionChangeListener;
+	directoriesWithGitChanges?: ReadonlySet<FileTreePublicId>;
+	gitStatusByPath?: ReadonlyMap<FileTreePublicId, GitStatus>;
+	ignoredGitDirectories?: ReadonlySet<FileTreePublicId>;
 };
 
-// getFileTreeRowPath (FileTreeView.tsx:121-126), duplicated locally the same
-// way renderRowVanilla.ts already duplicates it (see that file's own copy) --
-// `domId` computation below needs the flattened-aware target path
-// independently of `buildRow`'s internal copy.
-const getFileTreeRowPath = (row: FileTreeVisibleRow): string =>
-	row.isFlattened
-		? (row.flattenedSegments?.findLast((segment) => segment.isTerminal)?.path ??
-			row.path)
-		: row.path;
+// The subset of git-status state `setGitStatus` swaps in place -- mirrors the
+// three git props above so `FileTree` can pass the same shape it stores on
+// `#gitStatusState` (render/FileTree.ts).
+export type FileTreeVanillaViewGitStatus = Pick<
+	FileTreeVanillaViewProps,
+	"directoriesWithGitChanges" | "gitStatusByPath" | "ignoredGitDirectories"
+>;
 
 // getFileTreeRowAriaLabel (FileTreeView.tsx:128-135).
 const getFileTreeRowAriaLabel = (row: FileTreeVisibleRow): string => {
@@ -156,10 +172,13 @@ const isSearchOpenSeedKey = (event: KeyboardEvent): boolean =>
 export class FileTreeVanillaView {
 	readonly #controller: FileTreeController;
 	readonly #itemHeight: number;
-	readonly #iconResolver: ReturnType<typeof createFileTreeIconResolver>;
+	#iconResolver: ReturnType<typeof createFileTreeIconResolver>;
 	readonly #searchEnabled: boolean;
 	readonly #instanceId: string | undefined;
 	readonly #onSelectionChange: FileTreeSelectionChangeListener | undefined;
+	#directoriesWithGitChanges: ReadonlySet<FileTreePublicId> | undefined;
+	#gitStatusByPath: ReadonlyMap<FileTreePublicId, GitStatus> | undefined;
+	#ignoredGitDirectories: ReadonlySet<FileTreePublicId> | undefined;
 	#root: HTMLElement | undefined;
 	#list: HTMLElement | undefined;
 	#searchInput: HTMLInputElement | undefined;
@@ -173,7 +192,26 @@ export class FileTreeVanillaView {
 		this.#searchEnabled = props.searchEnabled === true;
 		this.#instanceId = props.instanceId;
 		this.#onSelectionChange = props.onSelectionChange;
+		this.#directoriesWithGitChanges = props.directoriesWithGitChanges;
+		this.#gitStatusByPath = props.gitStatusByPath;
+		this.#ignoredGitDirectories = props.ignoredGitDirectories;
 		this.#selectionVersion = this.#controller.getSelectionVersion();
+	}
+
+	// In-place git-status swap: updates the stored maps only -- callers rebuild
+	// rows afterward via `renderRows()` (mirrors `FileTree.#syncGitStatusToView`,
+	// render/FileTree.ts), so a caller-driven `resetPaths()` + `setGitStatus()`
+	// sequence never resets scroll/selection.
+	public setGitStatus(gitStatus: FileTreeVanillaViewGitStatus): void {
+		this.#directoriesWithGitChanges = gitStatus.directoriesWithGitChanges;
+		this.#gitStatusByPath = gitStatus.gitStatusByPath;
+		this.#ignoredGitDirectories = gitStatus.ignoredGitDirectories;
+	}
+
+	// In-place icon-resolver swap for `FileTree#setIcons` -- callers rebuild
+	// rows afterward via `renderRows()`.
+	public setIcons(icons?: FileTreeIcons): void {
+		this.#iconResolver = createFileTreeIconResolver(icons);
 	}
 
 	// Builds the host/list DOM (+ optional search input), subscribes to the
@@ -231,8 +269,14 @@ export class FileTreeVanillaView {
 			0,
 			this.#controller.getVisibleCount() - 1,
 		);
+		// One inheritance cache per render pass -- see `#buildRowContext` below
+		// for why this view scopes it per-pass rather than per-instance like the
+		// source's `useMemo` (FileTreeView.tsx:1285).
+		const ignoredInheritanceCache = new Map<string, boolean>();
 		list.replaceChildren(
-			...rows.map((row) => buildRow(row, this.#buildRowContext(row))),
+			...rows.map((row) =>
+				buildRow(row, this.#buildRowContext(row, ignoredInheritanceCache)),
+			),
 		);
 	}
 
@@ -258,8 +302,31 @@ export class FileTreeVanillaView {
 		return el("div", { "data-file-tree-search-container": "true" }, [input]);
 	}
 
-	#buildRowContext(row: FileTreeVisibleRow): FileTreeRowVanillaContext {
+	// effectiveGitStatus/containsGitChange mirrors renderFileTreeRow
+	// (FileTreeView.tsx:1025-1038): a row's own `gitStatusByPath` entry wins;
+	// absent that, "ignored" inherits from the nearest ignored ancestor
+	// directory via `getInheritedIgnoredGitStatus`, memoized into the
+	// `ignoredInheritanceCache` `renderRows()` created for this pass (NOT a
+	// cache scoped to the view instance like the source's `useMemo` -- this
+	// view already rebuilds every row on every controller emit, so a fresh
+	// per-pass cache is simpler than invalidating a longer-lived one whenever
+	// `ignoredGitDirectories` changes underneath it via `setGitStatus`).
+	#buildRowContext(
+		row: FileTreeVisibleRow,
+		ignoredInheritanceCache: Map<string, boolean>,
+	): FileTreeRowVanillaContext {
 		const targetPath = getFileTreeRowPath(row);
+		const ownGitStatus = this.#gitStatusByPath?.get(targetPath) ?? null;
+		const effectiveGitStatus =
+			ownGitStatus ??
+			getInheritedIgnoredGitStatus(
+				row.ancestorPaths,
+				this.#ignoredGitDirectories,
+				ignoredInheritanceCache,
+			);
+		const containsGitChange =
+			row.kind === "directory" &&
+			(this.#directoriesWithGitChanges?.has(targetPath) ?? false);
 		return {
 			iconResolver: this.#iconResolver,
 			itemHeight: this.#itemHeight,
@@ -267,9 +334,18 @@ export class FileTreeVanillaView {
 			domId: row.isFocused
 				? getFileTreeFocusedRowDomId(this.#instanceId, targetPath)
 				: undefined,
-			features: { gitLaneActive: false },
-			state: { effectiveGitStatus: null, containsGitChange: false },
+			features: { gitLaneActive: this.#isGitLaneActive() },
+			state: { effectiveGitStatus, containsGitChange },
 		};
+	}
+
+	// gitLaneActive (FileTreeView.tsx:1490-1493).
+	#isGitLaneActive(): boolean {
+		return (
+			this.#gitStatusByPath != null ||
+			this.#ignoredGitDirectories != null ||
+			this.#directoriesWithGitChanges != null
+		);
 	}
 
 	// The read-only subset of `handleRowClick` (FileTreeView.tsx:3513-3591) --
