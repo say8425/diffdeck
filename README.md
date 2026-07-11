@@ -6,7 +6,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
-> **Status: Foundation.** The four forked packages compile, type-check, and render a diff + file tree in the browser (shown below). The viewer/server app, de-preact, and CLI are follow-on work.
+> **Status: Foundation + viewer/server app.** The four forked packages compile, type-check, and render a diff + file tree in the browser (shown below); the viewer and its local diff server now live in `apps/viewer/`. De-preact and the CLI are follow-on work.
 
 ![diffdeck rendering a large multi-file diff with syntax highlighting and a deep, flattened file tree](docs/screenshot.png)
 
