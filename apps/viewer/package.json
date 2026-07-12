@@ -2,6 +2,7 @@
 	"name": "@say8425/diffdeck",
 	"version": "0.1.0",
 	"description": "Local git diff viewer — browse working-tree and branch diffs in your browser",
+	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/say8425/diffdeck.git"
@@ -10,7 +11,9 @@
 		"diffdeck": "dist/cli.js"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"LICENSE",
+		"NOTICE"
 	],
 	"type": "module",
 	"publishConfig": {
@@ -18,7 +21,8 @@
 	},
 	"scripts": {
 		"build": "bun run build.ts",
-		"start": "bun dist/cli.js"
+		"start": "bun dist/cli.js",
+		"prepack": "bun run build"
 	},
 	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",
