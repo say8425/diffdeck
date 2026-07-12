@@ -16,12 +16,12 @@ default browser.
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `--port <n>` | Port to serve on (default: `$DIFFDECK_PORT` or `49573`) |
-| `--no-open` | Do not open a browser automatically (prints the URL instead) |
-| `-h`, `--help` | Show help |
-| `-v`, `--version` | Show version |
+| Flag              | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)      |
+| `--no-open`       | Do not open a browser automatically (prints the URL instead) |
+| `-h`, `--help`    | Show help                                                    |
+| `-v`, `--version` | Show version                                                 |
 
 ## Environment
 
