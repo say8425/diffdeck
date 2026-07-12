@@ -78,3 +78,41 @@ Files under `packages/` are modified from the originals (import paths rewritten 
 ## License
 
 Apache-2.0. See [`NOTICE`](./NOTICE) and the per-package `LICENSE` files.
+
+## CLI
+
+Run the diff viewer for the git repository in the current directory:
+
+```bash
+bunx @say8425/diffdeck
+```
+
+This starts a local server on `127.0.0.1:49573` (override with `--port`) and opens
+the viewer in your browser.
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--port <n>` | Port to serve on (default: `$DIFFDECK_PORT` or `49573`) |
+| `--no-open` | Do not open a browser automatically (prints the URL) |
+| `-h`, `--help` | Show help |
+| `-v`, `--version` | Show version |
+
+Environment: `DIFFDECK_PORT` sets the default port; `DIFFDECK_DISABLE=1` disables the
+viewer. The token is cached under `~/.cache/diffdeck/`.
+
+## Publishing
+
+The package is `@say8425/diffdeck`; `apps/viewer` is the publish root. `@diffdeck/*`
+packages are bundled into `dist` at build time, so the published tarball has no
+runtime dependencies.
+
+```bash
+cd apps/viewer
+bun run build           # produces dist/cli.js + dist/viewer/
+bun publish --dry-run   # inspect the tarball contents
+bun publish             # publish (requires npm auth; run manually)
+```
+
+Only `dist/` ships (`files: ["dist"]`).
