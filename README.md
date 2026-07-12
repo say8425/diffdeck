@@ -99,8 +99,8 @@ Options:
 | `-h`, `--help` | Show help |
 | `-v`, `--version` | Show version |
 
-Environment: `DIFFDECK_PORT` sets the default port; `DIFFDECK_DISABLE=1` disables the
-viewer. The token is cached under `~/.cache/diffdeck/`.
+Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
+`~/.cache/diffdeck/`.
 
 ## Publishing
 
@@ -114,5 +114,9 @@ bun run build           # produces dist/cli.js + dist/viewer/
 bun publish --dry-run   # inspect the tarball contents
 bun publish             # publish (requires npm auth; run manually)
 ```
+
+Note: `bun publish --dry-run` still requires local npm auth to be configured
+(`npm login` / a valid token) — without it, it errors with "missing
+authentication" even though it performs no write to the registry.
 
 Only `dist/` ships (`files: ["dist"]`).
