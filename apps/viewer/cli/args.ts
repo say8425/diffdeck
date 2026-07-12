@@ -8,7 +8,9 @@ export interface ParsedArgs {
 const parsePort = (raw: string | undefined): number | undefined => {
 	if (!raw) return undefined;
 	const n = Number.parseInt(raw, 10);
-	return Number.isInteger(n) && n > 0 && n < 65536 ? n : undefined;
+	// 0 is a valid, meaningful value here (ask the OS for any free port —
+	// Bun.serve({ port: 0 }) honors it), so the lower bound is inclusive.
+	return Number.isInteger(n) && n >= 0 && n < 65536 ? n : undefined;
 };
 
 export const parseArgs = (argv: string[]): ParsedArgs => {

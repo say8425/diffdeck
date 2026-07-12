@@ -13,8 +13,21 @@ describe("parseArgs", () => {
 			version: false,
 		});
 	});
+	test("--port 0 is valid (ask the OS for any free port)", () => {
+		expect(parseArgs(["--port", "0"])).toEqual({
+			port: 0,
+			open: true,
+			help: false,
+			version: false,
+		});
+	});
 	test("invalid --port value is ignored (port stays undefined)", () => {
 		expect(parseArgs(["--port", "abc"])).toEqual({
+			open: true,
+			help: false,
+			version: false,
+		});
+		expect(parseArgs(["--port", "-1"])).toEqual({
 			open: true,
 			help: false,
 			version: false,

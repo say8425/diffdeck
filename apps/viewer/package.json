@@ -1,9 +1,26 @@
 {
-	"name": "@diffdeck/viewer",
-	"version": "0.0.0",
-	"private": true,
+	"name": "@say8425/diffdeck",
+	"version": "0.1.0",
+	"description": "Local git diff viewer — browse working-tree and branch diffs in your browser",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/say8425/diffdeck.git"
+	},
+	"bin": {
+		"diffdeck": "dist/cli.js"
+	},
+	"files": [
+		"dist"
+	],
 	"type": "module",
-	"dependencies": {
+	"publishConfig": {
+		"registry": "https://registry.npmjs.org"
+	},
+	"scripts": {
+		"build": "bun run build.ts",
+		"start": "bun dist/cli.js"
+	},
+	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",
 		"@diffdeck/path-store": "workspace:*",
 		"@diffdeck/trees": "workspace:*"
