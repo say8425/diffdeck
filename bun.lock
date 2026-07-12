@@ -14,9 +14,12 @@
       },
     },
     "apps/viewer": {
-      "name": "@diffdeck/viewer",
-      "version": "0.0.0",
-      "dependencies": {
+      "name": "@say8425/diffdeck",
+      "version": "0.1.0",
+      "bin": {
+        "diffdeck": "dist/cli.js",
+      },
+      "devDependencies": {
         "@diffdeck/diffs": "workspace:*",
         "@diffdeck/path-store": "workspace:*",
         "@diffdeck/trees": "workspace:*",
@@ -70,8 +73,6 @@
     "@diffdeck/theming": ["@diffdeck/theming@workspace:packages/theming"],
 
     "@diffdeck/trees": ["@diffdeck/trees@workspace:packages/trees"],
-
-    "@diffdeck/viewer": ["@diffdeck/viewer@workspace:apps/viewer"],
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
 
@@ -150,6 +151,8 @@
     "@oxlint/binding-win32-ia32-msvc": ["@oxlint/binding-win32-ia32-msvc@1.72.0", "", { "os": "win32", "cpu": "ia32" }, "sha512-yt6HEh7IsHvtjRWtmeZRX134eaXKHq5Gnqlf1xBJdJl1JtdoRUEJw3nAxpZoUDS860cX/foKbztO441anVBtVQ=="],
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.72.0", "", { "os": "win32", "cpu": "x64" }, "sha512-b2eKFD2hX7tIwmo/cyH6TDq8vzWRZ2qNHrzoGntUTmq0h3zQh/uX3eTSHCwI8OB/ADQfJCRelLItK8BsxuucDA=="],
+
+    "@say8425/diffdeck": ["@say8425/diffdeck@workspace:apps/viewer"],
 
     "@shikijs/core": ["@shikijs/core@4.3.0", "", { "dependencies": { "@shikijs/primitive": "4.3.0", "@shikijs/types": "4.3.0", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-EooU3i9F6IAE8kEu+AnGf9DFZWkQBZ+hJn3tLVbsH+61mtQiva5biai66fAA6nvFPXkLgvrh7BrR7YcJU83xQQ=="],
 
