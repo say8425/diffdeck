@@ -8,7 +8,7 @@ import { startDiffServer } from "../server/server.ts";
 let handle: ReturnType<typeof startDiffServer>;
 let base: string;
 let cacheHome: string;
-const distDir = join(import.meta.dir, "..", "dist");
+const distDir = join(import.meta.dir, "..", "dist", "viewer");
 
 beforeAll(async () => {
 	const proc = Bun.spawn(
