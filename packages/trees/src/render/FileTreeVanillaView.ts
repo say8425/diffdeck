@@ -183,6 +183,13 @@ export class FileTreeVanillaView {
 	#list: HTMLElement | undefined;
 	#searchInput: HTMLInputElement | undefined;
 	#unsubscribe: (() => void) | null = null;
+	// True between pointerdown and pointerup on the tree. While set, focusin must
+	// NOT drive a controller focus update: that emit rebuilds every row
+	// (renderRows -> replaceChildren) synchronously between the click's mousedown
+	// and mouseup, detaching the pressed <button> so the browser never fires
+	// `click` -- which reads to the user as "must double-click to select". The
+	// click handler sets focus + selection itself, so skipping focusin is safe.
+	#pointerInteracting = false;
 	#selectionVersion: number;
 
 	public constructor(props: FileTreeVanillaViewProps) {
@@ -247,6 +254,9 @@ export class FileTreeVanillaView {
 		root.addEventListener("click", this.#handleClick);
 		root.addEventListener("keydown", this.#handleKeyDown);
 		root.addEventListener("focusin", this.#handleFocusIn);
+		root.addEventListener("pointerdown", this.#handlePointerDown);
+		root.addEventListener("pointerup", this.#handlePointerUp);
+		root.addEventListener("pointercancel", this.#handlePointerUp);
 		this.#searchInput?.addEventListener("input", this.#handleSearchInput);
 		this.#unsubscribe = this.#controller.subscribe(() => {
 			this.renderRows();
@@ -286,6 +296,9 @@ export class FileTreeVanillaView {
 		this.#root?.removeEventListener("click", this.#handleClick);
 		this.#root?.removeEventListener("keydown", this.#handleKeyDown);
 		this.#root?.removeEventListener("focusin", this.#handleFocusIn);
+		this.#root?.removeEventListener("pointerdown", this.#handlePointerDown);
+		this.#root?.removeEventListener("pointerup", this.#handlePointerUp);
+		this.#root?.removeEventListener("pointercancel", this.#handlePointerUp);
 		this.#searchInput?.removeEventListener("input", this.#handleSearchInput);
 		this.#root?.remove();
 		this.#root = undefined;
@@ -538,7 +551,23 @@ export class FileTreeVanillaView {
 	}
 
 	// focusin delegate for the per-row `onFocus` at FileTreeView.tsx:1140-1144.
+	#handlePointerDown = (): void => {
+		this.#pointerInteracting = true;
+	};
+
+	#handlePointerUp = (): void => {
+		this.#pointerInteracting = false;
+	};
+
 	#handleFocusIn = (event: FocusEvent): void => {
+		// A pointer-driven focusin arrives mid-click (between mousedown and
+		// mouseup). Driving controller focus here rebuilds every row and detaches
+		// the pressed button, swallowing the click (see `#pointerInteracting`).
+		// The click handler sets focus itself, so skip. Keyboard/programmatic
+		// focus (no pointer down) still updates focus normally.
+		if (this.#pointerInteracting) {
+			return;
+		}
 		const target = event.target;
 		const rowElement =
 			target instanceof Element ? target.closest("[data-item-path]") : null;

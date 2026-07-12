@@ -230,6 +230,31 @@ test("focusin on a row syncs controller focus to that row", () => {
 	expect(controller.getFocusedPath()).toBe("b.ts");
 });
 
+test("a pointer press suppresses focusin's focus sync so a click is not swallowed", () => {
+	// Regression: in the browser, a row's focusin fires mid-click (between
+	// mousedown and mouseup). Syncing controller focus there rebuilds every row
+	// (renderRows -> replaceChildren) and detaches the pressed <button>, so the
+	// browser never fires `click` -- the single click is swallowed and the user
+	// has to click twice. happy-dom cannot reproduce the swallow, so we assert
+	// the guard directly: during a pointer interaction, focusin must not move
+	// controller focus (the click handler owns focus then).
+	const controller = createController(["a.ts", "b.ts"]);
+	const view = new FileTreeVanillaView({ controller, itemHeight: 30 });
+	const host = mountConnected(view);
+	const rowB = getRow(host, "b.ts");
+
+	expect(controller.getFocusedPath()).toBe("a.ts");
+
+	rowB.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+	rowB.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+	expect(controller.getFocusedPath()).toBe("a.ts");
+
+	// After release, focusin resumes syncing (Tab / programmatic focus).
+	rowB.dispatchEvent(new Event("pointerup", { bubbles: true }));
+	rowB.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+	expect(controller.getFocusedPath()).toBe("b.ts");
+});
+
 test("unmount tears down the delegated listeners: a later click no longer changes selection", () => {
 	const controller = createController(["a.ts", "b.ts"]);
 	const view = new FileTreeVanillaView({ controller, itemHeight: 30 });
