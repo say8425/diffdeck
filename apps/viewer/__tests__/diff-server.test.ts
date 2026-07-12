@@ -44,7 +44,7 @@ describe("diff server", () => {
 	test("ping returns 204 with marker header", async () => {
 		const res = await fetch(`${base}/api/ping`);
 		expect(res.status).toBe(204);
-		expect(res.headers.get("x-cc-statusline")).toBe("1");
+		expect(res.headers.get("x-diffdeck")).toBe("1");
 	});
 
 	test("serves index.html at / with no-store so the viewer is never stale", async () => {

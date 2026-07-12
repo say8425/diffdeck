@@ -37,6 +37,6 @@ describe("token module", () => {
 	});
 
 	test("getTokenPath is under the cache dir", () => {
-		expect(getTokenPath(env)).toBe(`${TMP}/cc-statusline/diff-server.token`);
+		expect(getTokenPath(env)).toBe(`${TMP}/diffdeck/diff-server.token`);
 	});
 });

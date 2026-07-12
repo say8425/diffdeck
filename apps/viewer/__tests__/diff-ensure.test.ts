@@ -18,7 +18,7 @@ afterEach(() => {
 describe("ensureDiffServer", () => {
 	test("returns null when disabled", () => {
 		const result = ensureDiffServer("/some/repo", {
-			CC_STATUSLINE_DIFF_DISABLE: "1",
+			DIFFDECK_DISABLE: "1",
 		});
 		expect(result).toBeNull();
 	});
@@ -28,7 +28,7 @@ describe("ensureDiffServer", () => {
 		// Use an unlikely port so the probe fails fast and no real daemon interferes.
 		const result = ensureDiffServer("/some/repo", {
 			XDG_CACHE_HOME: cacheHome,
-			CC_STATUSLINE_DIFF_PORT: "59999",
+			DIFFDECK_PORT: "59999",
 		});
 		// No token persisted yet on the very first call.
 		expect(result).toBeNull();
@@ -37,7 +37,7 @@ describe("ensureDiffServer", () => {
 	test("returns the token+port once a token file exists", async () => {
 		cacheHome = mkdtempSync(join(tmpdir(), "cc-ensure-"));
 		const { ensureToken } = await import("../server/token.ts");
-		const env = { XDG_CACHE_HOME: cacheHome, CC_STATUSLINE_DIFF_PORT: "59999" };
+		const env = { XDG_CACHE_HOME: cacheHome, DIFFDECK_PORT: "59999" };
 		const token = ensureToken(env);
 		resetEnsureCache();
 		const result = ensureDiffServer("/some/repo", env);
@@ -46,7 +46,7 @@ describe("ensureDiffServer", () => {
 
 	test("does not throw/reject when the injected spawner throws (spawn failure)", async () => {
 		cacheHome = mkdtempSync(join(tmpdir(), "cc-ensure-"));
-		const env = { XDG_CACHE_HOME: cacheHome, CC_STATUSLINE_DIFF_PORT: "59997" };
+		const env = { XDG_CACHE_HOME: cacheHome, DIFFDECK_PORT: "59997" };
 
 		// Must resolve (not throw) even though the injected spawner always throws,
 		// and the fire-and-forget probe/spawn promise must never surface as an

@@ -43,7 +43,7 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
 				status: 204,
-				headers: { "x-cc-statusline": "1" },
+				headers: { "x-diffdeck": "1" },
 			});
 		}
 

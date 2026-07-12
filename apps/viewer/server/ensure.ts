@@ -25,7 +25,7 @@ const probeOurServer = async (port: number): Promise<boolean> => {
 		const res = await fetch(`http://127.0.0.1:${port}/api/ping`, {
 			signal: AbortSignal.timeout(150),
 		});
-		return res.headers.get("x-cc-statusline") === "1";
+		return res.headers.get("x-diffdeck") === "1";
 	} catch {
 		return false;
 	}
@@ -62,7 +62,7 @@ const spawnDaemon = (port: number, env: Env): void => {
 			selfPath,
 		],
 		{
-			env: { ...process.env, ...env, CC_STATUSLINE_DIFF_PORT: String(port) },
+			env: { ...process.env, ...env, DIFFDECK_PORT: String(port) },
 			stdin: "ignore",
 			stdout: "ignore",
 			stderr: "ignore",
