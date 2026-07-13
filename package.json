@@ -11,7 +11,8 @@
 		"lint": "oxlint packages/ apps/ bin/",
 		"format": "oxfmt packages/ apps/ bin/",
 		"format:check": "oxfmt --check packages/ apps/ bin/",
-		"test": "bun test"
+		"test": "bun test",
+		"test:coverage": "bun test --coverage"
 	},
 	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",

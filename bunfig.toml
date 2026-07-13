@@ -12,3 +12,21 @@ root = "."
 # `import "../__tests__/happydom";` at the top of each file that needs a DOM
 # (see happydom-smoke.test.ts).
 preload = ["./scripts/parity/preload.ts"]
+
+# Coverage gate, scoped to diffdeck's owned runtime code
+# (apps/viewer/{browser,cli,server}). Only fires when `--coverage` is passed
+# (plain `bun test` stays fast), so `bun run test:coverage` enforces it.
+# Excluded: vendored packages/*, the source-map/parity tooling under scripts/,
+# the browser entry main.ts (integration entry — covered by the Playwright e2e
+# suite, not in-process), the build script, and the e2e specs themselves. The
+# threshold is aggregate over the remaining (owned) files, so 100% ⇔ every
+# owned runtime line is covered.
+coverageThreshold = { lines = 1, functions = 1, statements = 1 }
+coveragePathIgnorePatterns = [
+	"packages/**",
+	"scripts/**",
+	"apps/viewer/browser/main.ts",
+	"apps/viewer/build.ts",
+	"apps/viewer/e2e/**",
+	"**/*.test.ts",
+]
