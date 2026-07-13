@@ -51,6 +51,12 @@ cli,server}`), almost everything is already at 100% funcs. The gaps are:
    Pierre-under-happy-dom rendering for no real quality gain.
 3. **`build.ts` is excluded from the gate** as build tooling (exercised by the build
    step the e2e suite and `prepack` run).
+4. **Dead code carried from cc-statusline is removed (YAGNI).** `server/ensure.ts`
+   (the spawn-if-not-running daemon) and `server.ts`'s `idleTimeoutMs` idle-shutdown
+   are vestiges of cc-statusline's statusline-managed-daemon model; diffdeck's CLI runs
+   the server in the foreground and never calls either — only their own tests reference
+   them. Removing them is how those paths reach the gate; the remaining owned code then
+   hits 100% naturally, with no dead branches to contort tests around.
 
 ## Architecture — two workstreams
 
@@ -97,10 +103,17 @@ drives `run()` with fakes to cover every branch: `install-skill` (with/without
 and the server-start-failure path (`exit(1)`). The existing subprocess
 `cli-smoke.test.ts` stays as an integration check.
 
-**A3. server line-gap tests.** Targeted unit tests closing the residual branches in
-`server/diff.ts`, `server/ensure.ts`, `server/server.ts`. Exact uncovered lines are
-identified from the coverage report during implementation; tests exercise the real
-code paths (no assertions-on-mocks).
+**A3. server: remove dead code + close remaining gaps.**
+- Remove `server/ensure.ts` and its `__tests__/diff-ensure.test.ts` (dead in diffdeck).
+- Remove the `idleTimeoutMs` option and the idle-timer block from `server.ts`; drop
+  `idleTimeoutMs: 0` from `diff-server.test.ts` and `built-serving.test.ts`.
+- Close `server/diff.ts`'s residual lines with real code paths (no mocks):
+  `prBaseName` spawn-error catch (line 35) via a non-existent `cwd`; `defaultBranchName`
+  origin/HEAD-set branch (47-49) via a fixture repo with `refs/remotes/origin/HEAD` set;
+  renamed/added/deleted name-status parsing (220-231) via a fixture with an R/A/D file.
+  Export the internal git helpers (`prBaseName`, `defaultBranchName`) as needed to test
+  the edge branches directly.
+- Re-run coverage and close any residual `server.ts` line left after the idle removal.
 
 **A4. coverage gate config.** In `bunfig.toml` `[test]`:
 ```toml
