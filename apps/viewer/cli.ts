@@ -1,4 +1,9 @@
 import { parseArgs } from "./cli/args.ts";
+import {
+	installSkillTo,
+	parseInstallArgs,
+	resolveSkillTargets,
+} from "./cli/installSkill.ts";
 import { openerCommand } from "./cli/opener.ts";
 import packageJson from "./package.json";
 import { resolveDiffPort } from "./server/config.ts";
@@ -9,6 +14,12 @@ const HELP = `diffdeck — local git diff viewer
 
 Usage:
   bunx @say8425/diffdeck [options]
+  bunx @say8425/diffdeck install-skill [--codex] [--project]
+
+Commands:
+  install-skill  Install the diffdeck agent skill so an AI agent can open the
+                 viewer for you. Writes ~/.claude/skills/diffdeck/ (add --codex
+                 for ~/.agents/skills/, --project for the current repo).
 
 Options:
   --port <n>    Port to serve on (default: $DIFFDECK_PORT or 49573)
@@ -20,6 +31,17 @@ Runs a local diff viewer for the git repository in the current directory.
 Press Ctrl+C to stop.`;
 
 const main = (): void => {
+	if (process.argv[2] === "install-skill") {
+		const opts = parseInstallArgs(process.argv.slice(3));
+		const source = `${import.meta.dir}/skills/diffdeck/SKILL.md`;
+		const targets = resolveSkillTargets(opts);
+		installSkillTo(source, targets);
+		for (const dir of targets) {
+			console.log(`installed diffdeck skill → ${dir}/SKILL.md`);
+		}
+		process.exit(0);
+	}
+
 	const args = parseArgs(process.argv.slice(2));
 
 	if (args.help) {
