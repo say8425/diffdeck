@@ -1,0 +1,11 @@
+{
+	"name": "diffdeck",
+	"plugins": [
+		{
+			"name": "diffdeck",
+			"source": { "source": "local", "path": "./" },
+			"policy": { "installation": "AVAILABLE" },
+			"category": "Developer Tools"
+		}
+	]
+}

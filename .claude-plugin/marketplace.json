@@ -1,0 +1,11 @@
+{
+	"name": "diffdeck",
+	"owner": { "name": "say8425", "url": "https://github.com/say8425" },
+	"plugins": [
+		{
+			"name": "diffdeck",
+			"source": "./",
+			"description": "diffdeck diff-viewer skill — lets an AI agent open the diff viewer for you."
+		}
+	]
+}

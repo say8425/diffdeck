@@ -1,0 +1,16 @@
+{
+	"name": "diffdeck",
+	"version": "0.1.0",
+	"description": "Launch the diffdeck local diff viewer in the browser to show code changes visually to the human.",
+	"author": { "name": "say8425", "url": "https://github.com/say8425" },
+	"homepage": "https://github.com/say8425/diffdeck",
+	"repository": "https://github.com/say8425/diffdeck",
+	"license": "Apache-2.0",
+	"keywords": ["diff", "viewer", "git", "code-review"],
+	"skills": "./skills/",
+	"interface": {
+		"displayName": "diffdeck",
+		"shortDescription": "Local diff viewer an AI agent can open for you",
+		"category": "Developer Tools"
+	}
+}
