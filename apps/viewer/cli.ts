@@ -1,4 +1,4 @@
-import { parseArgs } from "./cli/args.ts";
+import { parseArgs, type ParsedArgs } from "./cli/args.ts";
 import {
 	installSkillTo,
 	parseInstallArgs,
@@ -35,47 +35,54 @@ Options:
 Runs a local diff viewer for the git repository in the current directory.
 Press Ctrl+C to stop.`;
 
-const main = (): void => {
-	if (process.argv[2] === "install-skill") {
-		const opts = parseInstallArgs(process.argv.slice(3));
-		const source = `${import.meta.dir}/skills/diffdeck/SKILL.md`;
-		const targets = resolveSkillTargets(opts);
-		installSkillTo(source, targets);
-		for (const dir of targets) {
-			console.log(`installed diffdeck skill → ${dir}/SKILL.md`);
+export interface CliDeps {
+	startServer: typeof startDiffServer;
+	buildUrl: typeof buildDiffViewerUrl;
+	resolvePort: typeof resolveDiffPort;
+	parse: (argv: string[]) => ParsedArgs;
+	spawnOpener: (url: string) => void;
+	installSkill: (argv: string[]) => string[];
+	log: (msg: string) => void;
+	error: (msg: string) => void;
+	exit: (code: number) => never;
+	onSignal: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
+	cwd: () => string;
+	viewerDir: string;
+}
+
+export const run = (argv: string[], deps: CliDeps): void => {
+	if (argv[0] === "install-skill") {
+		const dirs = deps.installSkill(argv.slice(1));
+		for (const dir of dirs) {
+			deps.log(`installed diffdeck skill → ${dir}/SKILL.md`);
 		}
-		process.exit(0);
+		deps.exit(0);
 	}
 
-	const args = parseArgs(process.argv.slice(2));
+	const args = deps.parse(argv);
 
 	if (args.help) {
-		console.log(HELP);
-		process.exit(0);
+		deps.log(HELP);
+		deps.exit(0);
 	}
 	if (args.version) {
-		console.log(packageJson.version);
-		process.exit(0);
+		deps.log(packageJson.version);
+		deps.exit(0);
 	}
 
-	const port = args.port ?? resolveDiffPort();
-	const repo = process.cwd();
+	const port = args.port ?? deps.resolvePort();
+	const repo = deps.cwd();
 
 	let handle: ReturnType<typeof startDiffServer>;
 	try {
-		handle = startDiffServer({
-			port,
-			viewerDir: `${import.meta.dir}/viewer`,
-		});
+		handle = deps.startServer({ port, viewerDir: deps.viewerDir });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		console.error(
-			`diffdeck: failed to start server on port ${port}: ${message}`,
-		);
-		process.exit(1);
+		deps.error(`diffdeck: failed to start server on port ${port}: ${message}`);
+		return deps.exit(1);
 	}
 
-	const url = buildDiffViewerUrl({
+	const url = deps.buildUrl({
 		// handle.server.port is `number | undefined` in bun-types (unix sockets
 		// have no port); we always request an explicit TCP port above, so the
 		// bound port is always defined and always equals it — fall back to the
@@ -90,11 +97,28 @@ const main = (): void => {
 		diffStyle: args.diffStyle,
 	});
 
-	console.log("diffdeck viewer running at:");
-	console.log(url);
-	console.log("Press Ctrl+C to stop.");
+	deps.log("diffdeck viewer running at:");
+	deps.log(url);
+	deps.log("Press Ctrl+C to stop.");
 
 	if (args.open) {
+		deps.spawnOpener(url);
+	}
+
+	const shutdown = (): void => {
+		handle.stop();
+		deps.exit(0);
+	};
+	deps.onSignal("SIGINT", shutdown);
+	deps.onSignal("SIGTERM", shutdown);
+};
+
+export const realDeps: CliDeps = {
+	startServer: startDiffServer,
+	buildUrl: buildDiffViewerUrl,
+	resolvePort: resolveDiffPort,
+	parse: parseArgs,
+	spawnOpener: (url) => {
 		try {
 			Bun.spawn(openerCommand(process.platform, url), {
 				stdout: "ignore",
@@ -104,14 +128,22 @@ const main = (): void => {
 			// Opening the browser is best-effort — the URL is already printed and
 			// the server keeps running even if no opener is available (headless/CI).
 		}
-	}
-
-	const shutdown = (): void => {
-		handle.stop();
-		process.exit(0);
-	};
-	process.on("SIGINT", shutdown);
-	process.on("SIGTERM", shutdown);
+	},
+	installSkill: (argv) => {
+		const opts = parseInstallArgs(argv);
+		const source = `${import.meta.dir}/skills/diffdeck/SKILL.md`;
+		const targets = resolveSkillTargets(opts);
+		installSkillTo(source, targets);
+		return targets;
+	},
+	log: (msg) => console.log(msg),
+	error: (msg) => console.error(msg),
+	exit: (code) => process.exit(code),
+	onSignal: (signal, handler) => {
+		process.on(signal, handler);
+	},
+	cwd: () => process.cwd(),
+	viewerDir: `${import.meta.dir}/viewer`,
 };
 
-main();
+if (import.meta.main) run(process.argv.slice(2), realDeps);
