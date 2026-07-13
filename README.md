@@ -6,8 +6,6 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
-> **Status: Foundation + viewer/server app.** The four forked packages compile, type-check, and render a diff + file tree in the browser (shown below); the viewer and its local diff server now live in `apps/viewer/`. De-preact and the CLI are follow-on work.
-
 ![diffdeck rendering a large multi-file diff with syntax highlighting and a deep, flattened file tree](docs/screenshot.png)
 
 ## What is this?
@@ -37,13 +35,12 @@ packages/
   path-store/   @diffdeck/path-store   pure tree logic (flatten, sort, projection, store)
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
-  trees/        @diffdeck/trees         FileTree engine (preact render skin, for now)
-apps/viewer/    diff-server (data API) + browser viewer, built with the css-inline plugin
-bin/            diffdeck CLI (in progress)
+  trees/        @diffdeck/trees         FileTree engine (vanilla render)
+apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer + agent skill
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
 ```
 
-Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`, and `preact` (in `trees` only).
+Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
 
 ## Development
 
@@ -51,7 +48,7 @@ Requires [Bun](https://bun.sh).
 
 ```bash
 bun install
-bun run typecheck   # per-package tsc (mixed preact/react JSX can't share one flat config)
+bun run typecheck   # per-package tsc
 bun test
 bun run lint        # oxlint
 bun run format      # oxfmt
@@ -92,15 +89,43 @@ the viewer in your browser.
 
 Options:
 
-| Flag | Description |
-|------|-------------|
-| `--port <n>` | Port to serve on (default: `$DIFFDECK_PORT` or `49573`) |
-| `--no-open` | Do not open a browser automatically (prints the URL) |
-| `-h`, `--help` | Show help |
-| `-v`, `--version` | Show version |
+| Flag              | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`) |
+| `--no-open`       | Do not open a browser automatically (prints the URL)    |
+| `-h`, `--help`    | Show help                                               |
+| `-v`, `--version` | Show version                                            |
 
 Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
 `~/.cache/diffdeck/`.
+
+## AI agents
+
+diffdeck ships an **agent skill** so an AI coding agent (Claude Code, Codex, …)
+can open the diff viewer in your browser when a change is easier to see than to
+read. The skill (a single `skills/diffdeck/SKILL.md`) just teaches the agent when
+and how to run the diffdeck CLI. Install it through any of these channels:
+
+```bash
+# 1. Self-contained (needs diffdeck installed) — writes ~/.claude/skills/diffdeck/
+diffdeck install-skill            # --codex → ~/.agents/skills/,  --project → this repo
+
+# 2. Claude Code plugin
+#    /plugin marketplace add say8425/diffdeck
+#    /plugin install diffdeck@diffdeck
+
+# 3. Codex plugin
+#    codex plugin marketplace add say8425/diffdeck
+#    codex plugin add diffdeck@diffdeck
+
+# 4. npx skills (any supported agent)
+npx skills add say8425/diffdeck
+```
+
+Channels 2–4 fetch from GitHub, so they need the repository to be **public** and
+diffdeck **published to npm** (so the skill's `bunx @say8425/diffdeck` resolves);
+channel 1 works from any local install. The `codex` / `npx skills` subcommands are
+young — check `codex plugin --help` / `npx skills --help` for your version.
 
 ## Publishing
 
