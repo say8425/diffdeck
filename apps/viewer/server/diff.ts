@@ -24,7 +24,7 @@ const refExists = async (repo: string, ref: string): Promise<boolean> => {
 	return r.exitCode === 0;
 };
 
-const prBaseName = async (repo: string): Promise<string | null> => {
+export const prBaseName = async (repo: string): Promise<string | null> => {
 	try {
 		const out = await $`gh pr view --json baseRefName -q .baseRefName`
 			.cwd(repo)
@@ -37,7 +37,9 @@ const prBaseName = async (repo: string): Promise<string | null> => {
 	}
 };
 
-const defaultBranchName = async (repo: string): Promise<string | null> => {
+export const defaultBranchName = async (
+	repo: string,
+): Promise<string | null> => {
 	const r =
 		await $`git -C ${repo} rev-parse --abbrev-ref origin/HEAD 2>/dev/null`
 			.nothrow()

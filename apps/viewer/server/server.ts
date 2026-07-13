@@ -127,39 +127,17 @@ export const startDiffServer = (opts: {
 	port: number;
 	viewerDir: string;
 	env?: Env;
-	idleTimeoutMs?: number;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	const token = ensureToken(env);
-	let lastActivity = Date.now();
 	const handler = createHandler({ viewerDir: opts.viewerDir, token });
-
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
-		fetch: (req) => {
-			lastActivity = Date.now();
-			return handler(req);
-		},
+		fetch: handler,
 	});
-
-	let idleTimer: ReturnType<typeof setInterval> | undefined;
-	const idleTimeoutMs = opts.idleTimeoutMs;
-	if (idleTimeoutMs && idleTimeoutMs > 0) {
-		idleTimer = setInterval(() => {
-			if (Date.now() - lastActivity > idleTimeoutMs) {
-				stop();
-				process.exit(0);
-			}
-		}, 60_000);
-		idleTimer.unref?.();
-	}
-
 	const stop = (): void => {
-		if (idleTimer) clearInterval(idleTimer);
-		// stop()은 종료 대기 Promise를 반환하지만 fire-and-forget으로 충분.
 		void server.stop(true);
 	};
-
 	return { server, token, stop };
 };

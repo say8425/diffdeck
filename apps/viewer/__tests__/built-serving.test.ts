@@ -26,7 +26,6 @@ beforeAll(async () => {
 		port: 0,
 		viewerDir: distDir,
 		env: { XDG_CACHE_HOME: cacheHome },
-		idleTimeoutMs: 0,
 	});
 	base = `http://127.0.0.1:${handle.server.port}`;
 });
