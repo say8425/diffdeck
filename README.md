@@ -164,17 +164,15 @@ cd scripts/parity && python3 -m http.server 8099
 # open http://127.0.0.1:8099/index.html
 ```
 
-## Provenance & License
+## License
+
+**Apache-2.0** — see [`NOTICE`](./NOTICE) and the per-package `LICENSE` files.
 
 diffdeck bundles source **recovered from and derived from** the following packages, all licensed **Apache-2.0**:
 
 - `@pierre/diffs`, `@pierre/trees`, `@pierre/theming`, `@pierre/theme` — Copyright The Pierre Computer Company.
 
 Files under `packages/` are modified from the originals (import paths rewritten to the `@diffdeck/*` namespace; type declarations reconstructed where absent from source maps). Each package retains its upstream `LICENSE`, `packages/trees/NOTICE.md` retains the `@headless-tree/core` (MIT) attribution, and the top-level [`NOTICE`](./NOTICE) records the provenance and the fact of modification, as required by the Apache-2.0 license.
-
-## License
-
-Apache-2.0. See [`NOTICE`](./NOTICE) and the per-package `LICENSE` files.
 
 ## Publishing
 
