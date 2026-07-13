@@ -37,6 +37,11 @@ await Bun.write(
 	Bun.file(`${import.meta.dir}/index.html`),
 );
 
+await Bun.write(
+	`${dist}/skills/diffdeck/SKILL.md`,
+	Bun.file(`${import.meta.dir}/../../skills/diffdeck/SKILL.md`),
+);
+
 const [entry] = viewer.outputs;
 console.log(
 	`viewer build: ${entry?.path} (${((entry?.size ?? 0) / 1_000_000).toFixed(2)} MB)`,
