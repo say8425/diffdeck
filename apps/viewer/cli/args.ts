@@ -3,6 +3,11 @@ export interface ParsedArgs {
 	open: boolean;
 	help: boolean;
 	version: boolean;
+	untracked: boolean;
+	watch: boolean;
+	flatten: boolean;
+	treeSide: "left" | "right";
+	diffStyle: "unified" | "split";
 }
 
 const parsePort = (raw: string | undefined): number | undefined => {
@@ -14,7 +19,16 @@ const parsePort = (raw: string | undefined): number | undefined => {
 };
 
 export const parseArgs = (argv: string[]): ParsedArgs => {
-	const result: ParsedArgs = { open: true, help: false, version: false };
+	const result: ParsedArgs = {
+		open: true,
+		help: false,
+		version: false,
+		untracked: false,
+		watch: false,
+		flatten: true,
+		treeSide: "left",
+		diffStyle: "unified",
+	};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
 		if (arg === "--port") {
@@ -27,6 +41,16 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
 			result.help = true;
 		} else if (arg === "--version" || arg === "-v") {
 			result.version = true;
+		} else if (arg === "--untracked") {
+			result.untracked = true;
+		} else if (arg === "--watch") {
+			result.watch = true;
+		} else if (arg === "--no-flatten") {
+			result.flatten = false;
+		} else if (arg === "--tree-right") {
+			result.treeSide = "right";
+		} else if (arg === "--split") {
+			result.diffStyle = "split";
 		}
 	}
 	return result;

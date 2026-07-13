@@ -1,9 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { parseArgs } from "../cli/args.ts";
 
+const DEFAULT_FLAGS = {
+	untracked: false,
+	watch: false,
+	flatten: true,
+	treeSide: "left" as const,
+	diffStyle: "unified" as const,
+};
+
 describe("parseArgs", () => {
 	test("defaults: open true, no port, no help/version", () => {
-		expect(parseArgs([])).toEqual({ open: true, help: false, version: false });
+		expect(parseArgs([])).toEqual({
+			open: true,
+			help: false,
+			version: false,
+			...DEFAULT_FLAGS,
+		});
 	});
 	test("--port <n> sets a valid integer port", () => {
 		expect(parseArgs(["--port", "51000"])).toEqual({
@@ -11,6 +24,7 @@ describe("parseArgs", () => {
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 	});
 	test("--port 0 is valid (ask the OS for any free port)", () => {
@@ -19,6 +33,7 @@ describe("parseArgs", () => {
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 	});
 	test("invalid --port value is ignored (port stays undefined)", () => {
@@ -26,21 +41,25 @@ describe("parseArgs", () => {
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 		expect(parseArgs(["--port", "-1"])).toEqual({
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 		expect(parseArgs(["--port", "70000"])).toEqual({
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 		expect(parseArgs(["--port"])).toEqual({
 			open: true,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
 		});
 	});
 	test("--no-open disables opening", () => {
@@ -60,6 +79,36 @@ describe("parseArgs", () => {
 			open: false,
 			help: false,
 			version: false,
+			...DEFAULT_FLAGS,
+		});
+	});
+});
+
+describe("launch view flags", () => {
+	test("defaults: untracked/watch off, flatten on, tree left, style unified", () => {
+		expect(parseArgs([])).toMatchObject({
+			untracked: false,
+			watch: false,
+			flatten: true,
+			treeSide: "left",
+			diffStyle: "unified",
+		});
+	});
+	test("each flag flips its field", () => {
+		expect(
+			parseArgs([
+				"--untracked",
+				"--watch",
+				"--no-flatten",
+				"--tree-right",
+				"--split",
+			]),
+		).toMatchObject({
+			untracked: true,
+			watch: true,
+			flatten: false,
+			treeSide: "right",
+			diffStyle: "split",
 		});
 	});
 });
