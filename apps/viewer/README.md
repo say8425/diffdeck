@@ -20,8 +20,17 @@ default browser.
 | ----------------- | ------------------------------------------------------------ |
 | `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)      |
 | `--no-open`       | Do not open a browser automatically (prints the URL instead) |
+| `--untracked`     | Start with untracked files included                          |
+| `--watch`         | Start with watch (auto-refresh) on                           |
+| `--no-flatten`    | Start with the file tree un-flattened (flatten is on)        |
+| `--tree-right`    | Start with the file tree on the right                        |
+| `--split`         | Start in split view (unified is the default)                 |
 | `-h`, `--help`    | Show help                                                    |
 | `-v`, `--version` | Show version                                                 |
+
+The view flags (`--untracked`, `--watch`, `--no-flatten`, `--tree-right`,
+`--split`) set the initial state for this launch only — they don't change your
+saved preferences, and the in-app toggles reflect the launched state.
 
 ## Environment
 
