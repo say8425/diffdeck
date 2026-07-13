@@ -61,6 +61,13 @@ bun run lint
 bun run format
 ```
 
+### 테스트 3레인
+
+- `bun test` — 유닛·통합, 빠름. `apps/viewer/e2e/*.e2e.ts`는 collection에서 제외되므로 이 커맨드로는 브라우저가 뜨지 않는다.
+- `bun run test:coverage` — 같은 스위트를 `--coverage`로 실행 + **diffdeck 소유 런타임 코드(`apps/viewer/{browser,cli,server}`) 100% 커버리지 게이트**(`bunfig.toml`의 `coverageThreshold`/`coveragePathIgnorePatterns`). 게이트 제외 대상: vendored `packages/*`, `scripts/**`, browser 엔트리 `main.ts`(in-process 유닛 테스트 대신 e2e로 커버), `build.ts`, 그리고 `*.test.ts`/`e2e/**` 자신.
+- `bun run test:e2e` — `apps/viewer/e2e/*.e2e.ts` Playwright 실브라우저 스위트. `playwright.config.ts`가 `channel:"chrome"`으로 시스템 Google Chrome을 구동(Chromium 별도 다운로드 없음), `globalSetup`이 `build.ts`를 1회 실행해 실제 `dist/cli.js`를 스폰. `main.ts`와 vendored 렌더 경로(fold·copy-path·find·flags-sync·image-diff 등)를 end-to-end로 커버. fixtures(`apps/viewer/e2e/fixtures/`: 임시 git repo 빌더 `repo.ts`, CLI 스폰 `launchViewer` `app.ts`, Node `child_process` 래퍼 `proc.ts`)는 **Node**로 동작 — Playwright Test는 항상 spec·fixture·globalSetup을 Node로 실행하므로(`bunx playwright test`로 띄워도) `Bun` 글로벌·`bun`의 `$` 셸을 못 쓰고 `spawn`으로 실제 `bun` 바이너리를 PATH에서 호출한다. `apps/viewer/e2e/tsconfig.json`이 루트 `typecheck` 스크립트에 배선되어 있다.
+- **`*.e2e.ts` 네이밍 규칙**: `bun test`는 `*.test.ts` 외에 `*.spec.ts`도 수집하므로, Playwright 스펙을 `*.e2e.ts`로 명명해 `bun test`가 절대 이를 실행하지 않도록 분리한다(Playwright 쪽은 `testMatch:"**/*.e2e.ts"`로 반대로 한정).
+
 ### 렌더 패리티 하니스
 
 포크한 CodeView+FileTree가 실제 렌더되는지 확인:
@@ -80,6 +87,7 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 - **react는 하드 런타임 의존 아님** — diffs/trees의 미사용 react 어댑터용 devDep/optional peer. 데드코드는 후속 plan에서 제거.
 - **라이선스**: 각 `packages/*/LICENSE`(Apache-2.0) + `packages/trees/NOTICE.md`(headless-tree MIT 유래) + 최상위 `NOTICE` 보존. 파일 수정 사실 고지 유지.
 - **`*.css?inline` ambient 선언**: 소비자(앱)의 tsconfig가 패키지 `src/**`를 glob include하지 않으면 안 보임 — Plan 2 앱 tsconfig에서 배선 필요.
+- **cc-statusline 잔재 데드코드 제거됨**: `server/ensure.ts`(spawn-if-not-running 데몬 ensure)와 `server.ts`의 `idleTimeoutMs` idle-shutdown을 제거했다. diffdeck의 CLI는 서버를 **foreground**로 띄워 Ctrl+C로 종료하는 모델이라(cc-statusline처럼 statusline이 백그라운드 데몬을 spawn-if-not-running으로 관리하는 구조가 아님) 두 기능 모두 미사용 상태였다.
 
 ### 로드맵 (각각 별도 sub-plan)
 

@@ -12,7 +12,8 @@
 		"format": "oxfmt packages/ apps/ bin/",
 		"format:check": "oxfmt --check packages/ apps/ bin/",
 		"test": "bun test",
-		"test:coverage": "bun test --coverage"
+		"test:coverage": "bun test --coverage",
+		"test:e2e": "cd apps/viewer && bunx playwright test"
 	},
 	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",

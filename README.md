@@ -154,6 +154,21 @@ bun run lint        # oxlint
 bun run format      # oxfmt
 ```
 
+### Testing
+
+Three lanes:
+
+- `bun test` — unit/integration tests, fast. `*.e2e.ts` specs are excluded from
+  collection, so this never launches a browser.
+- `bun run test:coverage` — the same suite with a **100% coverage gate on
+  diffdeck's owned runtime code** (`apps/viewer/{browser,cli,server}`).
+  Intentionally out of the gate: the vendored `packages/*`, the browser entry
+  `main.ts` (integration entry — exercised by the e2e suite instead, not
+  in-process), and `build.ts`.
+- `bun run test:e2e` — the Playwright real-browser suite (`apps/viewer/e2e/`).
+  Drives the system Google Chrome via `channel: "chrome"` (no Chromium
+  download) and covers `main.ts` and the vendored render paths end-to-end.
+
 ### Render-parity harness
 
 Reproduces the screenshot above — confirms the forked `CodeView` + `FileTree` actually render:
