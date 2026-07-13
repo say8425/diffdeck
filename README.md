@@ -89,12 +89,21 @@ the viewer in your browser.
 
 Options:
 
-| Flag              | Description                                             |
-| ----------------- | ------------------------------------------------------- |
-| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`) |
-| `--no-open`       | Do not open a browser automatically (prints the URL)    |
-| `-h`, `--help`    | Show help                                               |
-| `-v`, `--version` | Show version                                            |
+| Flag              | Description                                                      |
+| ----------------- | ---------------------------------------------------------------- |
+| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
+| `--no-open`       | Do not open a browser automatically (prints the URL)             |
+| `--untracked`     | Start with untracked files included                              |
+| `--watch`         | Start with watch (auto-refresh) on                               |
+| `--no-flatten`    | Start with the file tree un-flattened (flatten is on by default) |
+| `--tree-right`    | Start with the file tree on the right                            |
+| `--split`         | Start in split view (unified is the default)                     |
+| `-h`, `--help`    | Show help                                                        |
+| `-v`, `--version` | Show version                                                     |
+
+These view flags set the initial state for this launch only — they don't
+change your saved preferences, and the in-app toggles reflect the launched
+state.
 
 Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
 `~/.cache/diffdeck/`.
