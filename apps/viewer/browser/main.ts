@@ -15,10 +15,14 @@ import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
 import {
 	FLATTEN_KEY,
-	readFlatten,
-	readTreeSide,
+	resolveDiffStyle,
+	resolveFlatten,
+	resolveTreeSide,
+	resolveUntracked,
+	resolveWatch,
 	TREE_SIDE_KEY,
 	type TreeSide,
+	WATCH_KEY,
 } from "./prefs.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -96,11 +100,15 @@ const statusEl = document.getElementById("status") as HTMLElement;
 const modeSelect = document.getElementById("diff-mode") as HTMLSelectElement;
 const appEl = document.getElementById("app") as HTMLElement;
 
-let diffStyle: "unified" | "split" = "unified";
-let includeUntracked = false;
+let diffStyle: "unified" | "split" = resolveDiffStyle(params.get("style"));
+let includeUntracked = resolveUntracked(params.get("untracked"));
 let diffMode: "working" | "base" = "working";
-let flattenDirs = readFlatten((k) => localStorage.getItem(k));
-let treeSide: TreeSide = readTreeSide((k) => localStorage.getItem(k));
+let flattenDirs = resolveFlatten(params.get("flatten"), (k) =>
+	localStorage.getItem(k),
+);
+let treeSide: TreeSide = resolveTreeSide(params.get("tree"), (k) =>
+	localStorage.getItem(k),
+);
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
@@ -429,6 +437,7 @@ syncStyleButtons();
 const untrackedInput = document.getElementById(
 	"toggle-untracked",
 ) as HTMLInputElement;
+if (untrackedInput) untrackedInput.checked = includeUntracked;
 untrackedInput?.addEventListener("change", () => {
 	includeUntracked = untrackedInput.checked;
 	void load();
@@ -575,7 +584,6 @@ document
 
 void load();
 
-const WATCH_STORAGE_KEY = "cc-statusline:diff-watch";
 const WATCH_POLL_MS = 2000;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -604,16 +612,20 @@ const stopWatch = (): void => {
 const watchInput = document.getElementById("toggle-watch") as HTMLInputElement;
 watchInput?.addEventListener("change", () => {
 	if (watchInput.checked) {
-		localStorage.setItem(WATCH_STORAGE_KEY, "1");
+		localStorage.setItem(WATCH_KEY, "1");
 		startWatch();
 	} else {
-		localStorage.setItem(WATCH_STORAGE_KEY, "0");
+		localStorage.setItem(WATCH_KEY, "0");
 		stopWatch();
 	}
 });
 
-// 저장된 watch 상태 복원 (ON이면 폴링 시작)
-if (watchInput && localStorage.getItem(WATCH_STORAGE_KEY) === "1") {
+// URL 플래그 또는 저장된 watch 상태 복원 (ON이면 폴링 시작). 세션 전용:
+// localStorage에는 쓰지 않는다 (사용자가 토글해야 영속화됨).
+if (
+	watchInput &&
+	resolveWatch(params.get("watch"), (k) => localStorage.getItem(k))
+) {
 	watchInput.checked = true;
 	startWatch();
 }
