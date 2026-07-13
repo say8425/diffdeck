@@ -28,3 +28,42 @@ describe("buildDiffViewerUrl", () => {
 		expect(url).not.toContain("mode=");
 	});
 });
+
+describe("buildDiffViewerUrl view flags", () => {
+	const base = { port: 49573, repo: "/r", token: "t" };
+	test("no view flags → no view params", () => {
+		const url = buildDiffViewerUrl(base);
+		expect(url).not.toContain("untracked");
+		expect(url).not.toContain("style");
+		expect(url).not.toContain("tree");
+		expect(url).not.toContain("flatten");
+		expect(url).not.toContain("watch");
+	});
+	test("non-default values are appended", () => {
+		const url = buildDiffViewerUrl({
+			...base,
+			untracked: true,
+			watch: true,
+			flatten: false,
+			treeSide: "right",
+			diffStyle: "split",
+		});
+		const q = new URL(url).searchParams;
+		expect(q.get("untracked")).toBe("1");
+		expect(q.get("watch")).toBe("1");
+		expect(q.get("flatten")).toBe("0");
+		expect(q.get("tree")).toBe("right");
+		expect(q.get("style")).toBe("split");
+	});
+	test("default values are NOT appended (flatten:true, treeSide:left, diffStyle:unified)", () => {
+		const url = buildDiffViewerUrl({
+			...base,
+			untracked: false,
+			watch: false,
+			flatten: true,
+			treeSide: "left",
+			diffStyle: "unified",
+		});
+		expect(new URL(url).search).toBe(`?repo=%2Fr&token=t`);
+	});
+});

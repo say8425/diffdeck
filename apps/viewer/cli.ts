@@ -78,6 +78,11 @@ const main = (): void => {
 		port: handle.server.port ?? port,
 		repo,
 		token: handle.token,
+		untracked: args.untracked,
+		watch: args.watch,
+		flatten: args.flatten,
+		treeSide: args.treeSide,
+		diffStyle: args.diffStyle,
 	});
 
 	console.log("diffdeck viewer running at:");

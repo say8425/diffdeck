@@ -94,4 +94,42 @@ describe("packaged cli.js", () => {
 		proc.kill("SIGINT");
 		expect(await proc.exited).toBe(0);
 	});
+
+	test("view flags appear in the printed URL", async () => {
+		const cliPath = join(import.meta.dir, "..", "dist", "cli.js");
+		const repo = mkdtempSync(join(tmpdir(), "dd-flags-repo-"));
+		await $`git -C ${repo} init -q`;
+		const cache = mkdtempSync(join(tmpdir(), "dd-flags-cache-"));
+		const p = Bun.spawn(
+			[
+				"bun",
+				cliPath,
+				"--no-open",
+				"--port",
+				"0",
+				"--untracked",
+				"--split",
+				"--tree-right",
+				"--watch",
+				"--no-flatten",
+			],
+			{
+				cwd: repo,
+				env: { ...process.env, XDG_CACHE_HOME: cache },
+				stdout: "pipe",
+				stderr: "pipe",
+			},
+		);
+		const url = await readUrlFromStdout(p.stdout);
+		const q = new URL(url).searchParams;
+		expect(q.get("untracked")).toBe("1");
+		expect(q.get("style")).toBe("split");
+		expect(q.get("tree")).toBe("right");
+		expect(q.get("watch")).toBe("1");
+		expect(q.get("flatten")).toBe("0");
+		p.kill("SIGINT");
+		await p.exited;
+		rmSync(repo, { recursive: true, force: true });
+		rmSync(cache, { recursive: true, force: true });
+	});
 });
