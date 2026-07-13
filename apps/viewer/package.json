@@ -27,6 +27,8 @@
 	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",
 		"@diffdeck/path-store": "workspace:*",
-		"@diffdeck/trees": "workspace:*"
+		"@diffdeck/trees": "workspace:*",
+		"@happy-dom/global-registrator": "20.0.11",
+		"happy-dom": "20.0.11"
 	}
 }
