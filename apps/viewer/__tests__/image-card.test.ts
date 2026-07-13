@@ -259,4 +259,29 @@ describe("ensureImageCard", () => {
 		expect(card).not.toBeNull();
 		expect(header.nextElementSibling).toBe(card);
 	});
+
+	test("appends the card to root when there is no header", () => {
+		const host = document.createElement("div");
+		const root = host.attachShadow({ mode: "open" });
+		const urlFor = makeUrlFor();
+
+		ensureImageCard(host, entry(), false, urlFor);
+
+		const card = root.querySelector("[data-image-card]");
+		expect(card).not.toBeNull();
+		expect(card?.parentNode).toBe(root);
+	});
+
+	test("uses an empty version marker when entry.version is undefined", () => {
+		const { host, root } = makeContainer();
+		const urlFor = makeUrlFor();
+
+		ensureImageCard(host, entry({ version: undefined }), false, urlFor);
+		const first = root.querySelector("[data-image-card]");
+		expect(first?.getAttribute("data-image-card")).toBe("");
+
+		// A second undefined-version call is idempotent ("" === "" → no replace).
+		ensureImageCard(host, entry({ version: undefined }), false, urlFor);
+		expect(root.querySelector("[data-image-card]")).toBe(first);
+	});
 });
