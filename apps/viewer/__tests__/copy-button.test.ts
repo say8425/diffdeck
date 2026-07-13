@@ -13,7 +13,7 @@ const setClipboard = (value: unknown): void => {
 	Object.defineProperty(navigator, "clipboard", { value, configurable: true });
 };
 const restoreClipboard = (): void => {
-	// biome-ignore lint: test-only cleanup of a shadowed own property
+	// test-only cleanup of a shadowed own property
 	delete (navigator as { clipboard?: unknown }).clipboard;
 };
 
