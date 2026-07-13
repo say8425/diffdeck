@@ -17,6 +17,7 @@
 	"devDependencies": {
 		"@diffdeck/diffs": "workspace:*",
 		"@diffdeck/trees": "workspace:*",
+		"@playwright/test": "^1.61.1",
 		"@types/bun": "1.3.14",
 		"oxfmt": "0.57.0",
 		"oxlint": "1.72.0",
