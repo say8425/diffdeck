@@ -1,0 +1,12 @@
+{
+	"extends": "../../../tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"types": ["node"],
+		"typeRoots": [
+			"../../../node_modules/@types",
+			"../../../node_modules/.bun/node_modules/@types"
+		]
+	},
+	"include": ["**/*.ts", "../playwright.config.ts"]
+}

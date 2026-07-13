@@ -63,9 +63,17 @@ export const spawnLongRunning = (
 			stdio: ["ignore", "pipe", "pipe"],
 		},
 	);
-	const exited = new Promise<number>((resolve) => {
+	const exited = new Promise<number>((resolve, reject) => {
+		child.on("error", reject);
 		child.on("close", (code) => resolve(code ?? 0));
 	});
+	// A rejection here is surfaced to callers via `exited` (e.g. `stop()`
+	// awaits it). But callers that fail earlier — e.g. `readUrlFromStdout`
+	// throwing before anyone awaits `exited` — would otherwise leave this
+	// promise's rejection unhandled and crash the process. Attaching a no-op
+	// catch marks it handled without swallowing the rejection for real
+	// consumers (Promise settlement fires all attached handlers).
+	exited.catch(() => {});
 	return {
 		stdout: child.stdout,
 		exited,
