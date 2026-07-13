@@ -175,7 +175,14 @@ describe("run — normal startup", () => {
 			string,
 			() => void,
 		];
-		expect(() => sigintHandler()).toThrow(ExitSignal);
+		let shutdownExit: ExitSignal | null = null;
+		try {
+			sigintHandler();
+		} catch (err) {
+			if (err instanceof ExitSignal) shutdownExit = err;
+		}
+		expect(shutdownExit).toBeInstanceOf(ExitSignal);
+		expect(shutdownExit?.code).toBe(0);
 		expect(stop).toHaveBeenCalledTimes(1);
 	});
 
