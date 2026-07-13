@@ -28,6 +28,106 @@ What the diff-rendering engine provides (all demonstrated by the render above):
 
 The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
 
+## Installation
+
+Run it on demand — no install needed:
+
+```bash
+bunx @say8425/diffdeck
+```
+
+Or install it globally to get the `diffdeck` command:
+
+```bash
+bun install -g @say8425/diffdeck
+```
+
+Requires [Bun](https://bun.sh); `git` (and `gh` for branch-vs-base detection) on your `PATH`.
+
+## CLI
+
+Run it in any git repository to view its diff:
+
+```bash
+bunx @say8425/diffdeck        # or `diffdeck` if installed globally
+```
+
+This starts a local server on `127.0.0.1:49573` (override with `--port`) and opens
+the viewer in your browser.
+
+Options:
+
+| Flag              | Description                                                      |
+| ----------------- | ---------------------------------------------------------------- |
+| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
+| `--no-open`       | Do not open a browser automatically (prints the URL)             |
+| `--untracked`     | Start with untracked files included                              |
+| `--watch`         | Start with watch (auto-refresh) on                               |
+| `--no-flatten`    | Start with the file tree un-flattened (flatten is on by default) |
+| `--tree-right`    | Start with the file tree on the right                            |
+| `--split`         | Start in split view (unified is the default)                     |
+| `-h`, `--help`    | Show help                                                        |
+| `-v`, `--version` | Show version                                                     |
+
+These view flags set the initial state for this launch only — they don't change
+your saved preferences, and the in-app toggles reflect the launched state.
+
+Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
+`~/.cache/diffdeck/`.
+
+## Skills
+
+diffdeck ships an **agent skill** (a single `skills/diffdeck/SKILL.md`) so an AI
+coding agent can open the diff viewer in your browser when a change is easier to
+see than to read. Install it into your agent through one of the channels below.
+
+The plugin and `npx skills` channels fetch from GitHub, so they need the
+repository to be **public** and diffdeck **published to npm** (so the skill's
+`bunx @say8425/diffdeck` resolves). The self-contained `diffdeck install-skill`
+works from any local install.
+
+### Claude Code
+
+Plugin:
+
+```
+/plugin marketplace add say8425/diffdeck
+/plugin install diffdeck@diffdeck
+```
+
+Or self-contained (writes `~/.claude/skills/diffdeck/`):
+
+```bash
+diffdeck install-skill        # --project installs into the current repo instead
+```
+
+### Codex
+
+Plugin:
+
+```
+codex plugin marketplace add say8425/diffdeck
+codex plugin add diffdeck@diffdeck
+```
+
+Or self-contained (writes `~/.agents/skills/diffdeck/`):
+
+```bash
+diffdeck install-skill --codex
+```
+
+### skills
+
+Install into any [supported agent](https://github.com/vercel-labs/skills) with the
+`skills` CLI:
+
+```bash
+npx skills add say8425/diffdeck
+```
+
+The `codex` / `npx skills` subcommands are young — check `codex plugin --help` /
+`npx skills --help` for your version.
+
 ## Architecture
 
 ```
@@ -75,66 +175,6 @@ Files under `packages/` are modified from the originals (import paths rewritten 
 ## License
 
 Apache-2.0. See [`NOTICE`](./NOTICE) and the per-package `LICENSE` files.
-
-## CLI
-
-Run the diff viewer for the git repository in the current directory:
-
-```bash
-bunx @say8425/diffdeck
-```
-
-This starts a local server on `127.0.0.1:49573` (override with `--port`) and opens
-the viewer in your browser.
-
-Options:
-
-| Flag              | Description                                                      |
-| ----------------- | ---------------------------------------------------------------- |
-| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
-| `--no-open`       | Do not open a browser automatically (prints the URL)             |
-| `--untracked`     | Start with untracked files included                              |
-| `--watch`         | Start with watch (auto-refresh) on                               |
-| `--no-flatten`    | Start with the file tree un-flattened (flatten is on by default) |
-| `--tree-right`    | Start with the file tree on the right                            |
-| `--split`         | Start in split view (unified is the default)                     |
-| `-h`, `--help`    | Show help                                                        |
-| `-v`, `--version` | Show version                                                     |
-
-These view flags set the initial state for this launch only — they don't
-change your saved preferences, and the in-app toggles reflect the launched
-state.
-
-Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
-`~/.cache/diffdeck/`.
-
-## AI agents
-
-diffdeck ships an **agent skill** so an AI coding agent (Claude Code, Codex, …)
-can open the diff viewer in your browser when a change is easier to see than to
-read. The skill (a single `skills/diffdeck/SKILL.md`) just teaches the agent when
-and how to run the diffdeck CLI. Install it through any of these channels:
-
-```bash
-# 1. Self-contained (needs diffdeck installed) — writes ~/.claude/skills/diffdeck/
-diffdeck install-skill            # --codex → ~/.agents/skills/,  --project → this repo
-
-# 2. Claude Code plugin
-#    /plugin marketplace add say8425/diffdeck
-#    /plugin install diffdeck@diffdeck
-
-# 3. Codex plugin
-#    codex plugin marketplace add say8425/diffdeck
-#    codex plugin add diffdeck@diffdeck
-
-# 4. npx skills (any supported agent)
-npx skills add say8425/diffdeck
-```
-
-Channels 2–4 fetch from GitHub, so they need the repository to be **public** and
-diffdeck **published to npm** (so the skill's `bunx @say8425/diffdeck` resolves);
-channel 1 works from any local install. The `codex` / `npx skills` subcommands are
-young — check `codex plugin --help` / `npx skills --help` for your version.
 
 ## Publishing
 
