@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
@@ -66,6 +72,14 @@ afterAll(() => {
 describe("packaged cli.js", () => {
 	test("printed URL carries a token", () => {
 		expect(token.length).toBeGreaterThan(0);
+	});
+
+	test("dist/cli.js has a bun shebang and the exec bit", () => {
+		const contents = readFileSync(cliPath, "utf8");
+		expect(contents.startsWith("#!/usr/bin/env bun\n")).toBe(true);
+		// Bun.build's `// @bun` marker survives on the line after the shebang.
+		expect(contents.split("\n")[1]).toContain("@bun");
+		expect(statSync(cliPath).mode & 0o100).toBe(0o100);
 	});
 
 	test("GET /api/ping returns 204 with the x-diffdeck marker", async () => {

@@ -4,6 +4,7 @@
 //                         import `../style.css?inline`, so the css-inline plugin
 //                         must stay attached (parity with the harness build.ts).
 // Layout mirrors cc-statusline: dist/cli.js + dist/viewer/{main.js,index.html}.
+import { chmodSync } from "node:fs";
 import { cssInlineBundlerPlugin } from "../../scripts/css-inline-plugin.ts";
 
 const dist = `${import.meta.dir}/dist`;
@@ -18,6 +19,16 @@ if (!cli.success) {
 	console.error("cli build failed");
 	process.exit(1);
 }
+
+// Prepend a bun shebang + set the exec bit so the published bin runs via
+// npx/direct exec, not only `bunx`. Bun.build emits `// @bun` as line 1; the
+// shebang goes above it (bun skips the shebang line and still honors `// @bun`).
+const cliPath = `${dist}/cli.js`;
+const cliSource = await Bun.file(cliPath).text();
+if (!cliSource.startsWith("#!")) {
+	await Bun.write(cliPath, `#!/usr/bin/env bun\n${cliSource}`);
+}
+chmodSync(cliPath, 0o755);
 
 const viewer = await Bun.build({
 	entrypoints: [`${import.meta.dir}/browser/main.ts`],
