@@ -1,0 +1,9 @@
+{
+	"$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+	"packages": {
+		"apps/viewer": {
+			"release-type": "node",
+			"package-name": "@say8425/diffdeck"
+		}
+	}
+}
