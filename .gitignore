@@ -4,5 +4,6 @@ dist/
 .DS_Store
 scripts/parity/out/
 .superpowers/
+docs/superpowers/
 apps/viewer/test-results/
 apps/viewer/playwright-report/
