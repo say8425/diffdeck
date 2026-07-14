@@ -68,6 +68,14 @@ bun run format
 - `bun run test:e2e` — `apps/viewer/e2e/*.e2e.ts` Playwright 실브라우저 스위트. `playwright.config.ts`가 `channel:"chrome"`으로 시스템 Google Chrome을 구동(Chromium 별도 다운로드 없음), `globalSetup`이 `build.ts`를 1회 실행해 실제 `dist/cli.js`를 스폰. `main.ts`와 vendored 렌더 경로(fold·copy-path·find·flags-sync·image-diff 등)를 end-to-end로 커버. fixtures(`apps/viewer/e2e/fixtures/`: 임시 git repo 빌더 `repo.ts`, CLI 스폰 `launchViewer` `app.ts`, Node `child_process` 래퍼 `proc.ts`)는 **Node**로 동작 — Playwright Test는 항상 spec·fixture·globalSetup을 Node로 실행하므로(`bunx playwright test`로 띄워도) `Bun` 글로벌·`bun`의 `$` 셸을 못 쓰고 `spawn`으로 실제 `bun` 바이너리를 PATH에서 호출한다. `apps/viewer/e2e/tsconfig.json`이 루트 `typecheck` 스크립트에 배선되어 있다.
 - **`*.e2e.ts` 네이밍 규칙**: `bun test`는 `*.test.ts` 외에 `*.spec.ts`도 수집하므로, Playwright 스펙을 `*.e2e.ts`로 명명해 `bun test`가 절대 이를 실행하지 않도록 분리한다(Playwright 쪽은 `testMatch:"**/*.e2e.ts"`로 반대로 한정).
 
+### CI / 릴리스
+
+- **`.github/workflows/pr-check.yml`** — PR마다 lint(oxlint)·format:check(oxfmt)·typecheck·test·coverage(100% 게이트) 잡. `bun install --frozen-lockfile`.
+- **lint 스코프**: 스크립트는 `oxlint apps/`/`oxfmt apps/`로 **owned 코드만** 대상(vendored `packages/*`는 Pierre 원본 스타일이라 lint/format 게이트 제외). `.oxlintrc.json`의 `typeAware:true` 때문에 `oxlint-tsgolint`(devDep)가 있어야 lint가 돈다. 테스트/e2e override(`**/__tests__/**`·`**/e2e/**`)에서 unbound-method·no-empty-pattern·no-unassigned-import 등 완화.
+- **`.github/workflows/release.yml` + `release-please-config.json` + `.release-please-manifest.json`** — release-please(모노레포: 배포 패키지 `apps/viewer`, `package-name @say8425/diffdeck`)가 conventional commits로 release PR 생성·자동머지, `releases_created` 시 publish 잡이 `apps/viewer`에서 `bun run build` + `npm publish --provenance --access public`.
+- **사용자 게이트(자동화가 못 하는 것)**: publish 잡 성공엔 (a) `NPM_TOKEN` 시크릿 등록 **또는** npm trusted publishing 설정, (b) provenance용 public repo가 필요. 신규 패키지 최초 publish는 수동 1회가 필요할 수 있다. `gh pr merge --auto`의 push는 `GITHUB_TOKEN` 재귀 방지로 Release 워크플로를 재트리거 못 할 수 있음(cc-statusline과 동일한 알려진 quirk).
+- **배포 산출물**: `build.ts`가 `dist/cli.js`에 `#!/usr/bin/env bun` 셰뱅 + 실행권한을 부여해 `bunx`뿐 아니라 `npx`/직접 실행에서도 bun으로 구동된다(`// @bun` 마커는 셰뱅 다음 줄에 유지).
+
 ### 렌더 패리티 하니스
 
 포크한 CodeView+FileTree가 실제 렌더되는지 확인:

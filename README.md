@@ -209,4 +209,4 @@ Note: `bun publish --dry-run` still requires local npm auth to be configured
 (`npm login` / a valid token) — without it, it errors with "missing
 authentication" even though it performs no write to the registry.
 
-Only `dist/` ships (`files: ["dist"]`).
+Only `dist/` ships (`files: ["dist", "LICENSE", "NOTICE"]`).

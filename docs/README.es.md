@@ -188,4 +188,4 @@ bun publish             # publica (requiere autenticación npm; ejecutar manualm
 
 Nota: `bun publish --dry-run` todavía requiere que la autenticación local de npm esté configurada (`npm login` / un token válido) — sin ella, falla con "missing authentication" aunque no realiza ninguna escritura en el registro.
 
-Solo se publica `dist/` (`files: ["dist"]`).
+Solo se publica `dist/` (`files: ["dist", "LICENSE", "NOTICE"]`).

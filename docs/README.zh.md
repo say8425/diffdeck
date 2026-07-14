@@ -188,4 +188,4 @@ bun publish             # publish (requires npm auth; run manually)
 
 注意：即使 `bun publish --dry-run` 本身不会向 registry 写入任何内容，仍然需要在本地配置好 npm 认证（`npm login` 或有效的 token）——否则会报 "missing authentication" 错误。
 
-只有 `dist/` 会被发布（`files: ["dist"]`）。
+只有 `dist/` 会被发布（`files: ["dist", "LICENSE", "NOTICE"]`）。

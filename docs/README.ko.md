@@ -188,6 +188,6 @@ bun publish             # publish (requires npm auth; run manually)
 
 참고: `bun publish --dry-run`도 로컬에 npm 인증(`npm login` / 유효한 토큰)이 설정되어 있어야 합니다 — 설정되어 있지 않으면 레지스트리에 아무것도 쓰지 않음에도 "missing authentication" 오류가 발생합니다.
 
-`dist/`만 배포됩니다(`files: ["dist"]`).
+`dist/`만 배포됩니다(`files: ["dist", "LICENSE", "NOTICE"]`).
 </content>
 </invoke>
