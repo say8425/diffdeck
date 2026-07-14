@@ -39,10 +39,13 @@
 	},
 	"overrides": [
 		{
-			"files": ["src/__tests__/**"],
+			"files": ["**/__tests__/**", "**/e2e/**"],
 			"rules": {
 				"typescript/unbound-method": "off",
-				"no-await-in-loop": "off"
+				"typescript/no-unnecessary-type-assertion": "off",
+				"no-await-in-loop": "off",
+				"no-empty-pattern": "off",
+				"import/no-unassigned-import": "off"
 			}
 		}
 	]

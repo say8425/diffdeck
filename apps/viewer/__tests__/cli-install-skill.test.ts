@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -52,7 +58,7 @@ describe("installSkillTo", () => {
 	});
 	test("copies SKILL.md into each target dir (creating dirs)", () => {
 		const src = join(tmp, "src-SKILL.md");
-		Bun.write(src, "---\nname: diffdeck\n---\nbody");
+		writeFileSync(src, "---\nname: diffdeck\n---\nbody");
 		const a = join(tmp, "a", "diffdeck");
 		const b = join(tmp, "b", "diffdeck");
 		installSkillTo(src, [a, b]);
