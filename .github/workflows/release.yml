@@ -51,16 +51,11 @@ jobs:
       - name: Build the publishable package
         run: bun run build
         working-directory: apps/viewer
-      # Auth resolves OIDC-first, token-fallback: npm prefers trusted publishing
-      # (id-token: write above) and falls back to NODE_AUTH_TOKEN. So this works
-      # now via the NPM_TOKEN secret, and auto-upgrades to fully tokenless once a
-      # trusted publisher is configured for @say8425/diffdeck on npmjs.com
-      # (org say8425 / repo diffdeck / workflow release.yml). The package must
-      # exist first — publish 0.1.0 once manually with a token, since npm has no
-      # first-publish OIDC (npm/cli#8544). Remove the env below for pure tokenless
-      # once trusted publishing is confirmed working.
-      - name: Publish to npm (trusted publishing, token fallback + provenance)
+      # Tokenless: the npm CLI detects the OIDC environment (id-token: write
+      # above) and authenticates via the trusted publisher configured for
+      # @say8425/diffdeck on npmjs.com (org say8425 / repo diffdeck / workflow
+      # release.yml). No NODE_AUTH_TOKEN. (0.1.0 was bootstrapped with a one-off
+      # manual token publish, since npm has no first-publish OIDC — npm/cli#8544.)
+      - name: Publish to npm (trusted publishing + provenance)
         run: npm publish --provenance --access public
         working-directory: apps/viewer
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
