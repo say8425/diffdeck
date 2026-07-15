@@ -174,18 +174,3 @@ diffdeck は、以下のパッケージ(すべて **Apache-2.0** ライセンス
 - `@pierre/diffs`、`@pierre/trees`、`@pierre/theming`、`@pierre/theme` — Copyright The Pierre Computer Company.
 
 `packages/` 配下のファイルはオリジナルから変更が加えられています(import パスは `@diffdeck/*` 名前空間に書き換え、型宣言はソースマップに存在しない箇所を再構築)。各パッケージはアップストリームの `LICENSE` を保持し、`packages/trees/NOTICE.md` は `@headless-tree/core`(MIT)のクレジット表記を保持しています。そしてトップレベルの [`NOTICE`](../NOTICE) が、Apache-2.0 ライセンスの要件に従って、由来と変更の事実を記録しています。
-
-## 公開
-
-パッケージ名は `@say8425/diffdeck` で、`apps/viewer` が公開ルートです。`@diffdeck/*` パッケージはビルド時に `dist` へバンドルされるため、公開される tarball にはランタイム依存関係がありません。
-
-```bash
-cd apps/viewer
-bun run build           # produces dist/cli.js + dist/viewer/
-bun publish --dry-run   # inspect the tarball contents
-bun publish             # publish (requires npm auth; run manually)
-```
-
-注意: `bun publish --dry-run` を実行する場合も、ローカルの npm 認証(`npm login` または有効なトークン)の設定が必要です — 設定されていないと、レジストリへの書き込みを一切行わないにもかかわらず "missing authentication" エラーになります。
-
-配布されるのは `dist/` のみです(`files: ["dist", "LICENSE", "NOTICE"]`)。

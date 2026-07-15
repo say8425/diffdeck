@@ -191,22 +191,3 @@ diffdeck bundles source **recovered from and derived from** the following packag
 - `@pierre/diffs`, `@pierre/trees`, `@pierre/theming`, `@pierre/theme` — Copyright The Pierre Computer Company.
 
 Files under `packages/` are modified from the originals (import paths rewritten to the `@diffdeck/*` namespace; type declarations reconstructed where absent from source maps). Each package retains its upstream `LICENSE`, `packages/trees/NOTICE.md` retains the `@headless-tree/core` (MIT) attribution, and the top-level [`NOTICE`](./NOTICE) records the provenance and the fact of modification, as required by the Apache-2.0 license.
-
-## Publishing
-
-The package is `@say8425/diffdeck`; `apps/viewer` is the publish root. `@diffdeck/*`
-packages are bundled into `dist` at build time, so the published tarball has no
-runtime dependencies.
-
-```bash
-cd apps/viewer
-bun run build           # produces dist/cli.js + dist/viewer/
-bun publish --dry-run   # inspect the tarball contents
-bun publish             # publish (requires npm auth; run manually)
-```
-
-Note: `bun publish --dry-run` still requires local npm auth to be configured
-(`npm login` / a valid token) — without it, it errors with "missing
-authentication" even though it performs no write to the registry.
-
-Only `dist/` ships (`files: ["dist", "LICENSE", "NOTICE"]`).
