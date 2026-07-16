@@ -16,7 +16,7 @@ diffdeck/
 ├── bin/                    # (Plan 5) diffdeck CLI 엔트리 예정
 ├── scripts/
 │   ├── extract-sources.ts       # 소스맵 sourcesContent → 원본 TS 복원 도구 (Foundation 일회성)
-│   ├── extract-sources.test.ts  # (비-hermetic: ~/dev/cc-statusline/node_modules 참조 — CI 전 gate 필요)
+│   ├── extract-sources.test.ts  # 합성 소스맵 fixture로 hermetic (외부 체크아웃 의존 없음)
 │   ├── css-inline-plugin.ts     # *.css?inline import용 Bun 플러그인 (런타임/번들러 2분리)
 │   └── parity/                  # 포크 렌더 패리티 하니스 (fixture·smoke test·main·build)
 ├── tsconfig.base.json      # 공유 base (jsxImportSource: preact, @diffdeck/* path alias)
