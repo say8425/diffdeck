@@ -15,21 +15,16 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.releases_created }}
     steps:
+      # release-please opens/updates the release PR. It is merged by a human on
+      # purpose: a release is an npm publish, so it gets a review gate. Merging
+      # it by hand also sidesteps the GITHUB_TOKEN recursion guard — a push made
+      # by GITHUB_TOKEN would not re-trigger this workflow, so an auto-merged
+      # release PR would silently never publish.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      - if: ${{ steps.release.outputs.prs_created == 'true' }}
-        run: |
-          PR_NUMBER=$(gh pr list --label "autorelease: pending" --json number --jq '.[0].number')
-          if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" --add-assignee say8425
-            gh pr merge "$PR_NUMBER" --auto --rebase
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
 
   publish:
     needs: release-please
