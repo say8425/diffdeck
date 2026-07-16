@@ -167,10 +167,4 @@ cd scripts/parity && python3 -m http.server 8099
 
 ## 许可证
 
-**Apache-2.0** —— 详见 [`NOTICE`](../NOTICE) 以及各 package 目录下的 `LICENSE` 文件。
-
-diffdeck 打包了**从以下软件包中还原、并基于其派生**的源代码，这些软件包均采用 **Apache-2.0** 许可证：
-
-- `@pierre/diffs`、`@pierre/trees`、`@pierre/theming`、`@pierre/theme` —— 版权归 The Pierre Computer Company 所有。
-
-`packages/` 下的文件相较原始版本有所修改（import 路径已重写至 `@diffdeck/*` 命名空间；在 source map 中缺失的类型声明已重新构建）。每个 package 都保留了其上游的 `LICENSE`；`packages/trees/NOTICE.md` 保留了 `@headless-tree/core`（MIT）的署名；顶层的 [`NOTICE`](../NOTICE) 则按照 Apache-2.0 许可证的要求，记录了来源与修改事实。
+**Apache-2.0.** diffdeck 内置了衍生自 Pierre `@pierre/*` 包（Apache-2.0，© The Pierre Computer Company）的源码，并在 `@diffdeck/*` 命名空间下进行了修改。完整的署名和必要的修改声明见 [`NOTICE`](../NOTICE) 及各包的 `LICENSE`。

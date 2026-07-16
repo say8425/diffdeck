@@ -167,10 +167,4 @@ cd scripts/parity && python3 -m http.server 8099
 
 ## Licencia
 
-**Apache-2.0** — ver [`NOTICE`](../NOTICE) y los archivos `LICENSE` de cada paquete.
-
-diffdeck incluye código fuente **recuperado y derivado** de los siguientes paquetes, todos licenciados bajo **Apache-2.0**:
-
-- `@pierre/diffs`, `@pierre/trees`, `@pierre/theming`, `@pierre/theme` — Copyright The Pierre Computer Company.
-
-Los archivos bajo `packages/` están modificados respecto de los originales (las rutas de import se reescribieron al namespace `@diffdeck/*`; las declaraciones de tipos se reconstruyeron donde no estaban presentes en los source maps). Cada paquete conserva su `LICENSE` original, `packages/trees/NOTICE.md` conserva la atribución de `@headless-tree/core` (MIT), y el [`NOTICE`](../NOTICE) de nivel superior registra la procedencia y el hecho de la modificación, tal como lo exige la licencia Apache-2.0.
+**Apache-2.0.** diffdeck incorpora código derivado de los paquetes `@pierre/*` de Pierre (Apache-2.0, © The Pierre Computer Company), modificado bajo el espacio de nombres `@diffdeck/*`. Consulta [`NOTICE`](../NOTICE) y el `LICENSE` de cada paquete para la atribución completa y el aviso de modificación requerido.
