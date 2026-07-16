@@ -68,6 +68,11 @@ bun run format
 - `bun run test:e2e` — `apps/viewer/e2e/*.e2e.ts` Playwright 실브라우저 스위트. `playwright.config.ts`가 `channel:"chrome"`으로 시스템 Google Chrome을 구동(Chromium 별도 다운로드 없음), `globalSetup`이 `build.ts`를 1회 실행해 실제 `dist/cli.js`를 스폰. `main.ts`와 vendored 렌더 경로(fold·copy-path·find·flags-sync·image-diff 등)를 end-to-end로 커버. fixtures(`apps/viewer/e2e/fixtures/`: 임시 git repo 빌더 `repo.ts`, CLI 스폰 `launchViewer` `app.ts`, Node `child_process` 래퍼 `proc.ts`)는 **Node**로 동작 — Playwright Test는 항상 spec·fixture·globalSetup을 Node로 실행하므로(`bunx playwright test`로 띄워도) `Bun` 글로벌·`bun`의 `$` 셸을 못 쓰고 `spawn`으로 실제 `bun` 바이너리를 PATH에서 호출한다. `apps/viewer/e2e/tsconfig.json`이 루트 `typecheck` 스크립트에 배선되어 있다.
 - **`*.e2e.ts` 네이밍 규칙**: `bun test`는 `*.test.ts` 외에 `*.spec.ts`도 수집하므로, Playwright 스펙을 `*.e2e.ts`로 명명해 `bun test`가 절대 이를 실행하지 않도록 분리한다(Playwright 쪽은 `testMatch:"**/*.e2e.ts"`로 반대로 한정).
 
+### 기여 워크플로 (PR 필수)
+
+- **`main`에 직접 push 금지 — 모든 변경은 브랜치 → PR로 진행한다.** (초기 extraction 시기의 main 직접 push 관례는 종료. 이미 배포·CI가 붙은 상태라 PR 리뷰를 거친다.) 브랜치를 파고 PR을 열면 `pr-check` CI(lint/format/typecheck/test/coverage)가 돌고, 사람이 리뷰·머지한다.
+- 커밋 메시지는 **Conventional Commits**(`feat:`/`fix:`/`docs:`/`chore:`/`refactor:`/`test:`/`ci:` …) — release-please가 이를 근거로 버전·CHANGELOG·릴리스를 관리하기 때문(`feat:`→minor, `fix:`→patch, `feat!:`/`BREAKING CHANGE:`→major; `docs`/`chore`/`test`/`ci` 등은 릴리스 미유발).
+
 ### CI / 릴리스
 
 - **`.github/workflows/pr-check.yml`** — PR마다 lint(oxlint)·format:check(oxfmt)·typecheck·test·coverage(100% 게이트) 잡. `bun install --frozen-lockfile`.
