@@ -224,7 +224,14 @@ const codeViewOptions = (): ConstructorParameters<
 		syncImageCard(container);
 	},
 	unsafeCSS:
-		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:rgba(255,255,255,.05)}` +
+		// The header is sticky, so its own code scrolls underneath it: the hover
+		// tint has to be mixed into --diffs-bg rather than layered over it as a
+		// translucent colour, which would replace the opaque background and let
+		// the code show through. --diffs-mixer is the engine's own contrast
+		// token (light-dark(#000, #fff)), so this tints the right direction in
+		// either theme; in srgb because that matches how the browser would have
+		// composited the equivalent 5% overlay.
+		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
 		"[data-copy-name]{opacity:0;transition:opacity .15s;background:transparent;border:0;color:#84848a;cursor:pointer;display:inline-flex;align-items:center;padding:0 4px;margin-left:2px;line-height:1}" +
