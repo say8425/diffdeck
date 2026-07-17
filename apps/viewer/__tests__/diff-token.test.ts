@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import {
-	ensureToken,
 	generateToken,
 	getTokenPath,
+	persistToken,
 	readTokenSync,
 } from "../server/token.ts";
 
@@ -25,15 +25,17 @@ describe("token module", () => {
 		expect(readTokenSync(env)).toBeNull();
 	});
 
-	test("ensureToken persists a token and readTokenSync returns it", () => {
-		const t = ensureToken(env);
+	test("persistToken writes a token that readTokenSync reads back", () => {
+		const t = generateToken();
+		persistToken(t, env);
 		expect(readTokenSync(env)).toBe(t);
 	});
 
-	test("ensureToken reuses an existing token", () => {
-		const first = ensureToken(env);
-		const second = ensureToken(env);
-		expect(second).toBe(first);
+	test("persistToken creates the cache dir when it does not exist yet", () => {
+		rmSync(TMP, { recursive: true, force: true });
+		const t = generateToken();
+		persistToken(t, env);
+		expect(readTokenSync(env)).toBe(t);
 	});
 
 	test("getTokenPath is under the cache dir", () => {

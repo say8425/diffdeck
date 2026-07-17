@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
 import { startDiffServer } from "../server/server.ts";
+import {
+	generateToken,
+	getTokenPath,
+	persistToken,
+	readTokenSync,
+} from "../server/token.ts";
 
 let repo: string;
 let viewerDir: string;
@@ -44,6 +50,47 @@ describe("diff server", () => {
 		const res = await fetch(`${base}/api/ping`);
 		expect(res.status).toBe(204);
 		expect(res.headers.get("x-diffdeck")).toBe("1");
+	});
+
+	// The mirror of the test below: binding the port is what makes the token
+	// publishable, so a successful start must actually publish it. A client
+	// reads this file to decide a daemon is usable — without it there is no
+	// link at all, and nothing else here would notice.
+	test("publishes the token once the port is really ours", () => {
+		expect(readTokenSync({ XDG_CACHE_HOME: cacheHome })).toBe(handle.token);
+	});
+
+	// A token already on disk is handed out to every later daemon, so an open
+	// viewer tab keeps working across a restart.
+	test("reuses a token that was already issued", () => {
+		const reuseCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-reuse-"));
+		const env = { XDG_CACHE_HOME: reuseCacheHome };
+		const existing = generateToken();
+		persistToken(existing, env);
+		const reused = startDiffServer({ port: 0, viewerDir, env });
+		try {
+			expect(reused.token).toBe(existing);
+		} finally {
+			reused.stop();
+			rmSync(reuseCacheHome, { recursive: true, force: true });
+		}
+	});
+
+	// The token is the client's only signal that a daemon is usable. Issuing it
+	// before the port is bound means a spawn that dies on EADDRINUSE still
+	// leaves one behind, and the client then renders a link pointing at whoever
+	// actually owns the port — which answers 403. Fail with nothing instead.
+	test("a failed port bind leaves no token behind", () => {
+		const busyCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-busy-"));
+		const env = { XDG_CACHE_HOME: busyCacheHome };
+		try {
+			expect(() =>
+				startDiffServer({ port: handle.server.port, viewerDir, env }),
+			).toThrow();
+			expect(existsSync(getTokenPath(env))).toBe(false);
+		} finally {
+			rmSync(busyCacheHome, { recursive: true, force: true });
+		}
 	});
 
 	test("serves index.html at / with no-store so the viewer is never stale", async () => {

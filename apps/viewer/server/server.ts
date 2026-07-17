@@ -7,7 +7,7 @@ import {
 	resolveBaseRef,
 } from "./diff.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
-import { ensureToken } from "./token.ts";
+import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -129,13 +129,19 @@ export const startDiffServer = (opts: {
 	env?: Env;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
-	const token = ensureToken(env);
+	// Mint the token but don't write it yet — Bun.serve throws if the port is
+	// taken, and a token on disk is what tells a client a daemon is usable
+	// here. Writing first would leave one pointing at whoever owns the port
+	// (which rejects it), so bind first and only then publish.
+	const existing = readTokenSync(env);
+	const token = existing ?? generateToken();
 	const handler = createHandler({ viewerDir: opts.viewerDir, token });
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
 		fetch: handler,
 	});
+	if (existing == null) persistToken(token, env);
 	const stop = (): void => {
 		void server.stop(true);
 	};
