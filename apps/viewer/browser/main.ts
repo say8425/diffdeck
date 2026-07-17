@@ -338,6 +338,27 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		codeView?.cleanUp();
 		diffMount.replaceChildren();
 		codeView = new CodeView(codeViewOptions());
+		// Render further ahead of the viewport than CodeView's 200px default.
+		// Re-mounting a file drops its highlighter (DiffHunksRenderer.recycle),
+		// so the file paints headerless and 0-height until an async highlight
+		// lands ~2 frames later; overscrollSize is the engine's own knob for
+		// keeping such gaps off-screen ("reduce blanking during fast scrolls"),
+		// and 200px is narrower than a single fast-scroll frame delta, so the
+		// gap gets composited inside the pane and reads as a blinking header.
+		// 1000 is what the engine's sibling Virtualizer defaults to for exactly
+		// this (Virtualizer.ts:20-22), and it is the smallest value measured
+		// clean at 400px/frame: 600 still showed 2 defective frames in 40.
+		//
+		// The cost is that overscrollSize also widens the `fitPerfectly`
+		// large-jump threshold (CodeView.ts:2576-2580 compares against
+		// viewportHeight + overscrollSize * 2), so jumps of ~viewport+400..2000px
+		// now paint a full window instead of the minimum, and the element pool
+		// grows (:963). Accepted: the blink is constant and user-visible, while
+		// this only costs one frame on a jump — and no smaller value fixes it.
+		//
+		// Set per instance: main.ts rebuilds the CodeView on diffStyle change,
+		// and setOptions never touches config.
+		codeView.config.overscrollSize = 1000;
 		codeView.setup(diffMount);
 		codeView.setItems(items);
 		codeView.render();

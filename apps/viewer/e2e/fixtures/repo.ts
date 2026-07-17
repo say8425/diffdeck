@@ -32,7 +32,32 @@ export interface FixtureRepo {
 	cleanup: () => void;
 }
 
-export const makeFixtureRepo = (): FixtureRepo => {
+export interface FixtureRepoOptions {
+	/**
+	 * Extra `src/bulk-N.ts` files, each fully rewritten in the working tree, to
+	 * make the rendered diff tall enough to actually scroll — which is what
+	 * drives CodeView's virtualization to mount and unmount files. The default
+	 * fixture renders shorter than the viewport (nothing scrolls), so a spec
+	 * that needs scroll behaviour must opt in. Kept opt-in so every other spec
+	 * sees the byte-identical repo it was written against.
+	 */
+	bulkFiles?: number;
+}
+
+// Wide enough that each line is one diff row; deliberately free of the words
+// other specs search for (e.g. "hello"), so opting in can never shift their
+// match counts.
+const bulkFileLines = (marker: string): string =>
+	`${Array.from(
+		{ length: 200 },
+		(_, i) =>
+			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
+	).join("\n")}\n`;
+
+export const makeFixtureRepo = (
+	options: FixtureRepoOptions = {},
+): FixtureRepo => {
+	const bulkFiles = options.bulkFiles ?? 0;
 	const dir = mkdtempSync(join(tmpdir(), "dd-e2e-repo-"));
 
 	git(dir, ["init", "-q"]);
@@ -55,6 +80,9 @@ export const makeFixtureRepo = (): FixtureRepo => {
 		join(dir, "assets", "logo.png"),
 		Buffer.from(RED_PNG_BASE64, "base64"),
 	);
+	for (let i = 0; i < bulkFiles; i++) {
+		writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("base"));
+	}
 
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
@@ -72,6 +100,10 @@ export const makeFixtureRepo = (): FixtureRepo => {
 		join(dir, "assets", "logo.png"),
 		Buffer.from(BLUE_PNG_BASE64, "base64"),
 	);
+
+	for (let i = 0; i < bulkFiles; i++) {
+		writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("edited"));
+	}
 
 	// Untracked file for `--untracked`.
 	writeFileSync(join(dir, "data.txt"), "untracked scratch data\n");
