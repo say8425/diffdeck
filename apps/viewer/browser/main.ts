@@ -224,7 +224,14 @@ const codeViewOptions = (): ConstructorParameters<
 		syncImageCard(container);
 	},
 	unsafeCSS:
-		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:rgba(255,255,255,.05)}` +
+		// The header is sticky, so its own code scrolls underneath it: the hover
+		// tint has to be mixed into --diffs-bg rather than layered over it as a
+		// translucent colour, which would replace the opaque background and let
+		// the code show through. --diffs-mixer is the engine's own contrast
+		// token (light-dark(#000, #fff)), so this tints the right direction in
+		// either theme; in srgb because that matches how the browser would have
+		// composited the equivalent 5% overlay.
+		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
 		"[data-copy-name]{opacity:0;transition:opacity .15s;background:transparent;border:0;color:#84848a;cursor:pointer;display:inline-flex;align-items:center;padding:0 4px;margin-left:2px;line-height:1}" +
@@ -331,6 +338,27 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		codeView?.cleanUp();
 		diffMount.replaceChildren();
 		codeView = new CodeView(codeViewOptions());
+		// Render further ahead of the viewport than CodeView's 200px default.
+		// Re-mounting a file drops its highlighter (DiffHunksRenderer.recycle),
+		// so the file paints headerless and 0-height until an async highlight
+		// lands ~2 frames later; overscrollSize is the engine's own knob for
+		// keeping such gaps off-screen ("reduce blanking during fast scrolls"),
+		// and 200px is narrower than a single fast-scroll frame delta, so the
+		// gap gets composited inside the pane and reads as a blinking header.
+		// 1000 is what the engine's sibling Virtualizer defaults to for exactly
+		// this (Virtualizer.ts:20-22), and it is the smallest value measured
+		// clean at 400px/frame: 600 still showed 2 defective frames in 40.
+		//
+		// The cost is that overscrollSize also widens the `fitPerfectly`
+		// large-jump threshold (CodeView.ts:2576-2580 compares against
+		// viewportHeight + overscrollSize * 2), so jumps of ~viewport+400..2000px
+		// now paint a full window instead of the minimum, and the element pool
+		// grows (:963). Accepted: the blink is constant and user-visible, while
+		// this only costs one frame on a jump — and no smaller value fixes it.
+		//
+		// Set per instance: main.ts rebuilds the CodeView on diffStyle change,
+		// and setOptions never touches config.
+		codeView.config.overscrollSize = 1000;
 		codeView.setup(diffMount);
 		codeView.setItems(items);
 		codeView.render();

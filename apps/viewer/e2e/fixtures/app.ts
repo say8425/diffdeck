@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { spawnLongRunning } from "./proc.ts";
-import { makeFixtureRepo } from "./repo.ts";
+import { type FixtureRepoOptions, makeFixtureRepo } from "./repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cliPath = join(here, "..", "..", "dist", "cli.js");
@@ -40,8 +40,9 @@ export interface LaunchedViewer {
  */
 export const launchViewer = async (
 	flags: string[] = [],
+	repoOptions: FixtureRepoOptions = {},
 ): Promise<LaunchedViewer> => {
-	const repo = makeFixtureRepo();
+	const repo = makeFixtureRepo(repoOptions);
 	const cacheHome = mkdtempSync(join(tmpdir(), "dd-e2e-cache-"));
 
 	const proc = spawnLongRunning(
