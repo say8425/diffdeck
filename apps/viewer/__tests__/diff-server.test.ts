@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
+import packageJson from "../package.json";
 import { startDiffServer } from "../server/server.ts";
 import {
 	generateToken,
@@ -50,6 +51,17 @@ describe("diff server", () => {
 		const res = await fetch(`${base}/api/ping`);
 		expect(res.status).toBe(204);
 		expect(res.headers.get("x-diffdeck")).toBe("1");
+	});
+
+	// A long-lived daemon outlives the package that spawned it, so upgrading
+	// diffdeck on disk does not upgrade what is answering the port. Clients
+	// (cc-statusline) diff these against the version they resolved and replace
+	// the daemon on a mismatch — which needs the pid, since the incumbent is
+	// detached and its spawner is long gone.
+	test("ping reports the running version and pid so a client can spot a stale daemon", async () => {
+		const res = await fetch(`${base}/api/ping`);
+		expect(res.headers.get("x-diffdeck-version")).toBe(packageJson.version);
+		expect(res.headers.get("x-diffdeck-pid")).toBe(String(process.pid));
 	});
 
 	// The mirror of the test below: binding the port is what makes the token

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { Server } from "bun";
+import packageJson from "../package.json";
 import {
 	getDiffFiles,
 	getFileBytes,
@@ -43,7 +44,26 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
 				status: 204,
-				headers: { "x-diffdeck": "1" },
+				headers: {
+					// The bare marker stays a constant: clients built before
+					// versions were reported here match on it exactly.
+					"x-diffdeck": "1",
+					// A daemon is detached and outlives the install that spawned
+					// it, so upgrading the package on disk does not upgrade what
+					// answers this port. Report who we actually are so a client
+					// can replace a stale daemon instead of reading any answer
+					// as "up to date".
+					//
+					// This route is unauthenticated and any local process can
+					// bind this port, so neither field is trustworthy on its own
+					// — a client that signals a pid read from here would let a
+					// squatter pick the victim. A client MUST first confirm the
+					// responder holds the token it read from disk (a request
+					// that would 403 otherwise); only a real daemon can pass
+					// that, and only then is the pid its own.
+					"x-diffdeck-version": packageJson.version,
+					"x-diffdeck-pid": String(process.pid),
+				},
 			});
 		}
 
