@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.0...diffdeck-v0.2.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* **viewer:** stop the sticky file header going transparent and blinking ([#6](https://github.com/say8425/diffdeck/issues/6)) ([baa4429](https://github.com/say8425/diffdeck/commit/baa4429961b1fae0dbb5ae8010427241c9ab0757))
+
 ## [0.2.0](https://github.com/say8425/diffdeck/compare/diffdeck-v0.1.0...diffdeck-v0.2.0) (2026-07-16)
 
 
