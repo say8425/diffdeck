@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.1...diffdeck-v0.2.2) (2026-07-19)
+
+
+### Bug Fixes
+
+* make a published diffdeck actually reach users with a warm daemon ([#8](https://github.com/say8425/diffdeck/issues/8)) ([a76e105](https://github.com/say8425/diffdeck/commit/a76e105e23a2467f9c69e1d0b81bdc1b0fe0e733))
+
 ## [0.2.1](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.0...diffdeck-v0.2.1) (2026-07-17)
 
 
