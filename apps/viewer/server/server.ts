@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { Server } from "bun";
+import packageJson from "../package.json";
 import {
 	getDiffFiles,
 	getFileBytes,
@@ -7,7 +8,7 @@ import {
 	resolveBaseRef,
 } from "./diff.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
-import { ensureToken } from "./token.ts";
+import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
 type Env = Record<string, string | undefined>;
 
@@ -43,7 +44,26 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
 				status: 204,
-				headers: { "x-diffdeck": "1" },
+				headers: {
+					// The bare marker stays a constant: clients built before
+					// versions were reported here match on it exactly.
+					"x-diffdeck": "1",
+					// A daemon is detached and outlives the install that spawned
+					// it, so upgrading the package on disk does not upgrade what
+					// answers this port. Report who we actually are so a client
+					// can replace a stale daemon instead of reading any answer
+					// as "up to date".
+					//
+					// This route is unauthenticated and any local process can
+					// bind this port, so neither field is trustworthy on its own
+					// — a client that signals a pid read from here would let a
+					// squatter pick the victim. A client MUST first confirm the
+					// responder holds the token it read from disk (a request
+					// that would 403 otherwise); only a real daemon can pass
+					// that, and only then is the pid its own.
+					"x-diffdeck-version": packageJson.version,
+					"x-diffdeck-pid": String(process.pid),
+				},
 			});
 		}
 
@@ -129,13 +149,19 @@ export const startDiffServer = (opts: {
 	env?: Env;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
-	const token = ensureToken(env);
+	// Mint the token but don't write it yet — Bun.serve throws if the port is
+	// taken, and a token on disk is what tells a client a daemon is usable
+	// here. Writing first would leave one pointing at whoever owns the port
+	// (which rejects it), so bind first and only then publish.
+	const existing = readTokenSync(env);
+	const token = existing ?? generateToken();
 	const handler = createHandler({ viewerDir: opts.viewerDir, token });
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
 		fetch: handler,
 	});
+	if (existing == null) persistToken(token, env);
 	const stop = (): void => {
 		void server.stop(true);
 	};
