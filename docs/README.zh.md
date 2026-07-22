@@ -68,6 +68,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--no-flatten`      | 启动时文件树不进行 flatten（默认开启 flatten）               |
 | `--tree-right`      | 启动时文件树显示在右侧                                      |
 | `--split`           | 以 split 视图启动（默认是 unified）                          |
+| `--hide-tree`       | 启动时隐藏文件树                                            |
 | `-h`, `--help`      | 显示帮助                                                    |
 | `-v`, `--version`   | 显示版本号                                                  |
 

@@ -5,6 +5,7 @@ import {
 	readTreeSide,
 	resolveDiffStyle,
 	resolveFlatten,
+	resolveTreeHidden,
 	resolveTreeSide,
 	resolveUntracked,
 	resolveWatch,
@@ -51,6 +52,11 @@ describe("launch-flag resolvers (URL param → localStorage → default)", () =>
 		expect(resolveUntracked(null)).toBe(false);
 		expect(resolveUntracked("1")).toBe(true);
 		expect(resolveUntracked("0")).toBe(false);
+	});
+	test("resolveTreeHidden: URL only, default false (visible)", () => {
+		expect(resolveTreeHidden(null)).toBe(false);
+		expect(resolveTreeHidden("0")).toBe(true);
+		expect(resolveTreeHidden("1")).toBe(false);
 	});
 	test("resolveDiffStyle: URL only, default unified", () => {
 		expect(resolveDiffStyle(null)).toBe("unified");

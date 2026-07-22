@@ -126,6 +126,7 @@ describe("packaged cli.js", () => {
 				"--tree-right",
 				"--watch",
 				"--no-flatten",
+				"--hide-tree",
 			],
 			{
 				cwd: repo,
@@ -141,6 +142,7 @@ describe("packaged cli.js", () => {
 		expect(q.get("tree")).toBe("right");
 		expect(q.get("watch")).toBe("1");
 		expect(q.get("flatten")).toBe("0");
+		expect(q.get("sidebar")).toBe("0");
 		p.kill("SIGINT");
 		await p.exited;
 		rmSync(repo, { recursive: true, force: true });

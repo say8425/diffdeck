@@ -68,6 +68,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--no-flatten`      | 파일 트리를 flatten하지 않은 상태로 시작(flatten은 기본적으로 켜져 있음) |
 | `--tree-right`      | 파일 트리를 오른쪽에 둔 상태로 시작                                 |
 | `--split`           | split 뷰로 시작(unified가 기본값)                                  |
+| `--hide-tree`       | 파일 트리를 숨긴 상태로 시작                                       |
 | `-h`, `--help`      | 도움말 표시                                                        |
 | `-v`, `--version`   | 버전 표시                                                          |
 

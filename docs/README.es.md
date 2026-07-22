@@ -68,6 +68,7 @@ Opciones:
 | `--no-flatten`     | Iniciar con el árbol de archivos sin aplanar (flatten está activo por defecto)    |
 | `--tree-right`     | Iniciar con el árbol de archivos a la derecha                                     |
 | `--split`          | Iniciar en vista split (unified es el valor predeterminado)                       |
+| `--hide-tree`      | Iniciar con el árbol de archivos oculto                                            |
 | `-h`, `--help`     | Mostrar ayuda                                                                      |
 | `-v`, `--version`  | Mostrar versión                                                                    |
 
