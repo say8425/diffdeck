@@ -7,7 +7,9 @@ import {
 	isGitRepo,
 	resolveBaseRef,
 } from "./diff.ts";
+import { repoFingerprint } from "./fingerprint.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
+import { createPayloadCache, payloadEtag } from "./payloadCache.ts";
 import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
 type Env = Record<string, string | undefined>;
@@ -38,6 +40,7 @@ const resolveBaseCached = async (
 
 const createHandler = (cfg: { viewerDir: string; token: string }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
+	const diffCache = createPayloadCache();
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
@@ -78,19 +81,47 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 			const untracked = url.searchParams.get("untracked") === "1";
 			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
 			const { base, ref } = await resolveBaseCached(repo);
-			const files =
-				mode === "base"
-					? await getDiffFiles(repo, {
-							untracked,
-							mode: "base",
-							ref: ref ?? undefined,
-						})
-					: await getDiffFiles(repo, { untracked });
+			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
+			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
+			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
+			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
+			const fingerprint = await repoFingerprint(repo, {
+				untracked,
+				mode,
+				ref: mode === "base" ? (ref ?? undefined) : undefined,
+			});
+			const cacheKey = `${repo}\0${untracked}\0${mode}`;
+			let entry = diffCache.get(cacheKey, fingerprint);
+			if (!entry) {
+				const files =
+					mode === "base"
+						? await getDiffFiles(repo, {
+								untracked,
+								mode: "base",
+								ref: ref ?? undefined,
+							})
+						: await getDiffFiles(repo, { untracked });
+				entry = {
+					fingerprint,
+					etag: payloadEtag(files),
+					body: JSON.stringify(files),
+				};
+				diffCache.set(cacheKey, entry);
+			}
+			const etag = `"${entry.etag}"`;
+			// 304에도 x-diff-base를 실어 클라이언트가 드롭다운 라벨을 유지한다.
+			if (req.headers.get("if-none-match") === etag) {
+				return new Response(null, {
+					status: 304,
+					headers: { etag, "x-diff-base": base ?? "" },
+				});
+			}
 			// NOTE: intentionally no Access-Control-Allow-Origin — cross-origin pages must not read this.
-			return new Response(JSON.stringify(files), {
+			return new Response(entry.body, {
 				headers: {
 					"content-type": "application/json; charset=utf-8",
 					"x-diff-base": base ?? "",
+					etag,
 				},
 			});
 		}

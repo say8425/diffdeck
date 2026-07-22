@@ -135,6 +135,50 @@ describe("diff server", () => {
 		expect(file?.newContents).toContain("two");
 	});
 
+	test("api/diff sets an ETag and answers a matching If-None-Match with 304", async () => {
+		const url = `${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`;
+		const first = await fetch(url);
+		expect(first.status).toBe(200);
+		const etag = first.headers.get("etag");
+		expect(etag).toBeTruthy();
+		await first.text();
+
+		const second = await fetch(url, {
+			headers: { "if-none-match": etag ?? "" },
+		});
+		expect(second.status).toBe(304);
+		// 304에도 x-diff-base는 실린다 — 클라이언트가 드롭다운 라벨을 유지한다.
+		expect(second.headers.get("x-diff-base")).not.toBeNull();
+		expect(await second.text()).toBe("");
+	});
+
+	test("api/diff returns 200 with a new ETag after an edit", async () => {
+		const url = `${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`;
+		const first = await fetch(url);
+		const etag = first.headers.get("etag");
+		await first.text();
+		writeFileSync(join(repo, "a.txt"), "three\n");
+		const second = await fetch(url, {
+			headers: { "if-none-match": etag ?? "" },
+		});
+		expect(second.status).toBe(200);
+		expect(second.headers.get("etag")).toBeTruthy();
+		expect(second.headers.get("etag")).not.toBe(etag);
+		const files = (await second.json()) as Array<{ newContents: string }>;
+		expect(files[0]?.newContents).toContain("three");
+	});
+
+	test("api/diff without If-None-Match keeps returning the full payload", async () => {
+		const url = `${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`;
+		const first = await fetch(url);
+		const firstBody = await first.text();
+		// 지문이 그대로면 캐시에서 답하되, 조건부 요청이 아니므로 항상 200 본문.
+		const second = await fetch(url);
+		expect(second.status).toBe(200);
+		expect(second.headers.get("etag")).toBe(first.headers.get("etag"));
+		expect(await second.text()).toBe(firstBody);
+	});
+
 	test("api/diff rejects a non-repo path with 400", async () => {
 		const plain = mkdtempSync(join(tmpdir(), "cc-srv-plain-"));
 		const url = `${base}/api/diff?repo=${encodeURIComponent(plain)}&token=${handle.token}`;

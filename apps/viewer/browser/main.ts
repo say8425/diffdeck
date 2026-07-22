@@ -3,6 +3,7 @@ import {
 	DIFFS_HEADER_ATTR,
 	DIFFS_TAG_NAME,
 	DIFFS_TITLE_ATTR,
+	type FileDiffMetadata,
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
@@ -13,6 +14,7 @@ import { movedBeyondThreshold } from "./drag.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
+import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
 	resolveDiffStyle,
@@ -89,11 +91,10 @@ diffMount.addEventListener("click", (event) => {
 	const nextCollapsed = !collapsedIds.has(id);
 	if (nextCollapsed) collapsedIds.add(id);
 	else collapsedIds.delete(id);
-	renderVersion += 1;
 	codeView.updateItem({
 		...item,
 		collapsed: nextCollapsed,
-		version: renderVersion,
+		version: parseCache.bump(id),
 	});
 });
 
@@ -114,10 +115,16 @@ let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
-let lastPatch: string | null = null;
+// 마지막 200 응답의 ETag(폴링 304 조건부 요청용)와 파일 목록(스타일/flatten
+// 토글처럼 서버 데이터가 그대로인 재렌더에 재사용).
+let lastEtag: string | null = null;
+let lastFiles: DiffFile[] | null = null;
 let lastTreeKey: string | null = null;
 let renderedDiffStyle: "unified" | "split" | null = null;
-let renderVersion = 0;
+
+// 파일별 파싱 캐시: contentVersion이 같으면 Myers-diff 재파싱을 건너뛰고
+// CodeView 아이템 version도 유지해 바뀐 파일만 dirty가 되게 한다.
+const parseCache = createParseCache<FileDiffMetadata>();
 
 const collapsedIds = new Set<string>();
 const seenIds = new Set<string>();
@@ -247,8 +254,11 @@ const restoreAutoExpanded = (): void => {
 		const item = codeView.getItem(id);
 		if (item?.type !== "diff") continue;
 		collapsedIds.add(id);
-		renderVersion += 1;
-		codeView.updateItem({ ...item, collapsed: true, version: renderVersion });
+		codeView.updateItem({
+			...item,
+			collapsed: true,
+			version: parseCache.bump(id),
+		});
 	}
 	autoExpandedIds.clear();
 };
@@ -279,15 +289,24 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	const gitStatus = files.map((f) => ({ path: f.name, status: f.status }));
 
 	// Diff items: parse each non-binary file's full old/new contents into a
-	// NON-partial FileDiffMetadata so hunk expansion works.
-	renderVersion += 1;
+	// NON-partial FileDiffMetadata so hunk expansion works. contentVersion이
+	// 같은 파일은 parseCache가 이전 파싱 결과와 아이템 version을 돌려주므로,
+	// 실제로 바뀐 파일만 재파싱되고 CodeView도 그 아이템만 dirty로 본다.
 	const items = files
 		.filter((f) => !f.binary || imageEntryById.has(f.name))
 		.map((f) => {
 			const isImage = imageEntryById.has(f.name);
-			const fileDiff = parseDiffFromFile(
-				{ name: f.oldName ?? f.name, contents: isImage ? "" : f.oldContents },
-				{ name: f.name, contents: isImage ? "" : f.newContents },
+			const { value: fileDiff, version } = parseCache.resolve(
+				f.name,
+				f.contentVersion,
+				() =>
+					parseDiffFromFile(
+						{
+							name: f.oldName ?? f.name,
+							contents: isImage ? "" : f.oldContents,
+						},
+						{ name: f.name, contents: isImage ? "" : f.newContents },
+					),
 			);
 			// Large files (lockfiles or over the changed-line threshold) start
 			// collapsed on first sight.
@@ -301,10 +320,11 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 				id: f.name,
 				type: "diff" as const,
 				fileDiff,
-				version: renderVersion,
+				version,
 				collapsed: collapsedIds.has(f.name),
 			};
 		});
+	parseCache.prune(items.map((it) => it.id));
 
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();
@@ -406,10 +426,11 @@ const updateBaseOption = (base: string): void => {
 	}
 };
 
-const fetchDiff = async (): Promise<{
-	files: DiffFile[];
-	base: string;
-} | null> => {
+type FetchDiffResult =
+	| { kind: "data"; files: DiffFile[]; base: string; etag: string | null }
+	| { kind: "unchanged"; base: string };
+
+const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 	const query = new URLSearchParams({
 		repo,
 		token,
@@ -417,14 +438,33 @@ const fetchDiff = async (): Promise<{
 		mode: diffMode,
 	});
 	try {
-		const res = await fetch(`/api/diff?${query.toString()}`);
+		// 조건부 요청: 서버 지문이 그대로면 304가 오고, 수십 MB payload 전송과
+		// JSON 파싱·재렌더 전부를 건너뛴다.
+		const res = await fetch(`/api/diff?${query.toString()}`, {
+			headers: lastEtag ? { "if-none-match": lastEtag } : {},
+		});
+		const base = res.headers.get("x-diff-base") ?? "";
+		if (res.status === 304) return { kind: "unchanged", base };
 		if (!res.ok) return null;
 		const files = (await res.json()) as DiffFile[];
-		return { files, base: res.headers.get("x-diff-base") ?? "" };
+		return { kind: "data", files, base, etag: res.headers.get("etag") };
 	} catch (err) {
 		console.error(err);
 		return null;
 	}
+};
+
+const applyFetched = (result: FetchDiffResult): void => {
+	updateBaseOption(result.base);
+	if (result.kind === "unchanged") {
+		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
+		statusEl.textContent =
+			lastFiles && lastFiles.length > 0 ? `${lastFiles.length} file(s)` : "";
+		return;
+	}
+	lastEtag = result.etag;
+	lastFiles = result.files;
+	renderPatch(result.files);
 };
 
 const load = async (): Promise<void> => {
@@ -434,9 +474,7 @@ const load = async (): Promise<void> => {
 		diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
 		return;
 	}
-	updateBaseOption(result.base);
-	lastPatch = JSON.stringify(result.files);
-	renderPatch(result.files);
+	applyFetched(result);
 };
 
 // Segmented Unified/Split control: the active segment stays highlighted
@@ -460,7 +498,10 @@ for (const b of styleButtons) {
 		if (next === diffStyle) return;
 		diffStyle = next;
 		syncStyleButtons();
-		void load();
+		// 스타일은 클라이언트 렌더 옵션일 뿐이라 서버 데이터가 그대로다 —
+		// 재fetch 없이 마지막 파일 목록으로 즉시 재렌더한다(파싱 캐시 히트).
+		if (lastFiles) renderPatch(lastFiles);
+		else void load();
 	});
 }
 syncStyleButtons();
@@ -521,11 +562,13 @@ flattenInput?.addEventListener("change", () => {
 	flattenDirs = flattenInput.checked;
 	localStorage.setItem(FLATTEN_KEY, flattenDirs ? "1" : "0");
 	// flattenEmptyDirectories is a constructor option, so the tree must be
-	// recreated; force a rebuild on the next render and reload the diff.
+	// recreated; force a rebuild on the next render. 서버 데이터는 그대로라
+	// 재fetch 없이 마지막 파일 목록으로 재렌더한다.
 	fileTree?.cleanUp();
 	fileTree = null;
 	lastTreeKey = null;
-	void load();
+	if (lastFiles) renderPatch(lastFiles);
+	else void load();
 });
 
 // Hide/show the file-tree sidebar: session-only (no localStorage — every
@@ -618,8 +661,11 @@ findBar = createFindBar({
 		if (item?.type !== "diff") return;
 		collapsedIds.delete(m.fileId);
 		autoExpandedIds.add(m.fileId);
-		renderVersion += 1;
-		codeView.updateItem({ ...item, collapsed: false, version: renderVersion });
+		codeView.updateItem({
+			...item,
+			collapsed: false,
+			version: parseCache.bump(m.fileId),
+		});
 	},
 	setExpandAll: (on: boolean) => {
 		if (on === expandAll) {
@@ -644,14 +690,20 @@ void load();
 const WATCH_POLL_MS = 2000;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
+// 인플라이트 가드: 대형 diff에서 서버 응답이 폴 주기(2s)를 넘길 때 요청이
+// 겹겹이 쌓이지 않게 한다.
+let pollInFlight = false;
+
 const poll = async (): Promise<void> => {
-	const result = await fetchDiff();
-	if (result === null) return;
-	updateBaseOption(result.base);
-	const serialized = JSON.stringify(result.files);
-	if (serialized === lastPatch) return;
-	lastPatch = serialized;
-	renderPatch(result.files);
+	if (pollInFlight) return;
+	pollInFlight = true;
+	try {
+		const result = await fetchDiff();
+		if (result === null) return;
+		applyFetched(result);
+	} finally {
+		pollInFlight = false;
+	}
 };
 
 const startWatch = (): void => {
