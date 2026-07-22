@@ -1,6 +1,6 @@
 {
 	"name": "@say8425/diffdeck",
-	"version": "0.2.2",
+	"version": "0.3.0",
 	"description": "Local git diff viewer — browse working-tree and branch diffs in your browser",
 	"license": "Apache-2.0",
 	"repository": {

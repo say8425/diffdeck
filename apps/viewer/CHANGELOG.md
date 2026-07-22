@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.2...diffdeck-v0.3.0) (2026-07-22)
+
+
+### Features
+
+* **viewer:** add hide-sidebar toggle ([#10](https://github.com/say8425/diffdeck/issues/10)) ([daf9213](https://github.com/say8425/diffdeck/commit/daf92135d5bb12fe2302254dbad6702413453fdc))
+
+
+### Bug Fixes
+
+* **viewer:** scale to very large change sets with change-proportional updates ([#12](https://github.com/say8425/diffdeck/issues/12)) ([dfe70ff](https://github.com/say8425/diffdeck/commit/dfe70ff1630cea34ac5fe8930be35614e3bd082f))
+
 ## [0.2.2](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.1...diffdeck-v0.2.2) (2026-07-19)
 
 
