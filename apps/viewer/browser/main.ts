@@ -539,17 +539,17 @@ const treeToggleBtn = document.getElementById(
 const treeHiddenInput = document.getElementById(
 	"toggle-tree-hidden",
 ) as HTMLInputElement | null;
-const findBarEl = document.getElementById("find-bar");
+// .tb-search wraps #find-open (icon trigger) and #find-bar (the open search
+// input) — display:contents in CSS, so it's a stable single anchor without
+// affecting either child's flex layout.
+const searchGroupEl = document.querySelector(".tb-search");
 
 // Mirrors the file tree's physical side: sits on the search input's left
 // when the tree is on the left, on its right when the tree is on the right.
-// Anchored on #find-bar (the search input itself) for both sides — not
-// #find-open (its icon-button trigger) — even though the two are adjacent
-// siblings and "before #find-open" would land in the same spot today.
 const positionTreeToggleBtn = (side: TreeSide): void => {
 	if (!treeToggleBtn) return;
-	if (side === "right") findBarEl?.after(treeToggleBtn);
-	else findBarEl?.before(treeToggleBtn);
+	if (side === "right") searchGroupEl?.after(treeToggleBtn);
+	else searchGroupEl?.before(treeToggleBtn);
 };
 positionTreeToggleBtn(treeSide);
 

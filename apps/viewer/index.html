@@ -51,6 +51,13 @@
 			.tb-right {
 				margin-left: auto;
 			}
+			/* No box of its own -- #find-open/#find-bar stay direct flex items of
+			   .tb-right (identical layout to before), while the wrapper itself
+			   gives #tree-toggle-btn a single stable anchor to sit before/after,
+			   regardless of which of its two children is currently visible. */
+			.tb-search {
+				display: contents;
+			}
 			/* One control height for every toolbar widget — without it, line-height:
      normal + differing paddings yield 25/26/26.5/27px mismatches. */
 			#toolbar button,
@@ -440,62 +447,64 @@
 							<line x1="9" y1="3" x2="9" y2="21" />
 						</svg>
 					</button>
-					<button
-						id="find-open"
-						type="button"
-						aria-label="Search (⌘F / Ctrl+F)"
-						title="Search (⌘F / Ctrl+F)"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<circle cx="11" cy="11" r="8" />
-							<line x1="21" y1="21" x2="16.65" y2="16.65" />
-						</svg>
-					</button>
-					<search id="find-bar" class="tb-find" hidden>
-						<input
-							id="find-input"
-							type="text"
-							placeholder="Search diff"
-							aria-label="Search diff"
-							autocomplete="off"
-							spellcheck="false"
-						/>
-						<span id="find-count" aria-live="polite"></span>
+					<div class="tb-search">
 						<button
-							id="find-prev"
+							id="find-open"
 							type="button"
-							aria-label="Previous match"
-							title="Previous (Shift+Enter)"
+							aria-label="Search (⌘F / Ctrl+F)"
+							title="Search (⌘F / Ctrl+F)"
 						>
-							↑
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<circle cx="11" cy="11" r="8" />
+								<line x1="21" y1="21" x2="16.65" y2="16.65" />
+							</svg>
 						</button>
-						<button
-							id="find-next"
-							type="button"
-							aria-label="Next match"
-							title="Next (Enter)"
-						>
-							↓
-						</button>
-						<button
-							id="find-close"
-							type="button"
-							aria-label="Close search"
-							title="Close (Esc)"
-						>
-							✕
-						</button>
-					</search>
+						<search id="find-bar" class="tb-find" hidden>
+							<input
+								id="find-input"
+								type="text"
+								placeholder="Search diff"
+								aria-label="Search diff"
+								autocomplete="off"
+								spellcheck="false"
+							/>
+							<span id="find-count" aria-live="polite"></span>
+							<button
+								id="find-prev"
+								type="button"
+								aria-label="Previous match"
+								title="Previous (Shift+Enter)"
+							>
+								↑
+							</button>
+							<button
+								id="find-next"
+								type="button"
+								aria-label="Next match"
+								title="Next (Enter)"
+							>
+								↓
+							</button>
+							<button
+								id="find-close"
+								type="button"
+								aria-label="Close search"
+								title="Close (Esc)"
+							>
+								✕
+							</button>
+						</search>
+					</div>
 					<div class="tb-overflow">
 						<button
 							id="overflow-btn"

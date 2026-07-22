@@ -17,8 +17,9 @@
 //
 // `--tree-right` also drives `#tree-toggle-btn`'s DOM position: main.ts's
 // `positionTreeToggleBtn` mirrors the file tree's physical side by moving the
-// button to sit right after `#find-bar` (right of the search input) instead
-// of its default spot right before `#find-open` (left of the search input).
+// button to sit right after `.tb-search` (the wrapper around `#find-open` /
+// `#find-bar`, right of the search input) instead of its default spot right
+// before `.tb-search` (left of the search input).
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
 const FLAGS = [
@@ -71,8 +72,8 @@ test("launch flags are reflected in the in-app toggle state", async ({
 			treeHiddenAttr: document
 				.querySelector("[data-tree-hidden]")
 				?.getAttribute("data-tree-hidden"),
-			treeToggleBtnAfterFindBar:
-				document.getElementById("find-bar")?.nextElementSibling?.id,
+			treeToggleBtnAfterSearchGroup:
+				document.querySelector(".tb-search")?.nextElementSibling?.id,
 		}));
 
 	// Web-first: the toolbar/prefs wiring runs synchronously at module load,
@@ -86,6 +87,6 @@ test("launch flags are reflected in the in-app toggle state", async ({
 		treeSideAttr: "right",
 		treeHiddenToggle: true,
 		treeHiddenAttr: "true",
-		treeToggleBtnAfterFindBar: "tree-toggle-btn",
+		treeToggleBtnAfterSearchGroup: "tree-toggle-btn",
 	});
 });
