@@ -45,7 +45,7 @@ cc-statusline에 포함됐던 로컬 diff 뷰어를 독립 제품으로 분리 +
 
 → 소스 복원해 vendored 포크, 업스트림과 완전 결별. 내부 마크업 결합을 diffdeck 자체의 안정 계약으로 승격.
 
-뷰어 토글(untracked 포함·watch 자동갱신·flatten·파일트리 좌우·unified/split)은 `--untracked`/`--watch`/`--no-flatten`/`--tree-right`/`--split` CLI 플래그로 구동 시점에 미리 설정할 수 있다(session-only — 저장된 localStorage 프리퍼런스는 건드리지 않음). 인앱 토글의 초기 표시 상태는 항상 실제 launch 값과 일치하도록 sync되며, 우선순위 계산(URL 파라미터 → localStorage → 기본값)은 `apps/viewer/browser/prefs.ts`의 순수 resolver 함수(`resolveUntracked`/`resolveWatch`/`resolveFlatten`/`resolveTreeSide`/`resolveDiffStyle`)로 분리해 단위 테스트한다.
+뷰어 토글(untracked 포함·watch 자동갱신·flatten·파일트리 좌우·unified/split·파일트리 숨김)은 `--untracked`/`--watch`/`--no-flatten`/`--tree-right`/`--split`/`--hide-tree` CLI 플래그로 구동 시점에 미리 설정할 수 있다(session-only — 저장된 localStorage 프리퍼런스는 건드리지 않음). 인앱 토글의 초기 표시 상태는 항상 실제 launch 값과 일치하도록 sync되며, 우선순위 계산(URL 파라미터 → localStorage → 기본값)은 `apps/viewer/browser/prefs.ts`의 순수 resolver 함수(`resolveUntracked`/`resolveWatch`/`resolveFlatten`/`resolveTreeSide`/`resolveDiffStyle`/`resolveTreeHidden`)로 분리해 단위 테스트한다. 파일트리 숨김은 `localStorage` 폴백이 없는 session-only 토글(`resolveUntracked`와 동일 패턴)로, 툴바 아이콘 버튼(`#tree-toggle-btn`)과 오버플로 메뉴 체크박스(`#toggle-tree-hidden`) 둘 다에서 조작 가능하며 항상 서로 동기화된다.
 
 설계·조사 근거(요약): CodeView는 이미 프레임워크 무관 vanilla 27k줄 엔진(faithful 재작성 4~8개월, 이득 0 → 재작성 금지). 혼합 기술은 얕음 — vanilla가 아닌 건 trees 렌더 스킨의 preact 6파일뿐. 대체 라이브러리 조사 결과 pierre 품질 대체재 없음.
 
