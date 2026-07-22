@@ -270,6 +270,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	);
 	if (files.length === 0) {
 		teardownViews();
+		parseCache.prune([]);
 		diffMount.replaceChildren();
 		diffMount.innerHTML = '<div id="empty">No changes.</div>';
 		statusEl.textContent = "";
@@ -691,7 +692,9 @@ const WATCH_POLL_MS = 2000;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
 // 인플라이트 가드: 대형 diff에서 서버 응답이 폴 주기(2s)를 넘길 때 요청이
-// 겹겹이 쌓이지 않게 한다.
+// 겹겹이 쌓이지 않게 한다. poll끼리만 막는다 — 사용자 액션 경로(load():
+// focus/refresh/토글)는 의도된 즉시 갱신이라 막지 않으며, 동시 실행돼도
+// 다음 폴 사이클에서 최신 상태로 수렴한다.
 let pollInFlight = false;
 
 const poll = async (): Promise<void> => {

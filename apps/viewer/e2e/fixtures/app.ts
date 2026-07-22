@@ -28,6 +28,8 @@ const readUrlFromStdout = async (stream: Readable): Promise<string> => {
 
 export interface LaunchedViewer {
 	url: string;
+	/** 픽스처 리포 경로 — watch 스펙이 구동 후 워킹트리를 편집할 때 쓴다. */
+	repoDir: string;
 	stop: () => Promise<void>;
 }
 
@@ -63,7 +65,7 @@ export const launchViewer = async (
 		rmSync(cacheHome, { recursive: true, force: true });
 	};
 
-	return { url, stop };
+	return { url, repoDir: repo.dir, stop };
 };
 
 type WorkerFixtures = {

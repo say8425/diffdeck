@@ -77,6 +77,24 @@ describe("repoFingerprint", () => {
 		expect(fp2).not.toBe(fp1);
 	});
 
+	test("a staged rename changes the fingerprint, and edits to the renamed file keep being detected", async () => {
+		const fp1 = await repoFingerprint(repo);
+		await $`git -C ${repo} mv a.txt b.txt`;
+		const fp2 = await repoFingerprint(repo);
+		expect(fp2).not.toBe(fp1);
+		// 첫 편집은 status 자체가 R → RM으로 변해 지문이 당연히 바뀐다.
+		writeFileSync(join(repo, "b.txt"), "renamed edit one\n");
+		const fp3 = await repoFingerprint(repo);
+		expect(fp3).not.toBe(fp2);
+		// 두 번째 편집부터는 status 출력("RM b.txt\0a.txt")이 그대로다 — 이제는
+		// porcelain -z rename 토큰 스킵이 "새 경로"를 stat 대상으로 잡아야만
+		// 감지된다. 스킵 로직이 무너지면 여기서 잡힌다 (라인 커버리지만으로는
+		// 이 분기의 회귀를 못 잡는다).
+		writeFileSync(join(repo, "b.txt"), "renamed edit two, longer\n");
+		const fp4 = await repoFingerprint(repo);
+		expect(fp4).not.toBe(fp3);
+	});
+
 	test("base mode: changes when the base ref moves", async () => {
 		await $`git -C ${repo} branch -M main`;
 		await $`git -C ${repo} checkout -qb feature`;
