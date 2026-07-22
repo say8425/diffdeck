@@ -97,7 +97,7 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 ### 수정 시 주의사항
 
 - **CodeView(diffs) 재작성 금지** — 27k줄 vendored 엔진을 blackbox로 사용. 가상화·shiki 스트리밍·shadow DOM 등 상용급 난이도, 재작성 이득 없음.
-- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서.
+- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만 (현재 유일한 예외: `DiffHunksRenderer.recycle()`의 하이라이터 동기 재획득 — 헤더 깜박임 완치).
 - **JSX 설정**: `tsconfig.base.json`은 preact JSX. diffs는 패키지 tsconfig에서 react로 override(react 어댑터 때문), trees는 per-file `@jsxImportSource` pragma 사용. 그래서 루트 typecheck는 flat이 아니라 패키지별 루프.
 - **외부 deps는 정확 버전 핀** (캐럿 금지). vendored 패키지는 workspace 내부.
 - **preact는 trees에만** — Plan 3(de-preact)에서 vanilla로 포팅 후 제거 예정.
@@ -111,5 +111,5 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 - **Plan 1 — Foundation** ✅: 4패키지 포크, 타입체크·렌더 검증.
 - **Plan 2 — viewer + server 앱** ✅: `apps/viewer`로 이관(server/·browser/), 14 유닛 테스트 + 빌드-번들 서빙 통합 테스트로 동등성 검증. browser/는 vendored JSX 벽 때문에 typecheck 루프 제외(패리티 하니스와 동일, Plan 4/5서 선언 기반으로 해소).
 - **Plan 3 — de-preact 실용판**: trees preact 6파일 → vanilla (가상화·DnD·rename·sticky·SSR 제외, read-only 대응), preact 제거.
-- **Plan 4 — 커플링 하드닝**: 내부 마크업 계약화, 정렬 comparator 단일화, canary 테스트, 상수 export. + **헤더 깜박임 완치**: `DiffHunksRenderer.recycle()`이 하이라이터를 버려(`highlighter = undefined`) 재마운트 때 `renderDiff()`가 null을 반환 → `FileDiff.render()`가 헤더 적용(`:896`) 전에 탈출(`:885`) → 헤더 없는 0-height 프레임. 생성자(`:228-232`)처럼 `getHighlighterIfLoaded()`로 동기 재획득하면 근절되나 vendored 로직 변경이라 Foundation 원칙 예외 필요. 현재는 `overscrollSize=1000`으로 화면 밖에 숨기는 완화만 적용(400px/frame까지 clean, 800px/frame에선 잔존). 참고: 뷰어는 CodeView에 workerManager를 넘기지 않으므로 **항상** non-worker 분기 = 이 하이라이터 경로를 탄다.
+- **Plan 4 — 커플링 하드닝**: 내부 마크업 계약화, 정렬 comparator 단일화, canary 테스트, 상수 export. **헤더 깜박임은 완치됨**(Foundation 예외를 적용한 첫 vendored 로직 수정): `DiffHunksRenderer.recycle()`이 하이라이터를 무조건 버려(`highlighter = undefined`) 재마운트 때 `renderDiff()`가 null을 반환 → `FileDiff.render()`가 헤더 적용 전에 탈출 → 헤더 없는 0-height 프레임이었는데, recycle()이 생성자(`:228-232`)와 동일 조건으로 `getHighlighterIfLoaded()`를 동기 재획득하게 수정해 근절(`[diffdeck]` 주석으로 upstream 이탈 표기). `overscrollSize=1000`은 유지 — 남은 역할은 scroll→queueRender→다음 rAF의 1프레임 렌더 지연 커버(800px/frame 플링까지 e2e 검증, `header-mount.e2e.ts` 극한 프로브). 참고: 뷰어는 CodeView에 workerManager를 넘기지 않으므로 **항상** non-worker 분기 = 이 하이라이터 경로를 탄다.
 - **Plan 5 — CLI + 컷오버 + 배포**: `bin/diffdeck.ts`(데몬·토큰·URL), npm `@say8425/diffdeck` 배포, cc-statusline이 `bunx @say8425/diffdeck`로 전환.

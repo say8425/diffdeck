@@ -362,22 +362,23 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		diffMount.replaceChildren();
 		codeView = new CodeView(codeViewOptions());
 		// Render further ahead of the viewport than CodeView's 200px default.
-		// Re-mounting a file drops its highlighter (DiffHunksRenderer.recycle),
-		// so the file paints headerless and 0-height until an async highlight
-		// lands ~2 frames later; overscrollSize is the engine's own knob for
-		// keeping such gaps off-screen ("reduce blanking during fast scrolls"),
-		// and 200px is narrower than a single fast-scroll frame delta, so the
-		// gap gets composited inside the pane and reads as a blinking header.
-		// 1000 is what the engine's sibling Virtualizer defaults to for exactly
-		// this (Virtualizer.ts:20-22), and it is the smallest value measured
-		// clean at 400px/frame: 600 still showed 2 defective frames in 40.
+		// The old headerless-remount blink is cured at the source — the forked
+		// DiffHunksRenderer.recycle() re-acquires the shared highlighter
+		// synchronously (like its constructor), so a re-mounted file paints
+		// fully in the frame it renders. What remains is the engine's scroll →
+		// queueRender → next-rAF pipeline: rendering trails the scroll position
+		// by one frame, so the buffer must cover one frame's scroll delta.
+		// 1000px (the engine's sibling Virtualizer default, Virtualizer.ts:20-22)
+		// keeps the pane fully covered up to 800px/frame flings — verified by
+		// e2e/header-mount.e2e.ts's extreme-fling probe; 200px would re-expose
+		// blank bands at fast scrolls.
 		//
 		// The cost is that overscrollSize also widens the `fitPerfectly`
 		// large-jump threshold (CodeView.ts:2576-2580 compares against
 		// viewportHeight + overscrollSize * 2), so jumps of ~viewport+400..2000px
 		// now paint a full window instead of the minimum, and the element pool
-		// grows (:963). Accepted: the blink is constant and user-visible, while
-		// this only costs one frame on a jump — and no smaller value fixes it.
+		// grows (:963). Accepted: one frame's cost on a jump vs. visible
+		// blanking during every fast scroll.
 		//
 		// Set per instance: main.ts rebuilds the CodeView on diffStyle change,
 		// and setOptions never touches config.

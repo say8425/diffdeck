@@ -240,7 +240,21 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   public recycle(): void {
-    this.highlighter = undefined;
+    // [diffdeck] Deviation from upstream @pierre/diffs: mirror the constructor
+    // (see above) instead of unconditionally dropping the highlighter. A
+    // recycled renderer is about to be re-mounted by the virtualizer, and on
+    // the non-worker path the shared highlighter is a loaded singleton — with
+    // it re-acquired synchronously, the first render after re-mount paints
+    // synchronously (header included). Dropping it forced that render to bail
+    // and wait for an async highlight 1+ frames later, which painted mounted
+    // files headerless/0-height and read as blank bands during fast scrolls.
+    if (this.workerManager?.isWorkingPool() !== true) {
+      this.highlighter = areThemesAttached(this.options.theme ?? DEFAULT_THEMES)
+        ? getHighlighterIfLoaded()
+        : undefined;
+    } else {
+      this.highlighter = undefined;
+    }
     this.diff = undefined;
     this.clearRenderCache();
     this.additionAnnotations = {};
