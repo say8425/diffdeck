@@ -8,6 +8,7 @@ export interface ParsedArgs {
 	flatten: boolean;
 	treeSide: "left" | "right";
 	diffStyle: "unified" | "split";
+	treeHidden: boolean;
 }
 
 const parsePort = (raw: string | undefined): number | undefined => {
@@ -28,6 +29,7 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
 		flatten: true,
 		treeSide: "left",
 		diffStyle: "unified",
+		treeHidden: false,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
@@ -51,6 +53,8 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
 			result.treeSide = "right";
 		} else if (arg === "--split") {
 			result.diffStyle = "split";
+		} else if (arg === "--hide-tree") {
+			result.treeHidden = true;
 		}
 	}
 	return result;
