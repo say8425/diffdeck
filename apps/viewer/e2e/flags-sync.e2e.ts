@@ -14,6 +14,11 @@
 // element to be visible. The Unified/Split segmented control, `#app`'s
 // `data-tree-side`, and `#tree-toggle-btn`/`data-tree-hidden` live in the
 // always-visible toolbar/app shell.
+//
+// `--tree-right` also drives `#tree-toggle-btn`'s DOM position: main.ts's
+// `positionTreeToggleBtn` mirrors the file tree's physical side by moving the
+// button to sit right after `#find-bar` (right of the search input) instead
+// of its default spot right before `#find-open` (left of the search input).
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
 const FLAGS = [
@@ -66,6 +71,8 @@ test("launch flags are reflected in the in-app toggle state", async ({
 			treeHiddenAttr: document
 				.querySelector("[data-tree-hidden]")
 				?.getAttribute("data-tree-hidden"),
+			treeToggleBtnAfterFindBar:
+				document.getElementById("find-bar")?.nextElementSibling?.id,
 		}));
 
 	// Web-first: the toolbar/prefs wiring runs synchronously at module load,
@@ -79,5 +86,6 @@ test("launch flags are reflected in the in-app toggle state", async ({
 		treeSideAttr: "right",
 		treeHiddenToggle: true,
 		treeHiddenAttr: "true",
+		treeToggleBtnAfterFindBar: "tree-toggle-btn",
 	});
 });

@@ -515,6 +515,7 @@ treeSideInput?.addEventListener("change", () => {
 	treeSide = treeSideInput.checked ? "right" : "left";
 	appEl.dataset.treeSide = treeSide;
 	localStorage.setItem(TREE_SIDE_KEY, treeSide);
+	positionTreeToggleBtn(treeSide);
 });
 
 flattenInput?.addEventListener("change", () => {
@@ -538,6 +539,17 @@ const treeToggleBtn = document.getElementById(
 const treeHiddenInput = document.getElementById(
 	"toggle-tree-hidden",
 ) as HTMLInputElement | null;
+const findOpenBtn = document.getElementById("find-open");
+const findBarEl = document.getElementById("find-bar");
+
+// Mirrors the file tree's physical side: sits on the search input's left
+// when the tree is on the left, on its right when the tree is on the right.
+const positionTreeToggleBtn = (side: TreeSide): void => {
+	if (!treeToggleBtn) return;
+	if (side === "right") findBarEl?.after(treeToggleBtn);
+	else findOpenBtn?.before(treeToggleBtn);
+};
+positionTreeToggleBtn(treeSide);
 
 const setTreeHidden = (next: boolean): void => {
 	treeHidden = next;
