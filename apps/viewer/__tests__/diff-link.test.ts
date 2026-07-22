@@ -38,6 +38,7 @@ describe("buildDiffViewerUrl view flags", () => {
 		expect(url).not.toContain("tree");
 		expect(url).not.toContain("flatten");
 		expect(url).not.toContain("watch");
+		expect(url).not.toContain("sidebar");
 	});
 	test("non-default values are appended", () => {
 		const url = buildDiffViewerUrl({
@@ -47,6 +48,7 @@ describe("buildDiffViewerUrl view flags", () => {
 			flatten: false,
 			treeSide: "right",
 			diffStyle: "split",
+			treeHidden: true,
 		});
 		const q = new URL(url).searchParams;
 		expect(q.get("untracked")).toBe("1");
@@ -54,6 +56,7 @@ describe("buildDiffViewerUrl view flags", () => {
 		expect(q.get("flatten")).toBe("0");
 		expect(q.get("tree")).toBe("right");
 		expect(q.get("style")).toBe("split");
+		expect(q.get("sidebar")).toBe("0");
 	});
 	test("default values are NOT appended (flatten:true, treeSide:left, diffStyle:unified)", () => {
 		const url = buildDiffViewerUrl({
@@ -63,6 +66,7 @@ describe("buildDiffViewerUrl view flags", () => {
 			flatten: true,
 			treeSide: "left",
 			diffStyle: "unified",
+			treeHidden: false,
 		});
 		expect(new URL(url).search).toBe(`?repo=%2Fr&token=t`);
 	});
