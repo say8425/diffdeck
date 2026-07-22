@@ -17,6 +17,7 @@ import {
 	FLATTEN_KEY,
 	resolveDiffStyle,
 	resolveFlatten,
+	resolveTreeHidden,
 	resolveTreeSide,
 	resolveUntracked,
 	resolveWatch,
@@ -109,6 +110,7 @@ let flattenDirs = resolveFlatten(params.get("flatten"), (k) =>
 let treeSide: TreeSide = resolveTreeSide(params.get("tree"), (k) =>
 	localStorage.getItem(k),
 );
+let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
@@ -525,6 +527,33 @@ flattenInput?.addEventListener("change", () => {
 	lastTreeKey = null;
 	void load();
 });
+
+// Hide/show the file-tree sidebar: session-only (no localStorage — every
+// fresh load starts visible unless launched with --hide-tree). The toolbar
+// button and the overflow-menu checkbox both drive (and reflect) the same
+// state through this one setter, so they can never drift out of sync.
+const treeToggleBtn = document.getElementById(
+	"tree-toggle-btn",
+) as HTMLButtonElement | null;
+const treeHiddenInput = document.getElementById(
+	"toggle-tree-hidden",
+) as HTMLInputElement | null;
+
+const setTreeHidden = (next: boolean): void => {
+	treeHidden = next;
+	appEl.dataset.treeHidden = treeHidden ? "true" : "false";
+	const label = treeHidden ? "Show file tree" : "Hide file tree";
+	treeToggleBtn?.setAttribute("aria-pressed", treeHidden ? "true" : "false");
+	treeToggleBtn?.setAttribute("aria-label", label);
+	treeToggleBtn?.setAttribute("title", label);
+	if (treeHiddenInput) treeHiddenInput.checked = treeHidden;
+};
+setTreeHidden(treeHidden);
+
+treeToggleBtn?.addEventListener("click", () => setTreeHidden(!treeHidden));
+treeHiddenInput?.addEventListener("change", () =>
+	setTreeHidden(treeHiddenInput.checked),
+);
 
 // Overflow (⋯) menu: toggle on button click, close on outside click / Escape.
 const overflowBtn = document.getElementById("overflow-btn");
