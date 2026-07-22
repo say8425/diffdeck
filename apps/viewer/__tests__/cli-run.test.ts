@@ -29,6 +29,7 @@ const defaultArgs: ParsedArgs = {
 	flatten: true,
 	treeSide: "left",
 	diffStyle: "unified",
+	treeHidden: false,
 };
 
 const makeHandle = (
@@ -158,6 +159,7 @@ describe("run — normal startup", () => {
 			flatten: true,
 			treeSide: "left",
 			diffStyle: "unified",
+			treeHidden: false,
 		});
 		expect(deps.log).toHaveBeenCalledWith("diffdeck viewer running at:");
 		expect(deps.log).toHaveBeenCalledWith("http://127.0.0.1:5000/?token=tk");

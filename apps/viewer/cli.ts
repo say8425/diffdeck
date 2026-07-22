@@ -29,6 +29,7 @@ Options:
   --no-flatten  Start with the file tree un-flattened (flatten is on by default)
   --tree-right  Start with the file tree on the right
   --split       Start in split view (unified is the default)
+  --hide-tree   Start with the file tree hidden
   -h, --help    Show this help
   -v, --version Show version
 
@@ -95,6 +96,7 @@ export const run = (argv: string[], deps: CliDeps): void => {
 		flatten: args.flatten,
 		treeSide: args.treeSide,
 		diffStyle: args.diffStyle,
+		treeHidden: args.treeHidden,
 	});
 
 	deps.log("diffdeck viewer running at:");
