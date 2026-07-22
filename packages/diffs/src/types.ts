@@ -567,6 +567,10 @@ interface RenderedDiffASTCache {
   options: RenderDiffOptions;
   result: ThemedDiffResult | undefined;
   renderRange: RenderRange | undefined;
+  // [diffdeck] true when `result` came from a zero-line empty-window render
+  // (collapsed item) — such a pool must never be consumed by a non-empty
+  // window; see DiffHunksRenderer.renderDiff's emptyWindow handling.
+  emptyWindow?: boolean;
 }
 interface RenderRange {
   startingLine: number;

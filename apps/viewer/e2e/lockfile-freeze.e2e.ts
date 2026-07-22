@@ -124,3 +124,76 @@ test("mounting a huge collapsed lockfile at the bottom must not freeze the frame
 		await viewer.stop();
 	}
 });
+
+test("expanding a sub-cutoff (highlightable) lockfile renders without an engine error", async ({
+	page,
+}) => {
+	// 8k줄: 뷰어의 tokenizeMaxLength(20k) "아래"라 하이라이트 대상인 lockfile.
+	// collapsed 동안 empty-window 렌더는 lang 'text'로만 돌므로 yaml 문법이
+	// 로드되지 않은 채 펼침이 일어난다 — 이때 빈 윈도우에서 캐시된 zero-line
+	// 풀을 확장 렌더가 재사용하면 processDiffResult가 throw하고 엔진 catch가
+	// console.error + 에러 박스를 띄운다(비동기 하이라이트가 곧 자가복구해
+	// 행은 결국 보이므로, 판별자는 그 순간의 console.error다).
+	const viewer = await launchViewer([], { bulkFiles: 2, lockfileLines: 8000 });
+	const consoleErrors: string[] = [];
+	page.on("console", (msg) => {
+		if (msg.type() === "error") consoleErrors.push(msg.text());
+	});
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+		await expect(page.locator("diffs-container").first()).toBeVisible();
+
+		await page.evaluate(() => {
+			const scroller = document.getElementById("diff") as HTMLElement;
+			scroller.scrollTop = scroller.scrollHeight;
+		});
+		const expandLockfile = (): Promise<boolean> =>
+			page.evaluate(() => {
+				const container = [
+					...document.querySelectorAll("diffs-container"),
+				].find(
+					(el) =>
+						el.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ===
+						"pnpm-lock.yaml",
+				);
+				const header = container?.shadowRoot?.querySelector(
+					"[data-diffs-header]",
+				);
+				if (!header) return false;
+				header.dispatchEvent(
+					new MouseEvent("click", { bubbles: true, composed: true }),
+				);
+				return true;
+			});
+		await expect.poll(expandLockfile, { timeout: 15_000 }).toBe(true);
+
+		// 펼친 행이 실제로 나타난다 (plain 이든 highlighted 든).
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() => {
+						const container = [
+							...document.querySelectorAll("diffs-container"),
+						].find(
+							(el) =>
+								el.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ===
+								"pnpm-lock.yaml",
+						);
+						return (
+							container?.shadowRoot?.querySelector("pre")?.textContent
+								?.length ?? 0
+						);
+					}),
+				{ timeout: 15_000 },
+			)
+			.toBeGreaterThan(1000);
+
+		// 엔진 렌더 오류가 한 번도 찍히지 않아야 한다.
+		expect(
+			consoleErrors.filter((t) => /something is wrong|Error/i.test(t)),
+		).toEqual([]);
+	} finally {
+		await viewer.stop();
+	}
+});

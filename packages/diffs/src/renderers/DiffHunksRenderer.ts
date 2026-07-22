@@ -584,6 +584,11 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
         (forceHighlight ||
           forcePlainText ||
           (!this.renderCache.highlighted && canHighlight) ||
+          // [diffdeck] a pool cached by an empty-window render has zero lines
+          // — a non-empty window must refresh it (plain text when the
+          // language isn't attached yet) or processDiffResult would index
+          // into empty arrays and throw on expand.
+          (this.renderCache.emptyWindow === true && !emptyWindow) ||
           this.renderCache.result == null)
       ) {
         const { result, options } = this.renderDiffWithHighlighter(
@@ -599,6 +604,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
           highlighted: canHighlight,
           result,
           renderRange: undefined,
+          emptyWindow,
         };
       }
 
@@ -621,6 +627,13 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
             this.renderCache.highlighted = false;
           }
           this.onHighlightSuccess(diff, result, options, !forcePlainText);
+          // [diffdeck] onHighlightSuccess rebuilt the cache — when this async
+          // render was an empty window, mark its zero-line pool as such so a
+          // later expand refreshes instead of consuming it (see the sync
+          // branch's matching guard).
+          if (this.renderCache != null) {
+            this.renderCache.emptyWindow = emptyWindow;
+          }
         });
       }
     }

@@ -97,7 +97,9 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 ### 수정 시 주의사항
 
 - **CodeView(diffs) 재작성 금지** — 27k줄 vendored 엔진을 blackbox로 사용. 가상화·shiki 스트리밍·shadow DOM 등 상용급 난이도, 재작성 이득 없음.
-- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만 (현재 유일한 예외: `DiffHunksRenderer.recycle()`의 하이라이터 동기 재획득 — 헤더 깜박임 완치).
+- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만. 현재 예외 2건 (둘 다 `packages/diffs`):
+  1. `DiffHunksRenderer.recycle()`의 하이라이터 동기 재획득 — 빠른 스크롤 headerless blink 완치 (`header-mount.e2e.ts` 극한 프로브가 회귀망).
+  2. 빈 렌더 윈도우(totalLines 0 = collapsed) 렌더를 plain-text + zero-range로 — 하이라이트 렌더가 범위를 무시하고 전체 파일을 동기 토크나이즈해 대형 lockfile 마운트가 수 초 프리징하던 것 완치. `renderDiff` sync/async 두 경로 + `RenderedDiffASTCache.emptyWindow` 표식(빈 풀을 확장 렌더가 재사용하면 processDiffResult가 throw — 표식이 확장 시 재렌더를 강제). 회귀망: `lockfile-freeze.e2e.ts` (30k줄 프리징 게이트 + 8k줄 sub-cutoff 펼침 무오류).
 - **JSX 설정**: `tsconfig.base.json`은 preact JSX. diffs는 패키지 tsconfig에서 react로 override(react 어댑터 때문), trees는 per-file `@jsxImportSource` pragma 사용. 그래서 루트 typecheck는 flat이 아니라 패키지별 루프.
 - **외부 deps는 정확 버전 핀** (캐럿 금지). vendored 패키지는 workspace 내부.
 - **preact는 trees에만** — Plan 3(de-preact)에서 vanilla로 포팅 후 제거 예정.
