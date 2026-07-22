@@ -9,7 +9,12 @@ import {
 } from "./diff.ts";
 import { repoFingerprint } from "./fingerprint.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
-import { createPayloadCache, payloadEtag } from "./payloadCache.ts";
+import {
+	createPayloadCache,
+	type PayloadCacheEntry,
+	payloadEtag,
+} from "./payloadCache.ts";
+import { createSingleFlight } from "./singleFlight.ts";
 import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
 type Env = Record<string, string | undefined>;
@@ -27,20 +32,31 @@ const baseCache = new Map<
 	{ value: { base: string | null; ref: string | null }; at: number }
 >();
 
-const resolveBaseCached = async (
+// 동시 콜드 요청(프리워밍 + 첫 화면 + 폴)이 gh pr view를 중복 실행하지 않게
+// single-flight로 합류시킨다.
+const baseFlight = createSingleFlight<{
+	base: string | null;
+	ref: string | null;
+}>();
+
+const resolveBaseCached = (
 	repo: string,
-): Promise<{ base: string | null; ref: string | null }> => {
-	const now = Date.now();
-	const hit = baseCache.get(repo);
-	if (hit && now - hit.at < BASE_TTL_MS) return hit.value;
-	const value = await resolveBaseRef(repo);
-	baseCache.set(repo, { value, at: now });
-	return value;
-};
+): Promise<{ base: string | null; ref: string | null }> =>
+	baseFlight(repo, async () => {
+		const now = Date.now();
+		const hit = baseCache.get(repo);
+		if (hit && now - hit.at < BASE_TTL_MS) return hit.value;
+		const value = await resolveBaseRef(repo);
+		baseCache.set(repo, { value, at: now });
+		return value;
+	});
 
 const createHandler = (cfg: { viewerDir: string; token: string }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
+	// 같은 (repo, untracked, mode)의 지문 계산+파이프라인을 동시에 한 번만 —
+	// 콜드 상태에서 프리워밍과 첫 화면 요청이 겹쳐도 중복 실행되지 않는다.
+	const diffFlight = createSingleFlight<PayloadCacheEntry>();
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
@@ -85,14 +101,15 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
 			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
 			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
-			const fingerprint = await repoFingerprint(repo, {
-				untracked,
-				mode,
-				ref: mode === "base" ? (ref ?? undefined) : undefined,
-			});
 			const cacheKey = `${repo}\0${untracked}\0${mode}`;
-			let entry = diffCache.get(cacheKey, fingerprint);
-			if (!entry) {
+			const entry = await diffFlight(cacheKey, async () => {
+				const fingerprint = await repoFingerprint(repo, {
+					untracked,
+					mode,
+					ref: mode === "base" ? (ref ?? undefined) : undefined,
+				});
+				const cached = diffCache.get(cacheKey, fingerprint);
+				if (cached) return cached;
 				const files =
 					mode === "base"
 						? await getDiffFiles(repo, {
@@ -101,13 +118,14 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 								ref: ref ?? undefined,
 							})
 						: await getDiffFiles(repo, { untracked });
-				entry = {
+				const fresh = {
 					fingerprint,
 					etag: payloadEtag(files),
 					body: JSON.stringify(files),
 				};
-				diffCache.set(cacheKey, entry);
-			}
+				diffCache.set(cacheKey, fresh);
+				return fresh;
+			});
 			const etag = `"${entry.etag}"`;
 			// 304에도 x-diff-base를 실어 클라이언트가 드롭다운 라벨을 유지한다.
 			if (req.headers.get("if-none-match") === etag) {

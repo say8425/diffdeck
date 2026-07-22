@@ -470,6 +470,14 @@ const applyFetched = (result: FetchDiffResult): void => {
 
 const load = async (): Promise<void> => {
 	statusEl.textContent = "Loading…";
+	// 첫 로드(아직 아무것도 렌더된 적 없음)에만 로딩 인디케이터를 띄운다 —
+	// 이후 갱신은 기존 내용을 유지한 채 백그라운드로 교체되므로 비워지지
+	// 않는 것이 의도된 동작이다. 렌더가 성공하면 renderPatch가 이 노드를
+	// 통째로 대체한다.
+	if (!lastFiles) {
+		diffMount.innerHTML =
+			'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+	}
 	const result = await fetchDiff();
 	if (result === null) {
 		diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
