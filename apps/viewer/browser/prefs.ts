@@ -16,6 +16,11 @@ export const WATCH_KEY = "cc-statusline:diff-watch";
 export const resolveUntracked = (urlParam: string | null): boolean =>
 	urlParam === "1";
 
+// Session-only, like resolveUntracked: no localStorage fallback — every
+// fresh load starts visible unless the URL explicitly says otherwise.
+export const resolveTreeHidden = (urlParam: string | null): boolean =>
+	urlParam === "0";
+
 export const resolveDiffStyle = (
 	urlParam: string | null,
 ): "unified" | "split" => (urlParam === "split" ? "split" : "unified");
