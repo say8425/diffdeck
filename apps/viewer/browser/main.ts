@@ -3,6 +3,7 @@ import {
 	DIFFS_HEADER_ATTR,
 	DIFFS_TAG_NAME,
 	DIFFS_TITLE_ATTR,
+	type FileDiffMetadata,
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
@@ -13,6 +14,7 @@ import { movedBeyondThreshold } from "./drag.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
+import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
 	resolveDiffStyle,
@@ -89,11 +91,10 @@ diffMount.addEventListener("click", (event) => {
 	const nextCollapsed = !collapsedIds.has(id);
 	if (nextCollapsed) collapsedIds.add(id);
 	else collapsedIds.delete(id);
-	renderVersion += 1;
 	codeView.updateItem({
 		...item,
 		collapsed: nextCollapsed,
-		version: renderVersion,
+		version: parseCache.bump(id),
 	});
 });
 
@@ -114,10 +115,16 @@ let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
-let lastPatch: string | null = null;
+// 마지막 200 응답의 ETag(폴링 304 조건부 요청용)와 파일 목록(스타일/flatten
+// 토글처럼 서버 데이터가 그대로인 재렌더에 재사용).
+let lastEtag: string | null = null;
+let lastFiles: DiffFile[] | null = null;
 let lastTreeKey: string | null = null;
 let renderedDiffStyle: "unified" | "split" | null = null;
-let renderVersion = 0;
+
+// 파일별 파싱 캐시: contentVersion이 같으면 Myers-diff 재파싱을 건너뛰고
+// CodeView 아이템 version도 유지해 바뀐 파일만 dirty가 되게 한다.
+const parseCache = createParseCache<FileDiffMetadata>();
 
 const collapsedIds = new Set<string>();
 const seenIds = new Set<string>();
@@ -215,6 +222,13 @@ const codeViewOptions = (): ConstructorParameters<
 	hunkSeparators: "line-info",
 	expansionLineCount: 10,
 	collapsedContextThreshold: 3,
+	// 엔진 기본값(100k줄)보다 낮춘 하이라이트 상한: 이보다 큰 파일은 plain
+	// text로 렌더한다. 하이라이트 렌더는 범위를 무시하고 파일 전체를 동기
+	// 토크나이즈하므로(renderDiffWithHighlighter의 문법 정합성 정책), 수만 줄
+	// lockfile을 펼치는 순간 수 초 프리징이 됐다 — 그런 파일에 신택스 색은
+	// 무의미하니 20k줄부터 포기한다. 접힌 상태의 헤더-만 렌더는 이 값과
+	// 무관하게 zero-work다 (DiffHunksRenderer의 emptyWindow 경로).
+	tokenizeMaxLength: 20_000,
 	expandUnchanged: expandAll,
 	renderHeaderPrefix: (fileDiff) => makeFoldButton(fileDiff.name),
 	onPostRender: (node: HTMLElement, _instance: unknown, phase: string) => {
@@ -247,8 +261,11 @@ const restoreAutoExpanded = (): void => {
 		const item = codeView.getItem(id);
 		if (item?.type !== "diff") continue;
 		collapsedIds.add(id);
-		renderVersion += 1;
-		codeView.updateItem({ ...item, collapsed: true, version: renderVersion });
+		codeView.updateItem({
+			...item,
+			collapsed: true,
+			version: parseCache.bump(id),
+		});
 	}
 	autoExpandedIds.clear();
 };
@@ -260,6 +277,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	);
 	if (files.length === 0) {
 		teardownViews();
+		parseCache.prune([]);
 		diffMount.replaceChildren();
 		diffMount.innerHTML = '<div id="empty">No changes.</div>';
 		statusEl.textContent = "";
@@ -279,15 +297,24 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	const gitStatus = files.map((f) => ({ path: f.name, status: f.status }));
 
 	// Diff items: parse each non-binary file's full old/new contents into a
-	// NON-partial FileDiffMetadata so hunk expansion works.
-	renderVersion += 1;
+	// NON-partial FileDiffMetadata so hunk expansion works. contentVersion이
+	// 같은 파일은 parseCache가 이전 파싱 결과와 아이템 version을 돌려주므로,
+	// 실제로 바뀐 파일만 재파싱되고 CodeView도 그 아이템만 dirty로 본다.
 	const items = files
 		.filter((f) => !f.binary || imageEntryById.has(f.name))
 		.map((f) => {
 			const isImage = imageEntryById.has(f.name);
-			const fileDiff = parseDiffFromFile(
-				{ name: f.oldName ?? f.name, contents: isImage ? "" : f.oldContents },
-				{ name: f.name, contents: isImage ? "" : f.newContents },
+			const { value: fileDiff, version } = parseCache.resolve(
+				f.name,
+				f.contentVersion,
+				() =>
+					parseDiffFromFile(
+						{
+							name: f.oldName ?? f.name,
+							contents: isImage ? "" : f.oldContents,
+						},
+						{ name: f.name, contents: isImage ? "" : f.newContents },
+					),
 			);
 			// Large files (lockfiles or over the changed-line threshold) start
 			// collapsed on first sight.
@@ -301,10 +328,11 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 				id: f.name,
 				type: "diff" as const,
 				fileDiff,
-				version: renderVersion,
+				version,
 				collapsed: collapsedIds.has(f.name),
 			};
 		});
+	parseCache.prune(items.map((it) => it.id));
 
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();
@@ -341,22 +369,23 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		diffMount.replaceChildren();
 		codeView = new CodeView(codeViewOptions());
 		// Render further ahead of the viewport than CodeView's 200px default.
-		// Re-mounting a file drops its highlighter (DiffHunksRenderer.recycle),
-		// so the file paints headerless and 0-height until an async highlight
-		// lands ~2 frames later; overscrollSize is the engine's own knob for
-		// keeping such gaps off-screen ("reduce blanking during fast scrolls"),
-		// and 200px is narrower than a single fast-scroll frame delta, so the
-		// gap gets composited inside the pane and reads as a blinking header.
-		// 1000 is what the engine's sibling Virtualizer defaults to for exactly
-		// this (Virtualizer.ts:20-22), and it is the smallest value measured
-		// clean at 400px/frame: 600 still showed 2 defective frames in 40.
+		// The old headerless-remount blink is cured at the source — the forked
+		// DiffHunksRenderer.recycle() re-acquires the shared highlighter
+		// synchronously (like its constructor), so a re-mounted file paints
+		// fully in the frame it renders. What remains is the engine's scroll →
+		// queueRender → next-rAF pipeline: rendering trails the scroll position
+		// by one frame, so the buffer must cover one frame's scroll delta.
+		// 1000px (the engine's sibling Virtualizer default, Virtualizer.ts:20-22)
+		// keeps the pane fully covered up to 800px/frame flings — verified by
+		// e2e/header-mount.e2e.ts's extreme-fling probe; 200px would re-expose
+		// blank bands at fast scrolls.
 		//
 		// The cost is that overscrollSize also widens the `fitPerfectly`
 		// large-jump threshold (CodeView.ts:2576-2580 compares against
 		// viewportHeight + overscrollSize * 2), so jumps of ~viewport+400..2000px
 		// now paint a full window instead of the minimum, and the element pool
-		// grows (:963). Accepted: the blink is constant and user-visible, while
-		// this only costs one frame on a jump — and no smaller value fixes it.
+		// grows (:963). Accepted: one frame's cost on a jump vs. visible
+		// blanking during every fast scroll.
 		//
 		// Set per instance: main.ts rebuilds the CodeView on diffStyle change,
 		// and setOptions never touches config.
@@ -406,10 +435,11 @@ const updateBaseOption = (base: string): void => {
 	}
 };
 
-const fetchDiff = async (): Promise<{
-	files: DiffFile[];
-	base: string;
-} | null> => {
+type FetchDiffResult =
+	| { kind: "data"; files: DiffFile[]; base: string; etag: string | null }
+	| { kind: "unchanged"; base: string };
+
+const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 	const query = new URLSearchParams({
 		repo,
 		token,
@@ -417,26 +447,51 @@ const fetchDiff = async (): Promise<{
 		mode: diffMode,
 	});
 	try {
-		const res = await fetch(`/api/diff?${query.toString()}`);
+		// 조건부 요청: 서버 지문이 그대로면 304가 오고, 수십 MB payload 전송과
+		// JSON 파싱·재렌더 전부를 건너뛴다.
+		const res = await fetch(`/api/diff?${query.toString()}`, {
+			headers: lastEtag ? { "if-none-match": lastEtag } : {},
+		});
+		const base = res.headers.get("x-diff-base") ?? "";
+		if (res.status === 304) return { kind: "unchanged", base };
 		if (!res.ok) return null;
 		const files = (await res.json()) as DiffFile[];
-		return { files, base: res.headers.get("x-diff-base") ?? "" };
+		return { kind: "data", files, base, etag: res.headers.get("etag") };
 	} catch (err) {
 		console.error(err);
 		return null;
 	}
 };
 
+const applyFetched = (result: FetchDiffResult): void => {
+	updateBaseOption(result.base);
+	if (result.kind === "unchanged") {
+		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
+		statusEl.textContent =
+			lastFiles && lastFiles.length > 0 ? `${lastFiles.length} file(s)` : "";
+		return;
+	}
+	lastEtag = result.etag;
+	lastFiles = result.files;
+	renderPatch(result.files);
+};
+
 const load = async (): Promise<void> => {
 	statusEl.textContent = "Loading…";
+	// 첫 로드(아직 아무것도 렌더된 적 없음)에만 로딩 인디케이터를 띄운다 —
+	// 이후 갱신은 기존 내용을 유지한 채 백그라운드로 교체되므로 비워지지
+	// 않는 것이 의도된 동작이다. 렌더가 성공하면 renderPatch가 이 노드를
+	// 통째로 대체한다.
+	if (!lastFiles) {
+		diffMount.innerHTML =
+			'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+	}
 	const result = await fetchDiff();
 	if (result === null) {
 		diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
 		return;
 	}
-	updateBaseOption(result.base);
-	lastPatch = JSON.stringify(result.files);
-	renderPatch(result.files);
+	applyFetched(result);
 };
 
 // Segmented Unified/Split control: the active segment stays highlighted
@@ -460,7 +515,10 @@ for (const b of styleButtons) {
 		if (next === diffStyle) return;
 		diffStyle = next;
 		syncStyleButtons();
-		void load();
+		// 스타일은 클라이언트 렌더 옵션일 뿐이라 서버 데이터가 그대로다 —
+		// 재fetch 없이 마지막 파일 목록으로 즉시 재렌더한다(파싱 캐시 히트).
+		if (lastFiles) renderPatch(lastFiles);
+		else void load();
 	});
 }
 syncStyleButtons();
@@ -521,11 +579,13 @@ flattenInput?.addEventListener("change", () => {
 	flattenDirs = flattenInput.checked;
 	localStorage.setItem(FLATTEN_KEY, flattenDirs ? "1" : "0");
 	// flattenEmptyDirectories is a constructor option, so the tree must be
-	// recreated; force a rebuild on the next render and reload the diff.
+	// recreated; force a rebuild on the next render. 서버 데이터는 그대로라
+	// 재fetch 없이 마지막 파일 목록으로 재렌더한다.
 	fileTree?.cleanUp();
 	fileTree = null;
 	lastTreeKey = null;
-	void load();
+	if (lastFiles) renderPatch(lastFiles);
+	else void load();
 });
 
 // Hide/show the file-tree sidebar: session-only (no localStorage — every
@@ -618,8 +678,11 @@ findBar = createFindBar({
 		if (item?.type !== "diff") return;
 		collapsedIds.delete(m.fileId);
 		autoExpandedIds.add(m.fileId);
-		renderVersion += 1;
-		codeView.updateItem({ ...item, collapsed: false, version: renderVersion });
+		codeView.updateItem({
+			...item,
+			collapsed: false,
+			version: parseCache.bump(m.fileId),
+		});
 	},
 	setExpandAll: (on: boolean) => {
 		if (on === expandAll) {
@@ -644,14 +707,22 @@ void load();
 const WATCH_POLL_MS = 2000;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
+// 인플라이트 가드: 대형 diff에서 서버 응답이 폴 주기(2s)를 넘길 때 요청이
+// 겹겹이 쌓이지 않게 한다. poll끼리만 막는다 — 사용자 액션 경로(load():
+// focus/refresh/토글)는 의도된 즉시 갱신이라 막지 않으며, 동시 실행돼도
+// 다음 폴 사이클에서 최신 상태로 수렴한다.
+let pollInFlight = false;
+
 const poll = async (): Promise<void> => {
-	const result = await fetchDiff();
-	if (result === null) return;
-	updateBaseOption(result.base);
-	const serialized = JSON.stringify(result.files);
-	if (serialized === lastPatch) return;
-	lastPatch = serialized;
-	renderPatch(result.files);
+	if (pollInFlight) return;
+	pollInFlight = true;
+	try {
+		const result = await fetchDiff();
+		if (result === null) return;
+		applyFetched(result);
+	} finally {
+		pollInFlight = false;
+	}
 };
 
 const startWatch = (): void => {

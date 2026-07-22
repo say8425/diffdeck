@@ -59,6 +59,7 @@ const makeDeps = (over: Partial<CliDeps> = {}): CliDeps => ({
 	onSignal: mock(),
 	cwd: mock(() => "/repo"),
 	viewerDir: "/v",
+	prewarm: mock(),
 	...over,
 });
 
@@ -124,6 +125,27 @@ describe("run — help/version", () => {
 });
 
 describe("run — normal startup", () => {
+	test("kicks off a diff-cache prewarm with the bound port, repo, token, and untracked flag", () => {
+		const deps = makeDeps();
+		run([], deps);
+		expect(deps.prewarm).toHaveBeenCalledWith({
+			port: 5000,
+			repo: "/repo",
+			token: "tk",
+			untracked: false,
+		});
+	});
+
+	test("prewarm follows the --untracked launch flag", () => {
+		const deps = makeDeps({
+			parse: mock(() => ({ ...defaultArgs, untracked: true })),
+		});
+		run([], deps);
+		expect(deps.prewarm).toHaveBeenCalledWith(
+			expect.objectContaining({ untracked: true }),
+		);
+	});
+
 	test("starts the server, builds the url, logs, opens, and registers signals", () => {
 		const stop = mock();
 		const deps = makeDeps({
@@ -316,6 +338,17 @@ describe("realDeps", () => {
 
 	test("cwd delegates to process.cwd", () => {
 		expect(realDeps.cwd()).toBe(process.cwd());
+	});
+
+	test("prewarm is fire-and-forget and never throws, even unreachable", () => {
+		expect(() =>
+			realDeps.prewarm({
+				port: 1,
+				repo: "/nope",
+				token: "t",
+				untracked: false,
+			}),
+		).not.toThrow();
 	});
 
 	test("viewerDir points at the sibling viewer/ directory", () => {

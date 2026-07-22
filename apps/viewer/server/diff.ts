@@ -92,6 +92,11 @@ export interface DiffFile {
 	oldContents: string;
 	newContents: string;
 	/**
+	 * old/new 바이트 해시 쌍. 클라이언트 파싱 캐시의 키이자 서버 ETag의 재료 —
+	 * 값이 같으면 내용이 같다고 보고 재파싱/재전송을 건너뛴다.
+	 */
+	contentVersion: string;
+	/**
 	 * 바이너리 파일 전용 바이트 해시. 내용이 JSON에 실리지 않는 바이너리도
 	 * watch 폴링의 직렬화 비교로 변경이 감지되게 하고, blob URL 캐시버스터로
 	 * 쓰인다. 텍스트 파일에는 없다.
@@ -138,6 +143,7 @@ const buildFile = async (
 		status === "deleted" ? new Uint8Array() : readWorkingBytes(repo, name);
 	const binary = oldBytes.includes(0) || newBytes.includes(0);
 	const decoder = new TextDecoder();
+	const contentVersion = `${Bun.hash(oldBytes).toString(36)}.${Bun.hash(newBytes).toString(36)}`;
 	return {
 		name,
 		...(oldName ? { oldName } : {}),
@@ -145,11 +151,8 @@ const buildFile = async (
 		binary,
 		oldContents: binary ? "" : decoder.decode(oldBytes),
 		newContents: binary ? "" : decoder.decode(newBytes),
-		...(binary
-			? {
-					blobVersion: `${Bun.hash(oldBytes).toString(36)}.${Bun.hash(newBytes).toString(36)}`,
-				}
-			: {}),
+		contentVersion,
+		...(binary ? { blobVersion: contentVersion } : {}),
 	};
 };
 

@@ -102,6 +102,28 @@ describe("getDiffFiles", () => {
 		const files = await getDiffFiles(repo);
 		expect(files[0]?.blobVersion).toBeUndefined();
 	});
+
+	test("every file carries a contentVersion that tracks its contents", async () => {
+		writeFileSync(join(repo, "a.txt"), "changed\n");
+		writeFileSync(join(repo, "bin.dat"), Buffer.from([0x41, 0x00]));
+		const first = await getDiffFiles(repo, { untracked: true });
+		for (const f of first) expect(f.contentVersion).toBeTruthy();
+		// 무변경 재실행 → 동일 (클라이언트 파싱 캐시의 키가 되므로 안정적이어야 한다)
+		const again = await getDiffFiles(repo, { untracked: true });
+		expect(again.map((f) => f.contentVersion)).toEqual(
+			first.map((f) => f.contentVersion),
+		);
+		// 내용 변경 → 해당 파일만 변화
+		writeFileSync(join(repo, "a.txt"), "changed more\n");
+		const after = await getDiffFiles(repo, { untracked: true });
+		const before = new Map(first.map((f) => [f.name, f.contentVersion]));
+		expect(after.find((f) => f.name === "a.txt")?.contentVersion).not.toBe(
+			before.get("a.txt"),
+		);
+		expect(after.find((f) => f.name === "bin.dat")?.contentVersion).toBe(
+			before.get("bin.dat"),
+		);
+	});
 });
 
 describe("getFileBytes", () => {

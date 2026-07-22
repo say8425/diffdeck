@@ -8,6 +8,7 @@ import { openerCommand } from "./cli/opener.ts";
 import packageJson from "./package.json";
 import { resolveDiffPort } from "./server/config.ts";
 import { buildDiffViewerUrl } from "./server/link.ts";
+import { prewarmDiff } from "./server/prewarm.ts";
 import { startDiffServer } from "./server/server.ts";
 
 const HELP = `diffdeck — local git diff viewer
@@ -49,6 +50,12 @@ export interface CliDeps {
 	onSignal: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
 	cwd: () => string;
 	viewerDir: string;
+	prewarm: (opts: {
+		port: number;
+		repo: string;
+		token: string;
+		untracked: boolean;
+	}) => void;
 }
 
 export const run = (argv: string[], deps: CliDeps): void => {
@@ -103,6 +110,16 @@ export const run = (argv: string[], deps: CliDeps): void => {
 	deps.log(url);
 	deps.log("Press Ctrl+C to stop.");
 
+	// 브라우저가 뜨는 동안 diff 파이프라인을 미리 돌려 payload 캐시를 데운다 —
+	// 첫 화면 요청이 캐시 히트(또는 single-flight 합류)로 떨어져 콜드 로드가
+	// 짧아진다. best-effort fire-and-forget.
+	deps.prewarm({
+		port: handle.server.port ?? port,
+		repo,
+		token: handle.token,
+		untracked: args.untracked,
+	});
+
 	if (args.open) {
 		deps.spawnOpener(url);
 	}
@@ -146,6 +163,7 @@ export const realDeps: CliDeps = {
 	},
 	cwd: () => process.cwd(),
 	viewerDir: `${import.meta.dir}/viewer`,
+	prewarm: (opts) => void prewarmDiff(opts),
 };
 
 if (import.meta.main) run(process.argv.slice(2), realDeps);

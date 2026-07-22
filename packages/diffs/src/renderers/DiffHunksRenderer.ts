@@ -240,7 +240,21 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   public recycle(): void {
-    this.highlighter = undefined;
+    // [diffdeck] Deviation from upstream @pierre/diffs: mirror the constructor
+    // (see above) instead of unconditionally dropping the highlighter. A
+    // recycled renderer is about to be re-mounted by the virtualizer, and on
+    // the non-worker path the shared highlighter is a loaded singleton — with
+    // it re-acquired synchronously, the first render after re-mount paints
+    // synchronously (header included). Dropping it forced that render to bail
+    // and wait for an async highlight 1+ frames later, which painted mounted
+    // files headerless/0-height and read as blank bands during fast scrolls.
+    if (this.workerManager?.isWorkingPool() !== true) {
+      this.highlighter = areThemesAttached(this.options.theme ?? DEFAULT_THEMES)
+        ? getHighlighterIfLoaded()
+        : undefined;
+    } else {
+      this.highlighter = undefined;
+    }
     this.diff = undefined;
     this.clearRenderCache();
     this.additionAnnotations = {};
@@ -492,8 +506,19 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     };
     const hasContent =
       diff.additionLines.length > 0 || diff.deletionLines.length > 0;
+    // [diffdeck] Deviation from upstream @pierre/diffs: an empty window
+    // (totalLines 0 — a collapsed item showing only its header) renders as
+    // plain text with a zero range. Highlighted renders ignore the range and
+    // tokenize the ENTIRE file both sides (renderDiffWithHighlighter
+    // overrides startingLine/totalLines for syntax correctness), which for a
+    // sub-massive lockfile (e.g. 52k lines — under the 100k isDiffMassive
+    // cutoff) froze the main thread for seconds to draw one header line.
+    // Plain text honors the range, so a zero window does zero tokenize work;
+    // expanding the item changes the range and re-renders highlighted.
+    const emptyWindow = renderRange.totalLines === 0;
     const forcePlainText =
       !hasContent ||
+      emptyWindow ||
       isDiffPlainText(diff) ||
       isDiffMassive(diff, this.getTokenizeMaxLength());
     const newContent = !areDiffTargetsEqual(diff, this.renderCache.diff);
@@ -559,12 +584,19 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
         (forceHighlight ||
           forcePlainText ||
           (!this.renderCache.highlighted && canHighlight) ||
+          // [diffdeck] a pool cached by an empty-window render has zero lines
+          // — a non-empty window must refresh it (plain text when the
+          // language isn't attached yet) or processDiffResult would index
+          // into empty arrays and throw on expand.
+          (this.renderCache.emptyWindow === true && !emptyWindow) ||
           this.renderCache.result == null)
       ) {
         const { result, options } = this.renderDiffWithHighlighter(
           diff,
           this.highlighter,
-          forcePlainText || !hasLangs
+          forcePlainText || !hasLangs,
+          // [diffdeck] see emptyWindow above — a zero window renders zero lines
+          emptyWindow ? renderRange : undefined
         );
         this.renderCache = {
           diff,
@@ -572,6 +604,7 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
           highlighted: canHighlight,
           result,
           renderRange: undefined,
+          emptyWindow,
         };
       }
 
@@ -579,13 +612,28 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       // process which will involve initializing the highlighter with new themes
       // and languages
       if (!hasThemes || (!forcePlainText && !hasLangs)) {
-        void this.asyncHighlight(diff).then(({ result, options }) => {
+        // [diffdeck] see emptyWindow above — the async leg must honor it too:
+        // a collapsed item whose instance was constructed before the shared
+        // highlighter finished loading lands here on first mount, and an
+        // unbounded asyncHighlight would tokenize the entire file on the main
+        // thread anyway (the await only defers it, it does not unblock it).
+        void this.asyncHighlight(
+          diff,
+          emptyWindow ? renderRange : undefined
+        ).then(({ result, options }) => {
           // In this case we need to force a re-render, so we can do that by
           // reaching into renderCache
           if (this.renderCache != null) {
             this.renderCache.highlighted = false;
           }
           this.onHighlightSuccess(diff, result, options, !forcePlainText);
+          // [diffdeck] onHighlightSuccess rebuilt the cache — when this async
+          // render was an empty window, mark its zero-line pool as such so a
+          // later expand refreshes instead of consuming it (see the sync
+          // branch's matching guard).
+          if (this.renderCache != null) {
+            this.renderCache.emptyWindow = emptyWindow;
+          }
         });
       }
     }
@@ -626,9 +674,14 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   private async asyncHighlight(
-    diff: FileDiffMetadata
+    diff: FileDiffMetadata,
+    // [diffdeck] see renderDiff's emptyWindow — zero-window renders must stay
+    // zero-work on this leg as well.
+    emptyWindowRange?: RenderRange
   ): Promise<RenderDiffResult> {
-    const forcePlainText = isDiffMassive(diff, this.getTokenizeMaxLength());
+    const forcePlainText =
+      emptyWindowRange != null ||
+      isDiffMassive(diff, this.getTokenizeMaxLength());
     this.computedLang = forcePlainText
       ? 'text'
       : (diff.lang ?? getFiletypeFromFileName(diff.name));
@@ -646,20 +699,33 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     return this.renderDiffWithHighlighter(
       diff,
       this.highlighter,
-      forcePlainText
+      forcePlainText,
+      emptyWindowRange
     );
   }
 
   private renderDiffWithHighlighter(
     diff: FileDiffMetadata,
     highlighter: DiffsHighlighter,
-    forcePlainText = false
+    forcePlainText = false,
+    // [diffdeck] Only ever passed for an empty window (totalLines 0): plain
+    // text honors the range, so this renders zero lines instead of building
+    // the full-file AST. All other callers keep the full-render semantics
+    // the render cache is built around.
+    emptyWindowRange?: RenderRange
   ): RenderDiffResult {
     const { options } = this.getRenderOptions(diff);
     const { collapsedContextThreshold } = this.getOptionsWithDefaults();
     const result = renderDiffWithHighlighter(diff, highlighter, options, {
       forcePlainText,
-      expandedHunks: forcePlainText ? true : undefined,
+      ...(emptyWindowRange != null
+        ? {
+            startingLine: emptyWindowRange.startingLine,
+            totalLines: emptyWindowRange.totalLines,
+          }
+        : {}),
+      expandedHunks:
+        forcePlainText && emptyWindowRange == null ? true : undefined,
       collapsedContextThreshold,
     });
     return { result, options };

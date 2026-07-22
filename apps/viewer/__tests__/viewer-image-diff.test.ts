@@ -8,6 +8,7 @@ const file = (partial: Partial<DiffFile> & { name: string }): DiffFile => ({
 	binary: true,
 	oldContents: "",
 	newContents: "",
+	contentVersion: "cv",
 	...partial,
 });
 

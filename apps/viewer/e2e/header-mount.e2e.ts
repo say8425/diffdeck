@@ -68,6 +68,11 @@ const probeScroll = (
 							container.querySelector<HTMLElement>("[data-fold]")?.dataset.fold;
 						if (fileId != null) fileIds.add(fileId);
 						const rect = container.getBoundingClientRect();
+						// 0-height 컨테이너는 화면에 아무것도 그리지 않는다 — 풀
+						// 요소가 파일을 배정받기 전의 전환 상태로, degenerate rect
+						// (top == bottom)가 overlap 판정을 오탐시키므로 제외한다.
+						// 이 단언의 대상은 "그려진" 파일이 헤더 없이 보이는 것.
+						if (rect.height === 0) continue;
 						const overlapsPane =
 							rect.bottom > pane.top && rect.top < pane.bottom;
 						const hasHeader =
@@ -95,8 +100,9 @@ test("fast scrolling never paints a headerless file in the diff pane", async ({
 	page,
 }) => {
 	// The shared fixture renders shorter than the viewport, so it cannot scroll
-	// at all and would make this test silently vacuous. Opt into a tall diff.
-	const viewer = await launchViewer([], { bulkFiles: 8 });
+	// at all and would make this test silently vacuous. Opt into a tall diff —
+	// tall enough that the extreme-fling probe below never bottoms out.
+	const viewer = await launchViewer([], { bulkFiles: 16 });
 	try {
 		await page.goto(viewer.url);
 		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
@@ -127,14 +133,22 @@ test("fast scrolling never paints a headerless file in the diff pane", async ({
 		assertMeaningful(slow, 100 * 40, 2);
 		expect(slow.defectiveFrames).toBe(0);
 
-		// 400px/frame (~24k px/s) is the fastest velocity the 1000px buffer fully
-		// covers, so it is the gate for the buffer we do budget — not a claim that
-		// the underlying gap is gone. An extreme fling (800px/frame) still shows
-		// it; curing that needs DiffHunksRenderer.recycle() to keep its
-		// highlighter, a logic change to the vendored fork (Foundation rule).
+		// 400px/frame (~24k px/s): the fastest velocity the 1000px render-ahead
+		// buffer fully covers on its own.
 		const fast = await probeScroll(page, 400, 60);
 		assertMeaningful(fast, 400 * 60, 4);
 		expect(fast.defectiveFrames).toBe(0);
+
+		// 800px/frame extreme fling: beyond what any render-ahead buffer can
+		// absorb, so this only passes because DiffHunksRenderer.recycle() keeps
+		// its highlighter (re-acquired synchronously like the constructor does) —
+		// a re-mounted file must paint its header in the same frame it mounts,
+		// never waiting on an async highlight.
+		// 32,000px를 지나며 벌크 파일(개당 ~10k px)을 여럿 넘는다 — 4개 이상의
+		// 서로 다른 파일이 마운트됐다면 재활용 경로가 실제로 여러 번 돌았다.
+		const extreme = await probeScroll(page, 800, 40);
+		assertMeaningful(extreme, 800 * 40, 4);
+		expect(extreme.defectiveFrames).toBe(0);
 	} finally {
 		await viewer.stop();
 	}
