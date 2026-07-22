@@ -42,6 +42,13 @@ export interface FixtureRepoOptions {
 	 * sees the byte-identical repo it was written against.
 	 */
 	bulkFiles?: number;
+	/**
+	 * Opt-in: commit a `pnpm-lock.yaml` with this many lines and edit part of
+	 * it in the working tree. The viewer auto-collapses lockfiles on first
+	 * sight, so this exercises the "huge collapsed file mounts at the bottom"
+	 * path (lockfile-freeze.e2e.ts) without inflating any other spec's repo.
+	 */
+	lockfileLines?: number;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -53,6 +60,20 @@ const bulkFileLines = (marker: string): string =>
 		(_, i) =>
 			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
 	).join("\n")}\n`;
+
+// pnpm-lock.yaml 흉내: 실제 lockfile처럼 패키지 블록이 반복되는 YAML.
+// mutate 시 20줄마다 버전만 바꿔 수천 줄짜리 현실적인 diff를 만든다.
+const lockfileContents = (lines: number, mutate: boolean): string => {
+	const out: string[] = ["lockfileVersion: '9.0'", "packages:"];
+	for (let i = 2; i < lines; i += 2) {
+		const bumped = mutate && i % 20 === 0;
+		out.push(`  /pkg-${i}@1.${bumped ? 1 : 0}.0:`);
+		out.push(
+			`    resolution: {integrity: sha512-pkg${i}${bumped ? "b" : "a"}}`,
+		);
+	}
+	return `${out.join("\n")}\n`;
+};
 
 export const makeFixtureRepo = (
 	options: FixtureRepoOptions = {},
@@ -83,6 +104,13 @@ export const makeFixtureRepo = (
 	for (let i = 0; i < bulkFiles; i++) {
 		writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("base"));
 	}
+	const lockfileLines = options.lockfileLines ?? 0;
+	if (lockfileLines > 0) {
+		writeFileSync(
+			join(dir, "pnpm-lock.yaml"),
+			lockfileContents(lockfileLines, false),
+		);
+	}
 
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
@@ -103,6 +131,12 @@ export const makeFixtureRepo = (
 
 	for (let i = 0; i < bulkFiles; i++) {
 		writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("edited"));
+	}
+	if (lockfileLines > 0) {
+		writeFileSync(
+			join(dir, "pnpm-lock.yaml"),
+			lockfileContents(lockfileLines, true),
+		);
 	}
 
 	// Untracked file for `--untracked`.

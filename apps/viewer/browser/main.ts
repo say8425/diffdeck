@@ -222,6 +222,13 @@ const codeViewOptions = (): ConstructorParameters<
 	hunkSeparators: "line-info",
 	expansionLineCount: 10,
 	collapsedContextThreshold: 3,
+	// 엔진 기본값(100k줄)보다 낮춘 하이라이트 상한: 이보다 큰 파일은 plain
+	// text로 렌더한다. 하이라이트 렌더는 범위를 무시하고 파일 전체를 동기
+	// 토크나이즈하므로(renderDiffWithHighlighter의 문법 정합성 정책), 수만 줄
+	// lockfile을 펼치는 순간 수 초 프리징이 됐다 — 그런 파일에 신택스 색은
+	// 무의미하니 20k줄부터 포기한다. 접힌 상태의 헤더-만 렌더는 이 값과
+	// 무관하게 zero-work다 (DiffHunksRenderer의 emptyWindow 경로).
+	tokenizeMaxLength: 20_000,
 	expandUnchanged: expandAll,
 	renderHeaderPrefix: (fileDiff) => makeFoldButton(fileDiff.name),
 	onPostRender: (node: HTMLElement, _instance: unknown, phase: string) => {
