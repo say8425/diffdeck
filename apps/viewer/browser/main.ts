@@ -326,6 +326,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			},
 		});
 		fileTree.render({ containerWrapper: treeMount });
+		positionTreeToggleBtn(treeSide);
 		lastTreeKey = treeKey;
 	} else if (treeKey !== lastTreeKey) {
 		fileTree.resetPaths(paths);
@@ -530,41 +531,53 @@ flattenInput?.addEventListener("change", () => {
 });
 
 // Hide/show the file-tree sidebar: session-only (no localStorage — every
-// fresh load starts visible unless launched with --hide-tree). The toolbar
-// button and the overflow-menu checkbox both drive (and reflect) the same
-// state through this one setter, so they can never drift out of sync.
-const treeToggleBtn = document.getElementById(
-	"tree-toggle-btn",
-) as HTMLButtonElement | null;
+// fresh load starts visible unless launched with --hide-tree). Lives inside
+// the tree's own search row, not the app toolbar: FileTree's `search: true`
+// UI renders inside an open shadow root (`<file-tree-container>`) with no
+// public hook for extra content, so this reaches in via the documented
+// `[data-file-tree-search-container]` marker — the same shadow-DOM-reach
+// pattern already used above for the diffs engine's copy button/image
+// cards. The overflow-menu checkbox mirrors the same state through the same
+// setter, so the two can never drift out of sync.
+const treeToggleBtn = document.createElement("button");
+treeToggleBtn.type = "button";
+treeToggleBtn.id = "tree-toggle-btn";
+treeToggleBtn.style.cssText =
+	"flex:0 0 auto;height:var(--trees-row-height);margin:0 6px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--trees-border-color);border-radius:var(--trees-border-radius);color:var(--trees-fg-muted);cursor:pointer";
+treeToggleBtn.innerHTML =
+	'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>';
+
 const treeHiddenInput = document.getElementById(
 	"toggle-tree-hidden",
 ) as HTMLInputElement | null;
-// .tb-search wraps #find-open (icon trigger) and #find-bar (the open search
-// input) — display:contents in CSS, so it's a stable single anchor without
-// affecting either child's flex layout.
-const searchGroupEl = document.querySelector(".tb-search");
 
-// Mirrors the file tree's physical side: sits on the search input's left
-// when the tree is on the left, on its right when the tree is on the right.
+// Places (or re-places) the button inside the tree's search row: before the
+// search input when the tree is on the left, after it when on the right —
+// mirroring the tree's own physical side. Called once per fresh FileTree
+// (fileTree.render() re-creates the shadow root, dropping any prior
+// insertion) and again whenever treeSide changes.
 const positionTreeToggleBtn = (side: TreeSide): void => {
-	if (!treeToggleBtn) return;
-	if (side === "right") searchGroupEl?.after(treeToggleBtn);
-	else searchGroupEl?.before(treeToggleBtn);
+	const host = treeMount.querySelector("file-tree-container");
+	const searchContainer = host?.shadowRoot?.querySelector<HTMLElement>(
+		"[data-file-tree-search-container]",
+	);
+	if (!searchContainer) return;
+	if (side === "right") searchContainer.append(treeToggleBtn);
+	else searchContainer.prepend(treeToggleBtn);
 };
-positionTreeToggleBtn(treeSide);
 
 const setTreeHidden = (next: boolean): void => {
 	treeHidden = next;
 	appEl.dataset.treeHidden = treeHidden ? "true" : "false";
 	const label = treeHidden ? "Show file tree" : "Hide file tree";
-	treeToggleBtn?.setAttribute("aria-pressed", treeHidden ? "true" : "false");
-	treeToggleBtn?.setAttribute("aria-label", label);
-	treeToggleBtn?.setAttribute("title", label);
+	treeToggleBtn.setAttribute("aria-pressed", treeHidden ? "true" : "false");
+	treeToggleBtn.setAttribute("aria-label", label);
+	treeToggleBtn.setAttribute("title", label);
 	if (treeHiddenInput) treeHiddenInput.checked = treeHidden;
 };
 setTreeHidden(treeHidden);
 
-treeToggleBtn?.addEventListener("click", () => setTreeHidden(!treeHidden));
+treeToggleBtn.addEventListener("click", () => setTreeHidden(!treeHidden));
 treeHiddenInput?.addEventListener("change", () =>
 	setTreeHidden(treeHiddenInput.checked),
 );

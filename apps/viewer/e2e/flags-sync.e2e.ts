@@ -11,15 +11,17 @@
 // `#overflow-menu`, which starts `hidden` -- but main.ts sets their `.checked`
 // property at boot regardless of the menu's open state, and non-visibility
 // assertions (like reading a property via `page.evaluate`) don't require the
-// element to be visible. The Unified/Split segmented control, `#app`'s
-// `data-tree-side`, and `#tree-toggle-btn`/`data-tree-hidden` live in the
-// always-visible toolbar/app shell.
+// element to be visible. The Unified/Split segmented control and `#app`'s
+// `data-tree-side`/`data-tree-hidden` live in the always-visible toolbar/app
+// shell.
 //
-// `--tree-right` also drives `#tree-toggle-btn`'s DOM position: main.ts's
-// `positionTreeToggleBtn` mirrors the file tree's physical side by moving the
-// button to sit right after `.tb-search` (the wrapper around `#find-open` /
-// `#find-bar`, right of the search input) instead of its default spot right
-// before `.tb-search` (left of the search input).
+// `--tree-right` also drives `#tree-toggle-btn`'s DOM position: the button
+// lives inside the file tree's own search row, not the toolbar -- FileTree's
+// `search: true` UI renders inside an open shadow root on
+// `<file-tree-container>`, at `[data-file-tree-search-container]`. main.ts's
+// `positionTreeToggleBtn` mirrors the tree's physical side by moving the
+// button to the end of that row (after the search input) when the tree is on
+// the right, instead of its default spot at the start (before the input).
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
 const FLAGS = [
@@ -72,8 +74,17 @@ test("launch flags are reflected in the in-app toggle state", async ({
 			treeHiddenAttr: document
 				.querySelector("[data-tree-hidden]")
 				?.getAttribute("data-tree-hidden"),
-			treeToggleBtnAfterSearchGroup:
-				document.querySelector(".tb-search")?.nextElementSibling?.id,
+			treeSearchRowOrder: (() => {
+				const host = document.querySelector("file-tree-container");
+				const searchContainer = host?.shadowRoot?.querySelector(
+					"[data-file-tree-search-container]",
+				);
+				return searchContainer
+					? Array.from(searchContainer.children).map(
+							(c) => c.id || c.tagName,
+						)
+					: null;
+			})(),
 		}));
 
 	// Web-first: the toolbar/prefs wiring runs synchronously at module load,
@@ -87,6 +98,7 @@ test("launch flags are reflected in the in-app toggle state", async ({
 		treeSideAttr: "right",
 		treeHiddenToggle: true,
 		treeHiddenAttr: "true",
-		treeToggleBtnAfterSearchGroup: "tree-toggle-btn",
+		// Tree on right -> the toggle button sits after the search input.
+		treeSearchRowOrder: ["INPUT", "tree-toggle-btn"],
 	});
 });
