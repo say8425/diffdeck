@@ -25,12 +25,14 @@ default browser.
 | `--no-flatten`    | Start with the file tree un-flattened (flatten is on)        |
 | `--tree-right`    | Start with the file tree on the right                        |
 | `--split`         | Start in split view (unified is the default)                 |
+| `--hide-tree`     | Start with the file tree hidden                              |
 | `-h`, `--help`    | Show help                                                    |
 | `-v`, `--version` | Show version                                                 |
 
 The view flags (`--untracked`, `--watch`, `--no-flatten`, `--tree-right`,
-`--split`) set the initial state for this launch only — they don't change your
-saved preferences, and the in-app toggles reflect the launched state.
+`--split`, `--hide-tree`) set the initial state for this launch only — they
+don't change your saved preferences, and the in-app toggles reflect the
+launched state.
 
 ## Environment
 

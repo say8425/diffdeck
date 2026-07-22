@@ -68,6 +68,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--no-flatten` | ファイルツリーを未flatten状態で開始(flatten はデフォルトで有効) |
 | `--tree-right` | ファイルツリーを右側に配置した状態で開始 |
 | `--split` | split ビューで開始(デフォルトは unified) |
+| `--hide-tree` | ファイルツリーを非表示にした状態で開始 |
 | `-h`, `--help` | ヘルプを表示 |
 | `-v`, `--version` | バージョンを表示 |
 
