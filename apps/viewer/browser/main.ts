@@ -564,9 +564,7 @@ appEl.dataset.treeSide = treeSide;
 // custom property (index.html's grid reads it via var(--vd-tree-w, 300px));
 // computeDragWidth/computeKeyboardWidth (resize.ts) do the math, this block
 // is just event plumbing + persistence.
-const treeResizer = document.getElementById(
-	"tree-resizer",
-) as HTMLElement | null;
+const treeResizer = document.getElementById("tree-resizer");
 
 const applyTreeWidth = (width: number): void => {
 	treeWidth = width;

@@ -79,10 +79,7 @@ test("dragging with the tree on the right mirrors the direction", async ({
 }) => {
 	await page.goto(treeRightUrl);
 	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
-	await expect(page.locator("#app")).toHaveAttribute(
-		"data-tree-side",
-		"right",
-	);
+	await expect(page.locator("#app")).toHaveAttribute("data-tree-side", "right");
 
 	const startWidth = await readTreeWidth(page);
 	// Dragging the resizer LEFT (negative delta) grows a right-side tree.
