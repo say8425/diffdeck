@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+	clampTreeWidth,
+	DEFAULT_TREE_WIDTH,
 	FLATTEN_KEY,
+	MAX_TREE_WIDTH,
+	MIN_TREE_WIDTH,
 	readFlatten,
 	readTreeSide,
+	readTreeWidth,
 	resolveDiffStyle,
 	resolveFlatten,
 	resolveTreeHidden,
@@ -10,6 +15,7 @@ import {
 	resolveUntracked,
 	resolveWatch,
 	TREE_SIDE_KEY,
+	TREE_WIDTH_KEY,
 } from "../browser/prefs.ts";
 
 const fake =
@@ -92,5 +98,44 @@ describe("launch-flag resolvers (URL param → localStorage → default)", () =>
 			true,
 		);
 		expect(resolveWatch(null, empty)).toBe(false);
+	});
+});
+
+describe("clampTreeWidth", () => {
+	test("passes through values inside the 180-600 range", () => {
+		expect(clampTreeWidth(300)).toBe(300);
+		expect(clampTreeWidth(MIN_TREE_WIDTH)).toBe(MIN_TREE_WIDTH);
+		expect(clampTreeWidth(MAX_TREE_WIDTH)).toBe(MAX_TREE_WIDTH);
+	});
+	test("clamps values below the minimum", () => {
+		expect(clampTreeWidth(50)).toBe(MIN_TREE_WIDTH);
+	});
+	test("clamps values above the maximum", () => {
+		expect(clampTreeWidth(9999)).toBe(MAX_TREE_WIDTH);
+	});
+	test("falls back to the default for non-finite input", () => {
+		expect(clampTreeWidth(Number.NaN)).toBe(DEFAULT_TREE_WIDTH);
+	});
+});
+
+describe("readTreeWidth", () => {
+	test("defaults to 300 when unset", () => {
+		expect(readTreeWidth(fake({}))).toBe(DEFAULT_TREE_WIDTH);
+	});
+	test("returns the stored value when inside range", () => {
+		expect(readTreeWidth(fake({ [TREE_WIDTH_KEY]: "420" }))).toBe(420);
+	});
+	test("clamps a stored value outside range", () => {
+		expect(readTreeWidth(fake({ [TREE_WIDTH_KEY]: "50" }))).toBe(
+			MIN_TREE_WIDTH,
+		);
+		expect(readTreeWidth(fake({ [TREE_WIDTH_KEY]: "9999" }))).toBe(
+			MAX_TREE_WIDTH,
+		);
+	});
+	test("falls back to default for an unparseable stored value", () => {
+		expect(readTreeWidth(fake({ [TREE_WIDTH_KEY]: "bogus" }))).toBe(
+			DEFAULT_TREE_WIDTH,
+		);
 	});
 });
