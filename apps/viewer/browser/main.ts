@@ -7,7 +7,11 @@ import {
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
-import { FileTree } from "@diffdeck/trees";
+import {
+	FileTree,
+	type FileTreeDirectoryHandle,
+	type FileTreeItemHandle,
+} from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
@@ -17,8 +21,10 @@ import { isLargeFile } from "./largeFile.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
+	FOLD_WITH_TREE_KEY,
 	resolveDiffStyle,
 	resolveFlatten,
+	resolveFoldWithTree,
 	resolveTreeHidden,
 	resolveTreeSide,
 	resolveUntracked,
@@ -88,9 +94,17 @@ diffMount.addEventListener("click", (event) => {
 	if (!id) return;
 	const item = codeView.getItem(id);
 	if (item?.type !== "diff") return;
-	const nextCollapsed = !collapsedIds.has(id);
-	if (nextCollapsed) collapsedIds.add(id);
-	else collapsedIds.delete(id);
+	const nextCollapsed = !effectiveCollapsed(id);
+	// A manual click always claims this file away from the find bar's temporary
+	// bookkeeping — see restoreAutoExpanded below for why this matters.
+	autoExpandedIds.delete(id);
+	if (nextCollapsed) {
+		collapsedIds.add(id);
+		forceExpandedIds.delete(id);
+	} else {
+		collapsedIds.delete(id);
+		if (foldWithTree && treeCollapsedIds.has(id)) forceExpandedIds.add(id);
+	}
 	codeView.updateItem({
 		...item,
 		collapsed: nextCollapsed,
@@ -112,6 +126,9 @@ let treeSide: TreeSide = resolveTreeSide(params.get("tree"), (k) =>
 	localStorage.getItem(k),
 );
 let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
+let foldWithTree: boolean = resolveFoldWithTree(params.get("foldtree"), (k) =>
+	localStorage.getItem(k),
+);
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
@@ -127,6 +144,17 @@ let renderedDiffStyle: "unified" | "split" | null = null;
 const parseCache = createParseCache<FileDiffMetadata>();
 
 const collapsedIds = new Set<string>();
+// 조상 디렉토리가 사이드바 트리에서 접혀 있어 접혀야 하는 파일들 — foldWithTree가
+// 켜져 있을 때만 syncTreeFold()가 채운다(Task 6에서 정의).
+const treeCollapsedIds = new Set<string>();
+// 접힘 근거(collapsedIds든 treeCollapsedIds든)를 무시하고 강제로 펼쳐 둔 파일들.
+// 두 용도를 겸한다: (1) 트리 때문에 접힌 파일을 사용자가 직접 클릭해 펼친 경우 —
+// 사용자가 다시 접기 전까지 유지된다. (2) find bar가 검색 결과를 보여주려고
+// 임시로 펼친 경우 — autoExpandedIds에도 같이 기록되고, 검색이 끝나면 제거된다.
+const forceExpandedIds = new Set<string>();
+const effectiveCollapsed = (id: string): boolean =>
+	!forceExpandedIds.has(id) &&
+	(collapsedIds.has(id) || (foldWithTree && treeCollapsedIds.has(id)));
 const seenIds = new Set<string>();
 
 let searchFiles: SearchFile[] = [];
@@ -138,7 +166,7 @@ let findBar: FindBar | null = null;
 const foldButtons = new Map<string, HTMLButtonElement>();
 
 const makeFoldButton = (id: string): HTMLButtonElement => {
-	const collapsed = collapsedIds.has(id);
+	const collapsed = effectiveCollapsed(id);
 	let btn = foldButtons.get(id);
 	if (!btn) {
 		btn = document.createElement("button");
@@ -205,7 +233,7 @@ const syncImageCard = (container: HTMLElement): void => {
 	ensureImageCard(
 		container,
 		imageEntryById.get(fileId),
-		collapsedIds.has(fileId),
+		effectiveCollapsed(fileId),
 		imageUrlFor,
 	);
 };
@@ -257,15 +285,14 @@ const codeViewOptions = (): ConstructorParameters<
 const restoreAutoExpanded = (): void => {
 	if (!codeView || autoExpandedIds.size === 0) return;
 	for (const id of autoExpandedIds) {
-		if (collapsedIds.has(id)) continue;
+		forceExpandedIds.delete(id);
 		const item = codeView.getItem(id);
 		if (item?.type !== "diff") continue;
-		collapsedIds.add(id);
-		codeView.updateItem({
-			...item,
-			collapsed: true,
-			version: parseCache.bump(id),
-		});
+		// Re-evaluate now that the search override is gone — the file's real
+		// collapse reason (manual, tree, or none) may have changed while the
+		// find bar was open (e.g. the user expanded its directory in the tree).
+		const collapsed = effectiveCollapsed(id);
+		codeView.updateItem({ ...item, collapsed, version: parseCache.bump(id) });
 	}
 	autoExpandedIds.clear();
 };
@@ -329,7 +356,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 				type: "diff" as const,
 				fileDiff,
 				version,
-				collapsed: collapsedIds.has(f.name),
+				collapsed: effectiveCollapsed(f.name),
 			};
 		});
 	parseCache.prune(items.map((it) => it.id));
@@ -673,10 +700,10 @@ findBar = createFindBar({
 	clearSelection: () => codeView?.clearSelectedLines(),
 	ensureVisible: (m: SearchMatch) => {
 		if (!codeView) return;
-		if (!collapsedIds.has(m.fileId)) return;
+		if (!effectiveCollapsed(m.fileId)) return;
 		const item = codeView.getItem(m.fileId);
 		if (item?.type !== "diff") return;
-		collapsedIds.delete(m.fileId);
+		forceExpandedIds.add(m.fileId);
 		autoExpandedIds.add(m.fileId);
 		codeView.updateItem({
 			...item,
