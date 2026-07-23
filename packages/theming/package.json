@@ -10,7 +10,7 @@
 		"./themes/*": "./themes/*"
 	},
 	"dependencies": {
-		"@shikijs/themes": "4.3.0",
-		"shiki": "4.3.0"
+		"@shikijs/themes": "4.3.1",
+		"shiki": "4.3.1"
 	}
 }

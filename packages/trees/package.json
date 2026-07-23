@@ -11,7 +11,7 @@
 		"@diffdeck/theming": "workspace:*"
 	},
 	"devDependencies": {
-		"@happy-dom/global-registrator": "20.0.11",
-		"happy-dom": "20.0.11"
+		"@happy-dom/global-registrator": "20.11.1",
+		"happy-dom": "20.11.1"
 	}
 }
