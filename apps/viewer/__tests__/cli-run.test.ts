@@ -3,6 +3,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	rmdirSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
@@ -376,10 +377,19 @@ describe("realDeps", () => {
 		} finally {
 			cwdSpy.mockRestore();
 			rmSync(tmp, { recursive: true, force: true });
-			rmSync(join(import.meta.dir, "..", "skills"), {
-				recursive: true,
-				force: true,
-			});
+			// realDeps.installSkill의 소스 경로(cli.ts: `${import.meta.dir}/skills/...`)는
+			// 소스 트리에서 실행될 때 apps/viewer/skills/를 가리킨다 — 빌드 산출물
+			// (dist/skills/, build.ts가 채움)과 달리 이 경로는 트리에 원래 없어서
+			// 이 테스트가 직접 만들어야 한다. 정확히 이 테스트가 만든 파일/빈
+			// 디렉토리만 지운다 — apps/viewer/skills/가 다른 이유로 이미 있었거나
+			// 비어 있지 않다면 건드리지 않는다(rmdirSync는 비어있지 않으면 throw).
+			rmSync(join(skillSourceDir, "SKILL.md"), { force: true });
+			try {
+				rmdirSync(skillSourceDir);
+				rmdirSync(join(import.meta.dir, "..", "skills"));
+			} catch {
+				// 비어있지 않음 — 이 테스트가 만든 게 아니니 그대로 둔다.
+			}
 		}
 	});
 });

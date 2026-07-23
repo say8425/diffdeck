@@ -1,7 +1,11 @@
 import "./happydom.ts";
 import { afterEach, describe, expect, jest, mock, test } from "bun:test";
 import type { FileDiffMetadata } from "@diffdeck/diffs";
-import { createFindBar, type FindBarDeps } from "../browser/search/findBar.ts";
+import {
+	createFindBar,
+	type FindBar,
+	type FindBarDeps,
+} from "../browser/search/findBar.ts";
 import type { SearchFile, SearchMatch } from "../browser/search/searchIndex.ts";
 
 const DEBOUNCE_MS = 120;
@@ -94,15 +98,27 @@ const keydown = (target: EventTarget, init: KeyboardEventInit): boolean =>
 		new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
 	);
 
+// findBar()의 window keydown 리스너는 명시적으로 destroy()해야 해제된다 —
+// happy-dom은 프로세스 전역으로 한 번만 등록되므로(happydom.ts), destroy 없이
+// 매 테스트가 새 인스턴스를 만들면 리스너가 테스트 파일 끝까지 계속 쌓인다.
+// 모든 테스트가 이 헬퍼로만 인스턴스를 만들어 afterEach가 자동으로 정리한다.
+let activeFindBar: FindBar | null = null;
+const makeFindBar = (deps: FindBarDeps): FindBar => {
+	activeFindBar = createFindBar(deps);
+	return activeFindBar;
+};
+
 afterEach(() => {
 	jest.useRealTimers();
+	activeFindBar?.destroy();
+	activeFindBar = null;
 });
 
 describe("createFindBar", () => {
 	describe("open()", () => {
 		test("shows the bar, focuses+selects input, expands nothing for an empty query, and blanks the count", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			fb.open();
 
@@ -121,7 +137,7 @@ describe("createFindBar", () => {
 		test("reopening after a search replays the last query and reveals the current match", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			fb.open();
 			typeQuery(elements, "foo");
@@ -154,7 +170,7 @@ describe("createFindBar", () => {
 		test("applies the query only after the 120ms debounce elapses", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			deps.getFiles.mockClear();
 			deps.revealMatch.mockClear();
@@ -175,7 +191,7 @@ describe("createFindBar", () => {
 		test("rapid keystrokes reset the debounce timer so only the final value is applied", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			deps.getFiles.mockClear();
 
@@ -193,7 +209,7 @@ describe("createFindBar", () => {
 		test("clearing the query back to empty clears the selection and blanks the count", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 
 			typeQuery(elements, "foo");
@@ -216,7 +232,7 @@ describe("createFindBar", () => {
 		test("a query with no matches shows 0/0, disables prev/next, and clears the selection", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 
 			deps.clearSelection.mockClear();
@@ -235,7 +251,7 @@ describe("createFindBar", () => {
 		test("Enter advances to the next match, wrapping back to the first", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -257,7 +273,7 @@ describe("createFindBar", () => {
 		test("Shift+Enter moves to the previous match, wrapping back to the last", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -272,7 +288,7 @@ describe("createFindBar", () => {
 
 		test("Enter with no matches does nothing", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open(); // empty query -> no matches
 
 			deps.revealMatch.mockClear();
@@ -286,7 +302,7 @@ describe("createFindBar", () => {
 	describe("close()", () => {
 		test("Escape closes the bar and resets expand/selection", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			deps.setExpandAll.mockClear();
 			deps.clearSelection.mockClear();
@@ -303,7 +319,7 @@ describe("createFindBar", () => {
 
 		test("the close button closes the bar", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 
 			elements.close.click();
@@ -316,7 +332,7 @@ describe("createFindBar", () => {
 		test("closing cancels a pending debounce timer so the stale query never applies", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 
@@ -333,7 +349,7 @@ describe("createFindBar", () => {
 		test("next button moves forward one match", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -348,7 +364,7 @@ describe("createFindBar", () => {
 		test("prev button moves backward, wrapping to the last match", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -362,7 +378,7 @@ describe("createFindBar", () => {
 	describe("window Cmd/Ctrl+F shortcut", () => {
 		test("opens the bar when closed (metaKey)", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			expect(fb.isOpen()).toBe(false);
 			const result = keydown(window, { key: "f", metaKey: true });
@@ -375,18 +391,17 @@ describe("createFindBar", () => {
 
 		test("opens the bar when closed (ctrlKey, uppercase F)", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			keydown(window, { key: "F", ctrlKey: true });
 
 			expect(fb.isOpen()).toBe(true);
 			expect(elements.bar.hidden).toBe(false);
-			expect(deps).toBeTruthy();
 		});
 
 		test("when already open, refocuses/reselects the input instead of reopening", () => {
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			deps.setExpandAll.mockClear();
 			deps.getFiles.mockClear();
@@ -404,7 +419,7 @@ describe("createFindBar", () => {
 
 		test("plain 'f' without a modifier does not open the bar", () => {
 			const { elements, deps } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			keydown(window, { key: "f" });
 
@@ -416,7 +431,7 @@ describe("createFindBar", () => {
 	describe("getQuery() / getActiveMatch()", () => {
 		test("return '' / null when closed", () => {
 			const { deps } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			expect(fb.getQuery()).toBe("");
 			expect(fb.getActiveMatch()).toBeNull();
@@ -425,7 +440,7 @@ describe("createFindBar", () => {
 		test("return the real query and match once opened with results", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
@@ -444,7 +459,7 @@ describe("createFindBar", () => {
 	describe("setData()", () => {
 		test("no-ops when closed", () => {
 			const { deps } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 
 			fb.setData();
 
@@ -455,7 +470,7 @@ describe("createFindBar", () => {
 		test("rebuilds and selects the current match when open", () => {
 			jest.useFakeTimers();
 			const { deps, elements } = makeDeps();
-			const fb = createFindBar(deps);
+			const fb = makeFindBar(deps);
 			fb.open();
 			typeQuery(elements, "foo");
 			jest.advanceTimersByTime(DEBOUNCE_MS);
