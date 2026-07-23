@@ -8,6 +8,7 @@ const DEFAULT_FLAGS = {
 	treeSide: "left" as const,
 	diffStyle: "unified" as const,
 	treeHidden: false,
+	foldWithTree: false,
 };
 
 describe("parseArgs", () => {
@@ -86,7 +87,7 @@ describe("parseArgs", () => {
 });
 
 describe("launch view flags", () => {
-	test("defaults: untracked/watch off, flatten on, tree left, style unified, tree not hidden", () => {
+	test("defaults: untracked/watch off, flatten on, tree left, style unified, tree not hidden, fold-with-tree off", () => {
 		expect(parseArgs([])).toMatchObject({
 			untracked: false,
 			watch: false,
@@ -94,6 +95,7 @@ describe("launch view flags", () => {
 			treeSide: "left",
 			diffStyle: "unified",
 			treeHidden: false,
+			foldWithTree: false,
 		});
 	});
 	test("each flag flips its field", () => {
@@ -105,6 +107,7 @@ describe("launch view flags", () => {
 				"--tree-right",
 				"--split",
 				"--hide-tree",
+				"--fold-with-tree",
 			]),
 		).toMatchObject({
 			untracked: true,
@@ -113,6 +116,7 @@ describe("launch view flags", () => {
 			treeSide: "right",
 			diffStyle: "split",
 			treeHidden: true,
+			foldWithTree: true,
 		});
 	});
 });

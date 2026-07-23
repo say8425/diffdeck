@@ -49,6 +49,14 @@ export interface FixtureRepoOptions {
 	 * path (lockfile-freeze.e2e.ts) without inflating any other spec's repo.
 	 */
 	lockfileLines?: number;
+	/**
+	 * Opt-in: commit `src/mid/deep/nested.ts` (both `mid` and `deep` are
+	 * single-child directories) and edit it in the working tree, so the
+	 * sidebar's `flattenEmptyDirectories` feature actually has a chain to
+	 * compress into one row. Kept opt-in for the same reason as `bulkFiles`/
+	 * `lockfileLines` above.
+	 */
+	nestedChainFile?: boolean;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -111,6 +119,13 @@ export const makeFixtureRepo = (
 			lockfileContents(lockfileLines, false),
 		);
 	}
+	if (options.nestedChainFile) {
+		mkdirSync(join(dir, "src", "mid", "deep"), { recursive: true });
+		writeFileSync(
+			join(dir, "src", "mid", "deep", "nested.ts"),
+			"export const nested = 1;\n",
+		);
+	}
 
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
@@ -136,6 +151,12 @@ export const makeFixtureRepo = (
 		writeFileSync(
 			join(dir, "pnpm-lock.yaml"),
 			lockfileContents(lockfileLines, true),
+		);
+	}
+	if (options.nestedChainFile) {
+		writeFileSync(
+			join(dir, "src", "mid", "deep", "nested.ts"),
+			"export const nested = 2;\n",
 		);
 	}
 

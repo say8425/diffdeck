@@ -7,7 +7,11 @@ import {
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
-import { FileTree } from "@diffdeck/trees";
+import {
+	FileTree,
+	type FileTreeDirectoryHandle,
+	type FileTreeItemHandle,
+} from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
@@ -17,9 +21,11 @@ import { isLargeFile } from "./largeFile.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
+	FOLD_WITH_TREE_KEY,
 	readTreeWidth,
 	resolveDiffStyle,
 	resolveFlatten,
+	resolveFoldWithTree,
 	resolveTreeHidden,
 	resolveTreeSide,
 	resolveUntracked,
@@ -91,9 +97,17 @@ diffMount.addEventListener("click", (event) => {
 	if (!id) return;
 	const item = codeView.getItem(id);
 	if (item?.type !== "diff") return;
-	const nextCollapsed = !collapsedIds.has(id);
-	if (nextCollapsed) collapsedIds.add(id);
-	else collapsedIds.delete(id);
+	const nextCollapsed = !effectiveCollapsed(id);
+	// A manual click always claims this file away from the find bar's temporary
+	// bookkeeping — see restoreAutoExpanded below for why this matters.
+	autoExpandedIds.delete(id);
+	if (nextCollapsed) {
+		collapsedIds.add(id);
+		forceExpandedIds.delete(id);
+	} else {
+		collapsedIds.delete(id);
+		if (foldWithTree && treeCollapsedIds.has(id)) forceExpandedIds.add(id);
+	}
 	codeView.updateItem({
 		...item,
 		collapsed: nextCollapsed,
@@ -115,6 +129,9 @@ let treeSide: TreeSide = resolveTreeSide(params.get("tree"), (k) =>
 	localStorage.getItem(k),
 );
 let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
+let foldWithTree: boolean = resolveFoldWithTree(params.get("foldtree"), (k) =>
+	localStorage.getItem(k),
+);
 let treeWidth: number = readTreeWidth((k) => localStorage.getItem(k));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
@@ -131,6 +148,17 @@ let renderedDiffStyle: "unified" | "split" | null = null;
 const parseCache = createParseCache<FileDiffMetadata>();
 
 const collapsedIds = new Set<string>();
+// 조상 디렉토리가 사이드바 트리에서 접혀 있어 접혀야 하는 파일들 — foldWithTree가
+// 켜져 있을 때만 syncTreeFold()가 채운다(Task 6에서 정의).
+const treeCollapsedIds = new Set<string>();
+// 접힘 근거(collapsedIds든 treeCollapsedIds든)를 무시하고 강제로 펼쳐 둔 파일들.
+// 두 용도를 겸한다: (1) 트리 때문에 접힌 파일을 사용자가 직접 클릭해 펼친 경우 —
+// 사용자가 다시 접기 전까지 유지된다. (2) find bar가 검색 결과를 보여주려고
+// 임시로 펼친 경우 — autoExpandedIds에도 같이 기록되고, 검색이 끝나면 제거된다.
+const forceExpandedIds = new Set<string>();
+const effectiveCollapsed = (id: string): boolean =>
+	!forceExpandedIds.has(id) &&
+	(collapsedIds.has(id) || (foldWithTree && treeCollapsedIds.has(id)));
 const seenIds = new Set<string>();
 
 let searchFiles: SearchFile[] = [];
@@ -142,7 +170,7 @@ let findBar: FindBar | null = null;
 const foldButtons = new Map<string, HTMLButtonElement>();
 
 const makeFoldButton = (id: string): HTMLButtonElement => {
-	const collapsed = collapsedIds.has(id);
+	const collapsed = effectiveCollapsed(id);
 	let btn = foldButtons.get(id);
 	if (!btn) {
 		btn = document.createElement("button");
@@ -209,7 +237,7 @@ const syncImageCard = (container: HTMLElement): void => {
 	ensureImageCard(
 		container,
 		imageEntryById.get(fileId),
-		collapsedIds.has(fileId),
+		effectiveCollapsed(fileId),
 		imageUrlFor,
 	);
 };
@@ -261,17 +289,99 @@ const codeViewOptions = (): ConstructorParameters<
 const restoreAutoExpanded = (): void => {
 	if (!codeView || autoExpandedIds.size === 0) return;
 	for (const id of autoExpandedIds) {
-		if (collapsedIds.has(id)) continue;
+		forceExpandedIds.delete(id);
 		const item = codeView.getItem(id);
 		if (item?.type !== "diff") continue;
-		collapsedIds.add(id);
+		// Re-evaluate now that the search override is gone — the file's real
+		// collapse reason (manual, tree, or none) may have changed while the
+		// find bar was open (e.g. the user expanded its directory in the tree).
+		const collapsed = effectiveCollapsed(id);
+		codeView.updateItem({ ...item, collapsed, version: parseCache.bump(id) });
+	}
+	autoExpandedIds.clear();
+};
+
+const isDirHandle = (
+	item: FileTreeItemHandle,
+): item is FileTreeDirectoryHandle => item.isDirectory();
+
+// 디렉토리 경로 → 그 아래 모든 파일 경로(모든 하위 depth 포함) 맵. 파일 경로
+// 총 길이에 선형 — 매 depth마다 접두사를 처음부터 다시 만들지 않고 누적한다.
+const buildDirDescendants = (
+	paths: readonly string[],
+): Map<string, string[]> => {
+	const map = new Map<string, string[]>();
+	for (const path of paths) {
+		const segments = path.split("/");
+		let dir = "";
+		for (let i = 0; i < segments.length - 1; i++) {
+			dir = i === 0 ? segments[0] : `${dir}/${segments[i]}`;
+			const list = map.get(dir);
+			if (list) list.push(path);
+			else map.set(dir, [path]);
+		}
+	}
+	return map;
+};
+
+let knownDirDescendants: Map<string, string[]> = new Map();
+
+// fileTree.resetPaths()는 이 프로젝트의 initialExpansion:"open" 기본값 때문에
+// 호출될 때마다 모든 디렉토리를 펼침으로 되돌린다(초기화 옵션의
+// initialExpandedPaths로는 되돌릴 수 없음 — 이미 전부 "기본 펼침"이라 no-op).
+// 리셋 직전 접혀 있던 디렉토리를 캡처해 뒀다가, 리셋 후 다시 .collapse()해
+// 되돌린다. foldWithTree와 무관하게 항상 동작 — 사이드바 트리 자체의 접힘
+// 상태를 데이터 갱신 전반에 걸쳐 보존하는 것이 이 기능이 올바르게 작동하기
+// 위한 전제조건이다.
+const captureCollapsedDirPaths = (
+	dirPaths: Iterable<string>,
+): readonly string[] => {
+	if (!fileTree) return [];
+	const collapsed: string[] = [];
+	for (const dir of dirPaths) {
+		const item = fileTree.getItem(dir);
+		if (item && isDirHandle(item) && !item.isExpanded()) collapsed.push(dir);
+	}
+	return collapsed;
+};
+
+const reapplyCollapsedDirs = (dirPaths: readonly string[]): void => {
+	if (!fileTree) return;
+	for (const dir of dirPaths) {
+		const item = fileTree.getItem(dir);
+		if (item && isDirHandle(item)) item.collapse();
+	}
+};
+
+// foldWithTree가 켜져 있을 때 "트리 때문에 접혀야 할 파일 집합"을 다시 계산해
+// treeCollapsedIds와 diff하고, 실제로 상태가 바뀐 파일에 대해서만
+// codeView.updateItem()을 호출한다. fileTree.subscribe()(페이로드 없음 — 선택/
+// 포커스/검색 등 모든 트리 변경에 공통으로 발화)와 renderPatch() 양쪽에서
+// 호출된다.
+const syncTreeFold = (): void => {
+	if (!codeView) return;
+	const nextTreeCollapsed = new Set<string>();
+	if (foldWithTree && fileTree) {
+		for (const [dirPath, files] of knownDirDescendants) {
+			const item = fileTree.getItem(dirPath);
+			if (item && isDirHandle(item) && !item.isExpanded()) {
+				for (const f of files) nextTreeCollapsed.add(f);
+			}
+		}
+	}
+	for (const id of new Set([...treeCollapsedIds, ...nextTreeCollapsed])) {
+		if (treeCollapsedIds.has(id) === nextTreeCollapsed.has(id)) continue;
+		if (forceExpandedIds.has(id) || collapsedIds.has(id)) continue; // 화면상 접힘 상태 자체는 안 바뀜
+		const item = codeView.getItem(id);
+		if (item?.type !== "diff") continue;
 		codeView.updateItem({
 			...item,
-			collapsed: true,
+			collapsed: nextTreeCollapsed.has(id),
 			version: parseCache.bump(id),
 		});
 	}
-	autoExpandedIds.clear();
+	treeCollapsedIds.clear();
+	for (const id of nextTreeCollapsed) treeCollapsedIds.add(id);
 };
 
 const renderPatch = (unsorted: DiffFile[]): void => {
@@ -299,6 +409,46 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	// @diffdeck/trees GitStatus.
 	const paths = files.map((f) => f.name);
 	const gitStatus = files.map((f) => ({ path: f.name, status: f.status }));
+
+	// 트리 → diff 폴드 동기화 준비: 이번 렌더의 디렉토리 맵을 새로 만들고, 아직
+	// 갱신 전인(기존) fileTree에서 현재 접혀 있는 디렉토리를 캡처해 둔다 —
+	// resetPaths()가 모든 디렉토리를 펼침으로 되돌리기 때문에, 아래에서
+	// 되돌린다.
+	knownDirDescendants = buildDirDescendants(paths);
+	const collapsedDirPaths = captureCollapsedDirPaths(
+		knownDirDescendants.keys(),
+	);
+
+	// File tree: create once; afterwards update in place only when the file set
+	// or statuses changed (so editing a file's contents doesn't reset it).
+	const treeKey = JSON.stringify(gitStatus);
+	if (!fileTree) {
+		treeMount.replaceChildren();
+		fileTree = new FileTree({
+			paths,
+			gitStatus,
+			initialExpansion: "open",
+			flattenEmptyDirectories: flattenDirs,
+			search: true,
+			onSelectionChange: (selected) => {
+				const path = selected[0];
+				if (path && codeView) codeView.scrollTo({ type: "item", id: path });
+			},
+		});
+		fileTree.render({ containerWrapper: treeMount });
+		fileTree.subscribe(() => syncTreeFold());
+		reapplyCollapsedDirs(collapsedDirPaths);
+		lastTreeKey = treeKey;
+	} else if (treeKey !== lastTreeKey) {
+		fileTree.resetPaths(paths);
+		fileTree.setGitStatus(gitStatus);
+		reapplyCollapsedDirs(collapsedDirPaths);
+		lastTreeKey = treeKey;
+	}
+	// 트리 상태를 최종 반영 — foldWithTree가 꺼져 있으면 treeCollapsedIds를
+	// 비우는 역할도 겸한다. 아래 아이템 배열이 이 결과를 읽으므로 반드시 그
+	// 전에 호출한다.
+	syncTreeFold();
 
 	// Diff items: parse each non-binary file's full old/new contents into a
 	// NON-partial FileDiffMetadata so hunk expansion works. contentVersion이
@@ -333,37 +483,13 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 				type: "diff" as const,
 				fileDiff,
 				version,
-				collapsed: collapsedIds.has(f.name),
+				collapsed: effectiveCollapsed(f.name),
 			};
 		});
 	parseCache.prune(items.map((it) => it.id));
 
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();
-
-	// File tree: create once; afterwards update in place only when the file set
-	// or statuses changed (so editing a file's contents doesn't reset it).
-	const treeKey = JSON.stringify(gitStatus);
-	if (!fileTree) {
-		treeMount.replaceChildren();
-		fileTree = new FileTree({
-			paths,
-			gitStatus,
-			initialExpansion: "open",
-			flattenEmptyDirectories: flattenDirs,
-			search: true,
-			onSelectionChange: (selected) => {
-				const path = selected[0];
-				if (path && codeView) codeView.scrollTo({ type: "item", id: path });
-			},
-		});
-		fileTree.render({ containerWrapper: treeMount });
-		lastTreeKey = treeKey;
-	} else if (treeKey !== lastTreeKey) {
-		fileTree.resetPaths(paths);
-		fileTree.setGitStatus(gitStatus);
-		lastTreeKey = treeKey;
-	}
 
 	// Diff panel: recreate the CodeView on first render, when transitioning from
 	// empty, or when diffStyle changed; otherwise reuse it so scroll is
@@ -648,6 +774,16 @@ flattenInput?.addEventListener("change", () => {
 	else void load();
 });
 
+const foldWithTreeInput = document.getElementById(
+	"toggle-fold-with-tree",
+) as HTMLInputElement | null;
+if (foldWithTreeInput) foldWithTreeInput.checked = foldWithTree;
+foldWithTreeInput?.addEventListener("change", () => {
+	foldWithTree = foldWithTreeInput.checked;
+	localStorage.setItem(FOLD_WITH_TREE_KEY, foldWithTree ? "1" : "0");
+	syncTreeFold();
+});
+
 // Hide/show the file-tree sidebar: session-only (no localStorage — every
 // fresh load starts visible unless launched with --hide-tree). The toolbar
 // button and the overflow-menu checkbox both drive (and reflect) the same
@@ -733,10 +869,10 @@ findBar = createFindBar({
 	clearSelection: () => codeView?.clearSelectedLines(),
 	ensureVisible: (m: SearchMatch) => {
 		if (!codeView) return;
-		if (!collapsedIds.has(m.fileId)) return;
+		if (!effectiveCollapsed(m.fileId)) return;
 		const item = codeView.getItem(m.fileId);
 		if (item?.type !== "diff") return;
-		collapsedIds.delete(m.fileId);
+		forceExpandedIds.add(m.fileId);
 		autoExpandedIds.add(m.fileId);
 		codeView.updateItem({
 			...item,

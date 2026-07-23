@@ -10,6 +10,7 @@ import {
 	readTreeWidth,
 	resolveDiffStyle,
 	resolveFlatten,
+	resolveFoldWithTree,
 	resolveTreeHidden,
 	resolveTreeSide,
 	resolveUntracked,
@@ -98,6 +99,16 @@ describe("launch-flag resolvers (URL param → localStorage → default)", () =>
 			true,
 		);
 		expect(resolveWatch(null, empty)).toBe(false);
+	});
+	test("resolveFoldWithTree: URL wins, else localStorage, else default off", () => {
+		expect(resolveFoldWithTree("1", empty)).toBe(true);
+		expect(
+			resolveFoldWithTree("0", get({ "cc-statusline:fold-with-tree": "1" })),
+		).toBe(false);
+		expect(
+			resolveFoldWithTree(null, get({ "cc-statusline:fold-with-tree": "1" })),
+		).toBe(true);
+		expect(resolveFoldWithTree(null, empty)).toBe(false);
 	});
 });
 
