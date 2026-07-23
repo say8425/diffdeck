@@ -353,6 +353,10 @@
 				width: 2px;
 				background: var(--vd-accent);
 			}
+			#tree-resizer:focus-visible {
+				outline: 2px solid var(--vd-accent);
+				outline-offset: -2px;
+			}
 			body.vd-resizing {
 				cursor: col-resize !important;
 				user-select: none;
@@ -367,9 +371,6 @@
 			}
 			#app[data-tree-side="right"] #tree {
 				grid-column: 3;
-			}
-			#app[data-tree-side="right"] #tree-resizer {
-				grid-column: 2;
 			}
 			#app[data-tree-side="right"] #diff {
 				grid-column: 1;
