@@ -50,3 +50,42 @@ test("a search-expanded file stays expanded if its directory is expanded in the 
 	// it was never manually collapsed.
 	expect(await hasCode(page, "src/hello.ts")).toBe(true);
 });
+
+test("manually clicking a search-expanded file's header claims it away from the find bar, surviving search close", async ({
+	page,
+	foldUrl,
+}) => {
+	await page.goto(foldUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	await expect.poll(() => hasCode(page, "src/hello.ts")).toBe(true);
+
+	const srcRow = page
+		.locator("file-tree-container")
+		.locator('[data-item-path="src/"]');
+	await srcRow.click(); // collapse `src` — hello.ts tree-folds
+	await expect.poll(() => hasCode(page, "src/hello.ts")).toBe(false);
+
+	await page.keyboard.press("Control+F");
+	await page.locator("#find-input").fill("hello");
+	// The match forces hello.ts open despite `src` staying collapsed; this
+	// also adds it to the find bar's temporary `autoExpandedIds` bookkeeping.
+	await expect.poll(() => hasCode(page, "src/hello.ts")).toBe(true);
+
+	// Manually collapse it via its own header while the search is still open.
+	await page.locator('[data-fold="src/hello.ts"]').click();
+	await expect.poll(() => hasCode(page, "src/hello.ts")).toBe(false);
+	// ...then manually re-expand it. This is a fresh manual override — `src`
+	// is still collapsed in the tree, so without the fix this file would
+	// still be flagged in the find bar's `autoExpandedIds`.
+	await page.locator('[data-fold="src/hello.ts"]').click();
+	await expect.poll(() => hasCode(page, "src/hello.ts")).toBe(true);
+
+	await page.locator("#find-close").click();
+	await expect(page.locator("#find-bar")).toBeHidden();
+
+	// The manual re-expand must survive search closing — restoreAutoExpanded
+	// must not re-collapse a file the user has since claimed with a direct
+	// click, even though the file passed through the find bar's temporary
+	// expand earlier in this same session.
+	expect(await hasCode(page, "src/hello.ts")).toBe(true);
+});

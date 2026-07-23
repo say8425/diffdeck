@@ -41,9 +41,7 @@ test("collapsing a flatten-compressed directory row folds its diff file", async 
 	await expect(chainRow).toBeVisible();
 	await chainRow.click();
 
-	await expect
-		.poll(() => hasCode(page, "src/mid/deep/nested.ts"))
-		.toBe(false);
+	await expect.poll(() => hasCode(page, "src/mid/deep/nested.ts")).toBe(false);
 	await expect(
 		page.locator('[data-fold="src/mid/deep/nested.ts"]'),
 	).toHaveAttribute("aria-label", "Expand file");

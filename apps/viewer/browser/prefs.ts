@@ -46,4 +46,8 @@ export const resolveFoldWithTree = (
 	urlParam: string | null,
 	get: Getter,
 ): boolean =>
-	urlParam === "1" ? true : urlParam === "0" ? false : get(FOLD_WITH_TREE_KEY) === "1";
+	urlParam === "1"
+		? true
+		: urlParam === "0"
+			? false
+			: get(FOLD_WITH_TREE_KEY) === "1";

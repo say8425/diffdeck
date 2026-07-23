@@ -60,19 +60,19 @@ the viewer in your browser.
 
 Options:
 
-| Flag              | Description                                                      |
-| ----------------- | ---------------------------------------------------------------- |
-| `--port <n>`      | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
-| `--no-open`       | Do not open a browser automatically (prints the URL)             |
-| `--untracked`     | Start with untracked files included                              |
-| `--watch`         | Start with watch (auto-refresh) on                               |
-| `--no-flatten`    | Start with the file tree un-flattened (flatten is on by default) |
-| `--tree-right`    | Start with the file tree on the right                            |
-| `--split`         | Start in split view (unified is the default)                     |
-| `--hide-tree`     | Start with the file tree hidden                                  |
-| `--fold-with-tree`| Start with sidebar directory collapse synced to diff folds       |
-| `-h`, `--help`    | Show help                                                        |
-| `-v`, `--version` | Show version                                                     |
+| Flag               | Description                                                      |
+| ------------------ | ---------------------------------------------------------------- |
+| `--port <n>`       | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
+| `--no-open`        | Do not open a browser automatically (prints the URL)             |
+| `--untracked`      | Start with untracked files included                              |
+| `--watch`          | Start with watch (auto-refresh) on                               |
+| `--no-flatten`     | Start with the file tree un-flattened (flatten is on by default) |
+| `--tree-right`     | Start with the file tree on the right                            |
+| `--split`          | Start in split view (unified is the default)                     |
+| `--hide-tree`      | Start with the file tree hidden                                  |
+| `--fold-with-tree` | Start with sidebar directory collapse synced to diff folds       |
+| `-h`, `--help`     | Show help                                                        |
+| `-v`, `--version`  | Show version                                                     |
 
 These view flags set the initial state for this launch only — they don't change
 your saved preferences, and the in-app toggles reflect the launched state.
