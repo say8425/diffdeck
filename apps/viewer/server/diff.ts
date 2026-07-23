@@ -174,6 +174,8 @@ const parseNameStatusZ = (
 		const code = tokens[i] ?? "";
 		i++;
 		if (/^[RC]/.test(code)) {
+			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한(현재 미사용) git이
+			// 내지 않아 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
 			const oldName = tokens[i];
 			const name = tokens[i + 1] ?? "";
 			i += 2;
