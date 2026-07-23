@@ -28,6 +28,11 @@ export interface FindBar {
 	setData(): void;
 	getQuery(): string;
 	getActiveMatch(): SearchMatch | null;
+	/** window의 Cmd/Ctrl+F 리스너를 해제한다. 뷰어는 SPA라 실사용에서 호출되지
+	 * 않지만(단일 인스턴스가 페이지 수명 내내 삶), 이 리스너 없이는 매 테스트가
+	 * 새 인스턴스를 만들 때마다 happy-dom의 프로세스 전역 window에 리스너가
+	 * 누적된다. */
+	destroy(): void;
 }
 
 const DEBOUNCE_MS = 120;
@@ -121,7 +126,7 @@ export const createFindBar = (deps: FindBarDeps): FindBar => {
 		deps.reapplyHighlights();
 	};
 
-	window.addEventListener("keydown", (event) => {
+	const onWindowKeydown = (event: KeyboardEvent): void => {
 		if (
 			(event.metaKey || event.ctrlKey) &&
 			(event.key === "f" || event.key === "F")
@@ -134,7 +139,8 @@ export const createFindBar = (deps: FindBarDeps): FindBar => {
 				open();
 			}
 		}
-	});
+	};
+	window.addEventListener("keydown", onWindowKeydown);
 
 	return {
 		open,
@@ -148,5 +154,9 @@ export const createFindBar = (deps: FindBarDeps): FindBar => {
 		},
 		getQuery: () => (opened ? query : ""),
 		getActiveMatch: () => (opened && current >= 0 ? matches[current] : null),
+		destroy: () => {
+			if (debounce !== null) clearTimeout(debounce);
+			window.removeEventListener("keydown", onWindowKeydown);
+		},
 	};
 };

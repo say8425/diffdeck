@@ -70,50 +70,44 @@ afterAll(() => {
 });
 
 describe("packaged cli.js", () => {
-	test("printed URL carries a token", () => {
+	// 이 다섯 단계는 beforeAll이 띄운 단일 공유 proc의 생존을 순서대로
+	// 전제한다(토큰 파싱 → ping/shell/diff 응답 → 마지막에 SIGINT로 종료
+	// 확인). 개별 test()로 쪼개면 bun:test의 파일 내 선언 순서 실행에 암묵적으로
+	// 기대는 꼴이라 재정렬·병렬화에 취약해진다 — 하나의 test 안에 순차 assert로
+	// 묶어 그 의존을 코드 구조 자체로 강제한다.
+	test("the shared CLI process: tokened URL, executable shebang, ping/shell/diff endpoints, then clean SIGINT shutdown", async () => {
 		expect(token.length).toBeGreaterThan(0);
-	});
 
-	test("dist/cli.js has a bun shebang and the exec bit", () => {
 		const contents = readFileSync(cliPath, "utf8");
 		expect(contents.startsWith("#!/usr/bin/env bun\n")).toBe(true);
 		// Bun.build's `// @bun` marker survives on the line after the shebang.
 		expect(contents.split("\n")[1]).toContain("@bun");
 		expect(statSync(cliPath).mode & 0o100).toBe(0o100);
-	});
 
-	test("GET /api/ping returns 204 with the x-diffdeck marker", async () => {
-		const res = await fetch(`${baseUrl}/api/ping`);
-		expect(res.status).toBe(204);
-		expect(res.headers.get("x-diffdeck")).toBe("1");
-	});
+		const ping = await fetch(`${baseUrl}/api/ping`);
+		expect(ping.status).toBe(204);
+		expect(ping.headers.get("x-diffdeck")).toBe("1");
 
-	test("GET / serves the viewer shell", async () => {
-		const res = await fetch(`${baseUrl}/`);
-		expect(res.status).toBe(200);
-		expect(await res.text()).toContain("/main.js");
-	});
+		const shell = await fetch(`${baseUrl}/`);
+		expect(shell.status).toBe(200);
+		expect(await shell.text()).toContain("/main.js");
 
-	test("GET /api/diff with the token returns the repo diff JSON", async () => {
-		const res = await fetch(
+		const diff = await fetch(
 			`${baseUrl}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
 		);
-		expect(res.status).toBe(200);
+		expect(diff.status).toBe(200);
 		// DiffFile's field is `name`, not `path` — see apps/viewer/server/diff.ts.
-		const files = (await res.json()) as Array<{ name: string }>;
+		const files = (await diff.json()) as Array<{ name: string }>;
 		expect(files.some((f) => f.name === "a.txt")).toBe(true);
-	});
 
-	test("SIGINT stops the server gracefully (exit 0)", async () => {
 		proc.kill("SIGINT");
 		expect(await proc.exited).toBe(0);
 	});
 
 	test("view flags appear in the printed URL", async () => {
-		const cliPath = join(import.meta.dir, "..", "dist", "cli.js");
-		const repo = mkdtempSync(join(tmpdir(), "dd-flags-repo-"));
-		await $`git -C ${repo} init -q`;
-		const cache = mkdtempSync(join(tmpdir(), "dd-flags-cache-"));
+		const flagsRepo = mkdtempSync(join(tmpdir(), "dd-flags-repo-"));
+		await $`git -C ${flagsRepo} init -q`;
+		const flagsCache = mkdtempSync(join(tmpdir(), "dd-flags-cache-"));
 		const p = Bun.spawn(
 			[
 				"bun",
@@ -130,8 +124,8 @@ describe("packaged cli.js", () => {
 				"--fold-with-tree",
 			],
 			{
-				cwd: repo,
-				env: { ...process.env, XDG_CACHE_HOME: cache },
+				cwd: flagsRepo,
+				env: { ...process.env, XDG_CACHE_HOME: flagsCache },
 				stdout: "pipe",
 				stderr: "pipe",
 			},
@@ -147,7 +141,7 @@ describe("packaged cli.js", () => {
 		expect(q.get("foldtree")).toBe("1");
 		p.kill("SIGINT");
 		await p.exited;
-		rmSync(repo, { recursive: true, force: true });
-		rmSync(cache, { recursive: true, force: true });
+		rmSync(flagsRepo, { recursive: true, force: true });
+		rmSync(flagsCache, { recursive: true, force: true });
 	});
 });
