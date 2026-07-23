@@ -1,19 +1,21 @@
 // Launch-flag -> in-app toggle sync: CLI flags become URL params
 // (cli.ts -> server/link.ts's `buildDiffViewerUrl`), which main.ts's prefs.ts
 // resolvers (`resolveUntracked`/`resolveWatch`/`resolveFlatten`/
-// `resolveTreeSide`/`resolveDiffStyle`/`resolveTreeHidden`) read at boot to
-// seed both the rendering state (diffStyle, treeSide, treeHidden, ...) and
-// the toolbar controls that mirror it. This spec launches with a non-default
-// flag on every axis and asserts the DOM reflects all six.
+// `resolveTreeSide`/`resolveDiffStyle`/`resolveTreeHidden`/
+// `resolveFoldWithTree`) read at boot to seed both the rendering state
+// (diffStyle, treeSide, treeHidden, foldWithTree, ...) and the toolbar
+// controls that mirror it. This spec launches with a non-default flag on
+// every axis and asserts the DOM reflects all seven.
 //
-// The five checkbox toggles (`#toggle-untracked`, `#toggle-watch`,
-// `#toggle-flatten`, `#toggle-tree-side`, `#toggle-tree-hidden`) live inside
-// `#overflow-menu`, which starts `hidden` -- but main.ts sets their `.checked`
-// property at boot regardless of the menu's open state, and non-visibility
-// assertions (like reading a property via `page.evaluate`) don't require the
-// element to be visible. The Unified/Split segmented control, `#app`'s
-// `data-tree-side`, and `#tree-toggle-btn`/`data-tree-hidden` live in the
-// always-visible toolbar/app shell.
+// The six checkbox toggles (`#toggle-untracked`, `#toggle-watch`,
+// `#toggle-flatten`, `#toggle-tree-side`, `#toggle-tree-hidden`,
+// `#toggle-fold-with-tree`) live inside `#overflow-menu`, which starts
+// `hidden` -- but main.ts sets their `.checked` property at boot regardless
+// of the menu's open state, and non-visibility assertions (like reading a
+// property via `page.evaluate`) don't require the element to be visible. The
+// Unified/Split segmented control, `#app`'s `data-tree-side`, and
+// `#tree-toggle-btn`/`data-tree-hidden` live in the always-visible
+// toolbar/app shell.
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
 const FLAGS = [
@@ -23,6 +25,7 @@ const FLAGS = [
 	"--tree-right",
 	"--split",
 	"--hide-tree",
+	"--fold-with-tree",
 ];
 
 const test = base.extend<{ flagsUrl: string }>({
@@ -66,6 +69,11 @@ test("launch flags are reflected in the in-app toggle state", async ({
 			treeHiddenAttr: document
 				.querySelector("[data-tree-hidden]")
 				?.getAttribute("data-tree-hidden"),
+			foldWithTreeToggle: (
+				document.getElementById(
+					"toggle-fold-with-tree",
+				) as HTMLInputElement | null
+			)?.checked,
 		}));
 
 	// Web-first: the toolbar/prefs wiring runs synchronously at module load,
@@ -79,5 +87,6 @@ test("launch flags are reflected in the in-app toggle state", async ({
 		treeSideAttr: "right",
 		treeHiddenToggle: true,
 		treeHiddenAttr: "true",
+		foldWithTreeToggle: true,
 	});
 });
