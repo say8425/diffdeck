@@ -57,6 +57,13 @@ export interface FixtureRepoOptions {
 	 * `lockfileLines` above.
 	 */
 	nestedChainFile?: boolean;
+	/**
+	 * Opt-in: commit `src/한글파일.ts` and edit it in the working tree, so specs
+	 * can assert a non-ASCII filename actually renders diff content (regression
+	 * guard for the `git diff --name-status`/`ls-files` C-quoting bug — see
+	 * apps/viewer/server/diff.ts's `parseNameStatusZ`).
+	 */
+	koreanFilename?: boolean;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -126,6 +133,12 @@ export const makeFixtureRepo = (
 			"export const nested = 1;\n",
 		);
 	}
+	if (options.koreanFilename) {
+		writeFileSync(
+			join(dir, "src", "한글파일.ts"),
+			"export const korean = 1; // base\n",
+		);
+	}
 
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
@@ -157,6 +170,12 @@ export const makeFixtureRepo = (
 		writeFileSync(
 			join(dir, "src", "mid", "deep", "nested.ts"),
 			"export const nested = 2;\n",
+		);
+	}
+	if (options.koreanFilename) {
+		writeFileSync(
+			join(dir, "src", "한글파일.ts"),
+			"export const korean = 2; // edited\n",
 		);
 	}
 
