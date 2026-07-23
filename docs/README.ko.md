@@ -106,7 +106,7 @@ codex plugin marketplace add say8425/diffdeck
 codex plugin add diffdeck@diffdeck
 ```
 
-또는 자체 완결형(`~/.agents/skills/diffdeck/`에 기록):
+또는 자체 완결형(`~/.claude/skills/diffdeck/`와 `~/.agents/skills/diffdeck/`에 기록):
 
 ```bash
 diffdeck install-skill --codex

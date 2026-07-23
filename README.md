@@ -115,7 +115,7 @@ codex plugin marketplace add say8425/diffdeck
 codex plugin add diffdeck@diffdeck
 ```
 
-Or self-contained (writes `~/.agents/skills/diffdeck/`):
+Or self-contained (writes `~/.claude/skills/diffdeck/` and `~/.agents/skills/diffdeck/`):
 
 ```bash
 diffdeck install-skill --codex

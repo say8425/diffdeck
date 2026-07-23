@@ -3,7 +3,14 @@
 	"packages": {
 		"apps/viewer": {
 			"release-type": "node",
-			"package-name": "@say8425/diffdeck"
+			"package-name": "@say8425/diffdeck",
+			"extra-files": [
+				{
+					"type": "json",
+					"path": "/.codex-plugin/plugin.json",
+					"jsonpath": "$.version"
+				}
+			]
 		}
 	}
 }
