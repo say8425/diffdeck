@@ -170,7 +170,7 @@ const parseNameStatusZ = (
 		name: string;
 		oldName?: string;
 	}> = [];
-	for (let i = 0; i < tokens.length; ) {
+	for (let i = 0; i < tokens.length;) {
 		const code = tokens[i] ?? "";
 		i++;
 		if (/^[RC]/.test(code)) {
