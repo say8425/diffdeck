@@ -12,6 +12,7 @@ export const readTreeSide = (get: Getter): TreeSide =>
 export const readFlatten = (get: Getter): boolean => get(FLATTEN_KEY) !== "0";
 
 export const WATCH_KEY = "cc-statusline:diff-watch";
+export const FOLD_WITH_TREE_KEY = "cc-statusline:fold-with-tree";
 
 export const resolveUntracked = (urlParam: string | null): boolean =>
 	urlParam === "1";
@@ -40,3 +41,9 @@ export const resolveTreeSide = (
 
 export const resolveWatch = (urlParam: string | null, get: Getter): boolean =>
 	urlParam === "1" ? true : urlParam === "0" ? false : get(WATCH_KEY) === "1";
+
+export const resolveFoldWithTree = (
+	urlParam: string | null,
+	get: Getter,
+): boolean =>
+	urlParam === "1" ? true : urlParam === "0" ? false : get(FOLD_WITH_TREE_KEY) === "1";
