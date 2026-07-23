@@ -26,7 +26,10 @@ export const resolveDiffStyle = (
 	urlParam: string | null,
 ): "unified" | "split" => (urlParam === "split" ? "split" : "unified");
 
-export const resolveFlatten = (urlParam: string | null, get: Getter): boolean =>
+export const resolveFlatten = (
+	urlParam: string | null,
+	get: Getter,
+): boolean =>
 	urlParam === "0" ? false : urlParam === "1" ? true : readFlatten(get);
 
 export const resolveTreeSide = (
