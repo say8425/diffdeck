@@ -125,6 +125,21 @@ test("arrow keys adjust the width in 10px steps and persist", async ({
 	expect(stored).toBe(String(startWidth + 20));
 });
 
+test("the toolbar stays full width when the tree is resized", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	await dragResizer(page, 150);
+
+	const appBox = await page.locator("#app").boundingBox();
+	const toolbarBox = await page.locator("#toolbar").boundingBox();
+	if (!appBox || !toolbarBox) throw new Error("missing bounding box");
+	expect(toolbarBox.width).toBeCloseTo(appBox.width, 0);
+});
+
 test("dragging past the bounds clamps to 180-600", async ({
 	page,
 	viewerUrl,
