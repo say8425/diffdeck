@@ -8,12 +8,11 @@
 diffdeck/
 ├── packages/               # 포크한 pierre 패키지 (vendored, npm 설치 안 함)
 │   ├── path-store/         # @diffdeck/path-store — 트리 순수 로직 (flatten·sort·projection·store), 18 src, deps 없음
-│   ├── theming/            # @diffdeck/theming — 테마 시스템 + 테마 데이터, 15 src + themes/*.json 10개
-│   ├── diffs/              # @diffdeck/diffs — CodeView diff 렌더 엔진, 170 src (CodeView.ts 3,563줄)
-│   └── trees/              # @diffdeck/trees — FileTree 엔진, 52 src (preact 렌더 스킨 포함)
+│   ├── theming/            # @diffdeck/theming — 테마 시스템 + 테마 데이터, 14 src + themes/*.json 10개
+│   ├── diffs/              # @diffdeck/diffs — CodeView diff 렌더 엔진, 144 src (CodeView.ts 3,563줄)
+│   └── trees/              # @diffdeck/trees — FileTree 엔진, 46 src (vanilla 렌더, de-preact 완료)
 ├── apps/
-│   └── viewer/             # @diffdeck/viewer — server/(데이터 API) + browser/(뷰어 프론트) + build.ts·serve.ts
-├── bin/                    # (Plan 5) diffdeck CLI 엔트리 예정
+│   └── viewer/             # @say8425/diffdeck — server/(데이터 API) + browser/(뷰어 프론트) + cli/(CLI 엔트리) + build.ts·cli.ts
 ├── scripts/
 │   ├── extract-sources.ts       # 소스맵 sourcesContent → 원본 TS 복원 도구 (Foundation 일회성)
 │   ├── extract-sources.test.ts  # 합성 소스맵 fixture로 hermetic (외부 체크아웃 의존 없음)
@@ -32,7 +31,7 @@ diffdeck/
 - `path-store` → (없음)
 - `theming` → shiki, @shikijs/themes
 - `diffs` → theming, shiki, @shikijs/transformers, diff, hast-util-to-html, lru_map
-- `trees` → path-store, theming, **preact**, preact-render-to-string
+- `trees` → path-store, theming (preact 의존 제거됨 — vanilla 렌더러)
 
 **포크 provenance**: 원본 `@pierre/*`의 dist `.js.map` `sourcesContent`에 주석 포함 원본 TS가 전량 존재 → `scripts/extract-sources.ts`로 복원 후 `@pierre/*` import를 `@diffdeck/*`로 rewrite. `@pierre/path-store`는 npm 미배포지만 trees dist에 번들되어 함께 복원됨. `@pierre/theme`(테마 데이터)는 코드가 아니라 shiki 테마 JSON 10개라 `theming/themes/`에 그대로 vendored. 전부 Apache-2.0.
 
@@ -47,7 +46,7 @@ cc-statusline에 포함됐던 로컬 diff 뷰어를 독립 제품으로 분리 +
 
 뷰어 토글(untracked 포함·watch 자동갱신·flatten·파일트리 좌우·unified/split·파일트리 숨김·트리 접기 동기화)은 `--untracked`/`--watch`/`--no-flatten`/`--tree-right`/`--split`/`--hide-tree`/`--fold-with-tree` CLI 플래그로 구동 시점에 미리 설정할 수 있다(session-only — 저장된 localStorage 프리퍼런스는 건드리지 않음). 인앱 토글의 초기 표시 상태는 항상 실제 launch 값과 일치하도록 sync되며, 우선순위 계산(URL 파라미터 → localStorage → 기본값)은 `apps/viewer/browser/prefs.ts`의 순수 resolver 함수(`resolveUntracked`/`resolveWatch`/`resolveFlatten`/`resolveTreeSide`/`resolveDiffStyle`/`resolveTreeHidden`/`resolveFoldWithTree`)로 분리해 단위 테스트한다. 파일트리 숨김은 `localStorage` 폴백이 없는 session-only 토글(`resolveUntracked`와 동일 패턴)로, 툴바 아이콘 버튼(`#tree-toggle-btn`)과 오버플로 메뉴 체크박스(`#toggle-tree-hidden`) 둘 다에서 조작 가능하며 항상 서로 동기화된다. 사이드바에서 디렉토리를 접으면 diff 화면의 해당 파일들도 자동으로 접히는 "Fold with tree" 토글은 `flatten`/`treeSide`와 동일하게 `localStorage`(`cc-statusline:fold-with-tree`)에 영속화되며, 오버플로 메뉴 체크박스(`#toggle-fold-with-tree`)로만 조작한다(전용 툴바 버튼 없음). 트리에서 접힌 디렉토리 아래 파일을 diff 헤더 클릭으로 개별 펼치면 그 파일은 사용자가 다시 접기 전까지(토글 on/off와 무관하게) 계속 펼쳐진 채 유지된다. 파일 트리 사이드바 폭은 `#tree-resizer`를 드래그하거나(포커스 후 방향키로도 10px 단위 조정 가능) 180~600px 범위에서 조정할 수 있으며, 조정한 폭은 `localStorage`(session-only 토글들과 달리 지속)에 저장된다.
 
-설계·조사 근거(요약): CodeView는 이미 프레임워크 무관 vanilla 27k줄 엔진(faithful 재작성 4~8개월, 이득 0 → 재작성 금지). 혼합 기술은 얕음 — vanilla가 아닌 건 trees 렌더 스킨의 preact 6파일뿐. 대체 라이브러리 조사 결과 pierre 품질 대체재 없음.
+설계·조사 근거(요약): CodeView는 이미 프레임워크 무관 vanilla 27k줄 엔진(faithful 재작성 4~8개월, 이득 0 → 재작성 금지). trees의 preact 렌더 스킨도 Plan 3(de-preact)에서 vanilla로 포팅 완료 — 현재 리포에 preact/react 런타임 의존이 전혀 없다. 대체 라이브러리 조사 결과 pierre 품질 대체재 없음.
 
 ## HOW
 
@@ -55,7 +54,7 @@ cc-statusline에 포함됐던 로컬 diff 뷰어를 독립 제품으로 분리 +
 
 ```bash
 bun install
-bun run typecheck   # 4패키지 각자 tsconfig로 (혼합 JSX라 flat 불가 — 패키지별 루프)
+bun run typecheck   # 4패키지 + apps/viewer + apps/viewer/e2e, 각자 tsconfig로 (project references 미설정이라 패키지별 루프)
 bun test
 bun run lint
 bun run format
@@ -100,10 +99,9 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 - **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만. 현재 예외 2건 (둘 다 `packages/diffs`):
   1. `DiffHunksRenderer.recycle()`의 하이라이터 동기 재획득 — 빠른 스크롤 headerless blink 완치 (`header-mount.e2e.ts` 극한 프로브가 회귀망).
   2. 빈 렌더 윈도우(totalLines 0 = collapsed) 렌더를 plain-text + zero-range로 — 하이라이트 렌더가 범위를 무시하고 전체 파일을 동기 토크나이즈해 대형 lockfile 마운트가 수 초 프리징하던 것 완치. `renderDiff` sync/async 두 경로 + `RenderedDiffASTCache.emptyWindow` 표식(빈 풀을 확장 렌더가 재사용하면 processDiffResult가 throw — 표식이 확장 시 재렌더를 강제). 회귀망: `lockfile-freeze.e2e.ts` (30k줄 프리징 게이트 + 8k줄 sub-cutoff 펼침 무오류).
-- **JSX 설정**: `tsconfig.base.json`은 preact JSX. diffs는 패키지 tsconfig에서 react로 override(react 어댑터 때문), trees는 per-file `@jsxImportSource` pragma 사용. 그래서 루트 typecheck는 flat이 아니라 패키지별 루프.
+- **JSX 설정**: `tsconfig.base.json`은 `jsx: react-jsx` + `jsxImportSource: preact`를 여전히 선언하지만, Plan 3(de-preact) 완료 이후 리포 전체에 `.tsx` 파일이 하나도 없어 이 설정은 현재 미사용(vestigial) 상태다. `packages/diffs`·`packages/trees`의 tsconfig는 base를 extend만 하고 별도 JSX override가 없다. 루트 typecheck가 flat이 아니라 패키지별 루프인 건 JSX 때문이 아니라 TS project references가 안 걸려 있어서다.
 - **외부 deps는 정확 버전 핀** (캐럿 금지). vendored 패키지는 workspace 내부.
-- **preact는 trees에만** — Plan 3(de-preact)에서 vanilla로 포팅 후 제거 예정.
-- **react는 하드 런타임 의존 아님** — diffs/trees의 미사용 react 어댑터용 devDep/optional peer. 데드코드는 후속 plan에서 제거.
+- **preact/react 런타임 의존 없음** — Plan 3(de-preact)에서 trees의 preact 렌더 스킨을 vanilla로 완전히 포팅했고, 어느 `packages/*/package.json`·`apps/viewer/package.json`에도 preact/react가 없다(devDep·peer 포함).
 - **라이선스**: 각 `packages/*/LICENSE`(Apache-2.0) + `packages/trees/NOTICE.md`(headless-tree MIT 유래) + 최상위 `NOTICE` 보존. 파일 수정 사실 고지 유지.
 - **`*.css?inline` ambient 선언**: 소비자(앱)의 tsconfig가 패키지 `src/**`를 glob include하지 않으면 안 보임 — Plan 2 앱 tsconfig에서 배선 필요.
 - **cc-statusline 잔재 데드코드 제거됨**: `server/ensure.ts`(spawn-if-not-running 데몬 ensure)와 `server.ts`의 `idleTimeoutMs` idle-shutdown을 제거했다. diffdeck의 CLI는 서버를 **foreground**로 띄워 Ctrl+C로 종료하는 모델이라(cc-statusline처럼 statusline이 백그라운드 데몬을 spawn-if-not-running으로 관리하는 구조가 아님) 두 기능 모두 미사용 상태였다.
@@ -111,7 +109,7 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 ### 로드맵 (각각 별도 sub-plan)
 
 - **Plan 1 — Foundation** ✅: 4패키지 포크, 타입체크·렌더 검증.
-- **Plan 2 — viewer + server 앱** ✅: `apps/viewer`로 이관(server/·browser/), 14 유닛 테스트 + 빌드-번들 서빙 통합 테스트로 동등성 검증. browser/는 vendored JSX 벽 때문에 typecheck 루프 제외(패리티 하니스와 동일, Plan 4/5서 선언 기반으로 해소).
-- **Plan 3 — de-preact 실용판**: trees preact 6파일 → vanilla (가상화·DnD·rename·sticky·SSR 제외, read-only 대응), preact 제거.
+- **Plan 2 — viewer + server 앱** ✅: `apps/viewer`로 이관(server/·browser/), 14 유닛 테스트 + 빌드-번들 서빙 통합 테스트로 동등성 검증. `apps/viewer/tsconfig.json`은 지금도 `browser/**`를 include하지 않아 typecheck 루프에서 빠진다 — de-preact로 JSX 벽은 없어졌지만, `*.css?inline` ambient 선언 미해결(같은 문서의 `*.css?inline` 항목 참고)과 vendored 전역 augmentation(`Window.__INSTANCE`/`__TOGGLE`) 가시성 문제가 남아 있어 여전히 미해소 — Plan 4 이후로 이월.
+- **Plan 3 — de-preact 실용판** ✅: trees의 preact 렌더 스킨 → vanilla 포팅(가상화·DnD·rename·sticky·SSR 제외, read-only 대응) 완료. `packages/trees`에 preact 의존·`.tsx` 파일이 더 이상 없다.
 - **Plan 4 — 커플링 하드닝**: 내부 마크업 계약화, 정렬 comparator 단일화, canary 테스트, 상수 export. **헤더 깜박임은 완치됨**(Foundation 예외를 적용한 첫 vendored 로직 수정): `DiffHunksRenderer.recycle()`이 하이라이터를 무조건 버려(`highlighter = undefined`) 재마운트 때 `renderDiff()`가 null을 반환 → `FileDiff.render()`가 헤더 적용 전에 탈출 → 헤더 없는 0-height 프레임이었는데, recycle()이 생성자(`:228-232`)와 동일 조건으로 `getHighlighterIfLoaded()`를 동기 재획득하게 수정해 근절(`[diffdeck]` 주석으로 upstream 이탈 표기). `overscrollSize=1000`은 유지 — 남은 역할은 scroll→queueRender→다음 rAF의 1프레임 렌더 지연 커버(800px/frame 플링까지 e2e 검증, `header-mount.e2e.ts` 극한 프로브). 참고: 뷰어는 CodeView에 workerManager를 넘기지 않으므로 **항상** non-worker 분기 = 이 하이라이터 경로를 탄다.
-- **Plan 5 — CLI + 컷오버 + 배포**: `bin/diffdeck.ts`(데몬·토큰·URL), npm `@say8425/diffdeck` 배포, cc-statusline이 `bunx @say8425/diffdeck`로 전환.
+- **Plan 5 — CLI + 컷오버 + 배포** ✅: 계획 당시의 `bin/diffdeck.ts` 대신 `apps/viewer/cli.ts` + `apps/viewer/cli/{args,installSkill,opener}.ts`로 CLI(토큰·URL·flags·install-skill)를 구현, npm `@say8425/diffdeck` 배포 완료(현재 0.3.0, trusted publishing으로 자동 배포). `bin/` 디렉토리는 만들어지지 않았다 — CLI 엔트리는 계속 `apps/viewer` 워크스페이스 안에 산다.
