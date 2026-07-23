@@ -106,7 +106,7 @@ codex plugin marketplace add say8425/diffdeck
 codex plugin add diffdeck@diffdeck
 ```
 
-或使用自包含方式（写入 `~/.agents/skills/diffdeck/`）：
+或使用自包含方式（写入 `~/.claude/skills/diffdeck/` 和 `~/.agents/skills/diffdeck/`）：
 
 ```bash
 diffdeck install-skill --codex

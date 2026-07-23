@@ -106,7 +106,7 @@ codex plugin marketplace add say8425/diffdeck
 codex plugin add diffdeck@diffdeck
 ```
 
-または、自己完結型(`~/.agents/skills/diffdeck/` に書き込み):
+または、自己完結型(`~/.claude/skills/diffdeck/` と `~/.agents/skills/diffdeck/` に書き込み):
 
 ```bash
 diffdeck install-skill --codex
