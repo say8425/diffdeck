@@ -156,6 +156,44 @@ const buildFile = async (
 	};
 };
 
+// git의 기본값(core.quotePath=true)에서는 -z 없는 출력이 비-ASCII/특수문자
+// 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다. 그 인용 문자열을 그대로
+// 경로로 쓰면 git show/readFileSync가 못 찾아 조용히 빈 내용이 된다. -z는
+// NUL로 레코드를 구분하고 경로를 인용 없이 그대로 낸다(fingerprint.ts와 동일
+// 전략). rename/copy(R/C, 유사도 점수 접미) 레코드만 경로 필드가 2개(old, new).
+const parseNameStatusZ = (
+	output: string,
+): Array<{ status: DiffFileStatus; name: string; oldName?: string }> => {
+	const tokens = output.split("\0").filter((t) => t !== "");
+	const specs: Array<{
+		status: DiffFileStatus;
+		name: string;
+		oldName?: string;
+	}> = [];
+	for (let i = 0; i < tokens.length; ) {
+		const code = tokens[i] ?? "";
+		i++;
+		if (/^[RC]/.test(code)) {
+			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한(현재 미사용) git이
+			// 내지 않아 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
+			const oldName = tokens[i];
+			const name = tokens[i + 1] ?? "";
+			i += 2;
+			specs.push({ status: "renamed", name, oldName });
+		} else {
+			const name = tokens[i] ?? "";
+			i++;
+			const status: DiffFileStatus = code.startsWith("A")
+				? "added"
+				: code.startsWith("D")
+					? "deleted"
+					: "modified";
+			specs.push({ status, name });
+		}
+	}
+	return specs;
+};
+
 const resolveDiffBaseRev = async (
 	repo: string,
 	opts: { mode?: "working" | "base"; ref?: string },
@@ -207,34 +245,12 @@ export const getDiffFiles = async (
 	const files: DiffFile[] = [];
 	if (base) {
 		const nameStatus =
-			await $`git -C ${repo} diff --name-status ${base} 2>/dev/null`
+			await $`git -C ${repo} diff --name-status -z ${base} 2>/dev/null`
 				.nothrow()
 				.text();
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
-		const specs: Array<{
-			status: DiffFileStatus;
-			name: string;
-			oldName?: string;
-		}> = [];
-		for (const line of nameStatus.split("\n")) {
-			if (!line.trim()) continue;
-			const parts = line.split("\t");
-			const code = parts[0] ?? "";
-			if (code.startsWith("R")) {
-				specs.push({
-					status: "renamed",
-					name: parts[2] ?? "",
-					oldName: parts[1],
-				});
-			} else if (code.startsWith("A")) {
-				specs.push({ status: "added", name: parts[1] ?? "" });
-			} else if (code.startsWith("D")) {
-				specs.push({ status: "deleted", name: parts[1] ?? "" });
-			} else {
-				specs.push({ status: "modified", name: parts[1] ?? "" });
-			}
-		}
+		const specs = parseNameStatusZ(nameStatus);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
 				buildFile(repo, base, spec.status, spec.name, spec.oldName),
@@ -243,13 +259,10 @@ export const getDiffFiles = async (
 	}
 	if (opts.untracked) {
 		const listed =
-			await $`git -C ${repo} ls-files --others --exclude-standard 2>/dev/null`
+			await $`git -C ${repo} ls-files --others --exclude-standard -z 2>/dev/null`
 				.nothrow()
 				.text();
-		const paths = listed
-			.split("\n")
-			.map((s) => s.trim())
-			.filter(Boolean);
+		const paths = listed.split("\0").filter((s) => s !== "");
 		files.push(
 			...(await mapWithLimit(paths, BUILD_CONCURRENCY, (path) =>
 				buildFile(repo, base, "untracked", path),

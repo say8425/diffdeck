@@ -126,6 +126,87 @@ describe("getDiffFiles", () => {
 	});
 });
 
+describe("getDiffFiles non-ASCII and special filenames", () => {
+	// git의 기본값(core.quotePath=true)에서는 -z 없는 --name-status/ls-files가
+	// 비-ASCII·특수문자 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다
+	// (예: 한글.txt → "\355\225\234\352\270\200.txt"). 그 인용 문자열을 그대로
+	// 경로로 쓰면 git show/readFileSync가 못 찾아 내용이 빈 채로 렌더된다.
+	test("modified file with a Korean filename carries full contents", async () => {
+		const name = "한글.txt";
+		writeFileSync(join(repo, name), "one\n");
+		await $`git -C ${repo} add ${name}`;
+		await $`git -C ${repo} commit -qm korean`;
+		writeFileSync(join(repo, name), "two\n");
+		const files = await getDiffFiles(repo);
+		const f = files.find((x) => x.name === name);
+		expect(f).toBeDefined();
+		expect(f?.status).toBe("modified");
+		expect(f?.oldContents).toBe("one\n");
+		expect(f?.newContents).toBe("two\n");
+	});
+
+	test("added file with a Korean filename carries new contents", async () => {
+		const name = "추가.txt";
+		writeFileSync(join(repo, name), "brand new\n");
+		await $`git -C ${repo} add ${name}`;
+		const files = await getDiffFiles(repo);
+		const f = files.find((x) => x.name === name);
+		expect(f?.status).toBe("added");
+		expect(f?.newContents).toBe("brand new\n");
+	});
+
+	test("deleted file with a Korean filename carries old contents", async () => {
+		const name = "삭제.txt";
+		writeFileSync(join(repo, name), "gone soon\n");
+		await $`git -C ${repo} add ${name}`;
+		await $`git -C ${repo} commit -qm korean-delete`;
+		rmSync(join(repo, name));
+		const files = await getDiffFiles(repo);
+		const f = files.find((x) => x.name === name);
+		expect(f?.status).toBe("deleted");
+		expect(f?.oldContents).toBe("gone soon\n");
+		expect(f?.newContents).toBe("");
+	});
+
+	test("renamed file (ASCII to Korean) carries oldName and full contents", async () => {
+		const renamed = "이름변경.txt";
+		writeFileSync(join(repo, "old-name.txt"), "rename me\n");
+		await $`git -C ${repo} add old-name.txt`;
+		await $`git -C ${repo} commit -qm before-rename`;
+		// Bun의 $ 셸은 템플릿 리터럴에 직접 박힌(보간되지 않은) 비-ASCII 텍스트를
+		// 깨뜨리므로 ${} 보간으로 전달해야 한다 (이 자체가 diff.ts 파싱과는 무관한
+		// Bun 셸 인용 이슈).
+		await $`git -C ${repo} mv old-name.txt ${renamed}`;
+		const files = await getDiffFiles(repo);
+		const f = files.find((x) => x.name === renamed);
+		expect(f?.status).toBe("renamed");
+		expect(f?.oldName).toBe("old-name.txt");
+		expect(f?.oldContents).toBe("rename me\n");
+		expect(f?.newContents).toBe("rename me\n");
+	});
+
+	test("untracked file with a unicode filename carries new contents", async () => {
+		const name = "ünïcode.txt";
+		writeFileSync(join(repo, name), "fresh\n");
+		const files = await getDiffFiles(repo, { untracked: true });
+		const f = files.find((x) => x.name === name);
+		expect(f?.status).toBe("untracked");
+		expect(f?.newContents).toBe("fresh\n");
+	});
+
+	test("modified file with a space in its filename still works (regression guard)", async () => {
+		const name = "my file.txt";
+		writeFileSync(join(repo, name), "one\n");
+		await $`git -C ${repo} add ${name}`;
+		await $`git -C ${repo} commit -qm spacey`;
+		writeFileSync(join(repo, name), "two\n");
+		const files = await getDiffFiles(repo);
+		const f = files.find((x) => x.name === name);
+		expect(f?.oldContents).toBe("one\n");
+		expect(f?.newContents).toBe("two\n");
+	});
+});
+
 describe("getFileBytes", () => {
 	test("side=new reads the working tree, side=old reads the committed bytes", async () => {
 		writeFileSync(join(repo, "img.bin"), Buffer.from([1, 0, 1]));

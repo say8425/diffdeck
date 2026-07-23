@@ -470,6 +470,17 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 						{ name: f.name, contents: isImage ? "" : f.newContents },
 					),
 			);
+			// fileDiff.name/prevName은 신뢰할 수 없다: parseDiffFromFile(vendored)이
+			// npm `diff`의 createTwoFilesPatch로 유니파이드 diff 텍스트를 만든 뒤 그
+			// 텍스트의 `--- `/`+++ ` 헤더 줄을 되읽어 이름을 복원하는데, `diff`가
+			// 비-ASCII 경로를 그 텍스트 헤더에 git 스타일 큰따옴표+8진 이스케이프로
+			// 인용해서 쓰고 vendored 파서는 그걸 그대로(unquote 없이) 되읽는다 —
+			// 예를 들어 "src/한글파일.ts"의 fileDiff.name이 문자 그대로
+			// "src/\355\225\234\352\270\200\355\214\214\354\235\264.ts"가 된다. 헤더
+			// 표시(vendored 기본 렌더)·fold id·copy-path가 전부 이 필드들을 읽으므로,
+			// 서버가 이미 준 진짜 이름으로 파싱 직후 덮어써 근원에서 바로잡는다.
+			fileDiff.name = f.name;
+			if (f.oldName) fileDiff.prevName = f.oldName;
 			// Large files (lockfiles or over the changed-line threshold) start
 			// collapsed on first sight.
 			if (!seenIds.has(f.name)) {
