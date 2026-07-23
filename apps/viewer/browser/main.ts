@@ -577,7 +577,12 @@ let dragStartX = 0;
 let dragStartWidth = treeWidth;
 
 treeResizer?.addEventListener("pointerdown", (event) => {
+	// preventDefault() stops text selection while dragging, but it also
+	// suppresses the browser's default focus-on-mousedown -- restore it
+	// explicitly so a mouse drag leaves the resizer focused for immediate
+	// keyboard follow-up (matches what a plain click/tab would do).
 	event.preventDefault();
+	treeResizer.focus();
 	dragStartX = event.clientX;
 	dragStartWidth = treeWidth;
 	treeResizer.setPointerCapture(event.pointerId);

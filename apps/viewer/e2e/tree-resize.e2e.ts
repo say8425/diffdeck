@@ -50,6 +50,23 @@ test("dragging the resizer changes the tree width", async ({
 	await expect.poll(() => readTreeWidth(page)).toBe(startWidth + 80);
 });
 
+test("a mouse drag leaves the resizer focused for immediate keyboard follow-up", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	const startWidth = await readTreeWidth(page);
+	await dragResizer(page, 40);
+
+	await expect(page.locator("#tree-resizer")).toBeFocused();
+
+	// Immediate keyboard follow-up after the drag, with no extra Tab/click.
+	await page.keyboard.press("ArrowLeft");
+	await expect.poll(() => readTreeWidth(page)).toBe(startWidth + 40 - 10);
+});
+
 test("the resized width persists across reload", async ({
 	page,
 	viewerUrl,
