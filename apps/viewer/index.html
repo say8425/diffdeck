@@ -29,12 +29,12 @@
 			}
 			#app {
 				display: grid;
-				grid-template-columns: 300px 1fr;
+				grid-template-columns: var(--vd-tree-w, 300px) 6px 1fr;
 				grid-template-rows: auto 1fr;
 				height: 100vh;
 			}
 			#toolbar {
-				grid-column: 1 / 3;
+				grid-column: 1 / 4;
 				grid-row: 1;
 				display: flex;
 				align-items: center;
@@ -331,20 +331,46 @@
 				grid-column: 1;
 				overflow: auto;
 				padding-top: 8px;
-				border-right: 1px solid var(--vd-border);
+			}
+			#tree-resizer {
+				grid-row: 2;
+				grid-column: 2;
+				position: relative;
+				cursor: col-resize;
+				touch-action: none;
+			}
+			#tree-resizer::after {
+				content: "";
+				position: absolute;
+				inset: 0;
+				left: 50%;
+				width: 1px;
+				transform: translateX(-50%);
+				background: var(--vd-border);
+			}
+			#tree-resizer:hover::after,
+			#tree-resizer[data-dragging="true"]::after {
+				width: 2px;
+				background: var(--vd-accent);
+			}
+			#tree-resizer:focus-visible {
+				outline: 2px solid var(--vd-accent);
+				outline-offset: -2px;
+			}
+			body.vd-resizing {
+				cursor: col-resize !important;
+				user-select: none;
 			}
 			#diff {
 				grid-row: 2;
-				grid-column: 2;
+				grid-column: 3;
 				overflow: auto;
 			}
 			#app[data-tree-side="right"] {
-				grid-template-columns: 1fr 300px;
+				grid-template-columns: 1fr 6px var(--vd-tree-w, 300px);
 			}
 			#app[data-tree-side="right"] #tree {
-				grid-column: 2;
-				border-right: 0;
-				border-left: 1px solid var(--vd-border);
+				grid-column: 3;
 			}
 			#app[data-tree-side="right"] #diff {
 				grid-column: 1;
@@ -360,6 +386,9 @@
 				grid-template-columns: 1fr;
 			}
 			#app[data-tree-hidden="true"] #tree {
+				display: none;
+			}
+			#app[data-tree-hidden="true"] #tree-resizer {
 				display: none;
 			}
 			#app[data-tree-hidden="true"] #diff {
@@ -549,6 +578,16 @@
 				</div>
 			</div>
 			<div id="tree"></div>
+			<div
+				id="tree-resizer"
+				role="separator"
+				aria-orientation="vertical"
+				aria-label="Resize file tree"
+				aria-valuemin="180"
+				aria-valuemax="600"
+				aria-valuenow="300"
+				tabindex="0"
+			></div>
 			<div id="diff"></div>
 		</div>
 		<script type="module" src="/main.js"></script>

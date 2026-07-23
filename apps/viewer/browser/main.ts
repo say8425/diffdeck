@@ -17,6 +17,7 @@ import { isLargeFile } from "./largeFile.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
+	readTreeWidth,
 	resolveDiffStyle,
 	resolveFlatten,
 	resolveTreeHidden,
@@ -24,9 +25,11 @@ import {
 	resolveUntracked,
 	resolveWatch,
 	TREE_SIDE_KEY,
+	TREE_WIDTH_KEY,
 	type TreeSide,
 	WATCH_KEY,
 } from "./prefs.ts";
+import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
 import type { SearchFile, SearchMatch } from "./search/searchIndex.ts";
@@ -112,6 +115,7 @@ let treeSide: TreeSide = resolveTreeSide(params.get("tree"), (k) =>
 	localStorage.getItem(k),
 );
 let treeHidden: boolean = resolveTreeHidden(params.get("sidebar"));
+let treeWidth: number = readTreeWidth((k) => localStorage.getItem(k));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
@@ -555,6 +559,62 @@ if (urlMode === "base" || urlMode === "working") {
 
 // Apply persisted file-tree side and reflect stored prefs in the overflow menu.
 appEl.dataset.treeSide = treeSide;
+
+// Draggable/keyboard-resizable sidebar width. Lives in the --vd-tree-w CSS
+// custom property (index.html's grid reads it via var(--vd-tree-w, 300px));
+// computeDragWidth/computeKeyboardWidth (resize.ts) do the math, this block
+// is just event plumbing + persistence.
+const treeResizer = document.getElementById("tree-resizer");
+
+const applyTreeWidth = (width: number): void => {
+	treeWidth = width;
+	appEl.style.setProperty("--vd-tree-w", `${width}px`);
+	treeResizer?.setAttribute("aria-valuenow", String(width));
+};
+applyTreeWidth(treeWidth);
+
+let dragStartX = 0;
+let dragStartWidth = treeWidth;
+
+treeResizer?.addEventListener("pointerdown", (event) => {
+	// preventDefault() stops text selection while dragging, but it also
+	// suppresses the browser's default focus-on-mousedown -- restore it
+	// explicitly so a mouse drag leaves the resizer focused for immediate
+	// keyboard follow-up (matches what a plain click/tab would do).
+	event.preventDefault();
+	treeResizer.focus();
+	dragStartX = event.clientX;
+	dragStartWidth = treeWidth;
+	treeResizer.setPointerCapture(event.pointerId);
+	treeResizer.dataset.dragging = "true";
+	document.body.classList.add("vd-resizing");
+});
+
+treeResizer?.addEventListener("pointermove", (event) => {
+	if (treeResizer.dataset.dragging !== "true") return;
+	applyTreeWidth(
+		computeDragWidth(dragStartWidth, dragStartX, event.clientX, treeSide),
+	);
+});
+
+const endTreeResize = (event: PointerEvent): void => {
+	if (!treeResizer || treeResizer.dataset.dragging !== "true") return;
+	treeResizer.dataset.dragging = "false";
+	document.body.classList.remove("vd-resizing");
+	treeResizer.releasePointerCapture(event.pointerId);
+	localStorage.setItem(TREE_WIDTH_KEY, String(treeWidth));
+};
+treeResizer?.addEventListener("pointerup", endTreeResize);
+treeResizer?.addEventListener("pointercancel", endTreeResize);
+
+treeResizer?.addEventListener("keydown", (event) => {
+	if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+	event.preventDefault();
+	applyTreeWidth(
+		computeKeyboardWidth(treeWidth, event.key === "ArrowLeft" ? -1 : 1),
+	);
+	localStorage.setItem(TREE_WIDTH_KEY, String(treeWidth));
+});
 
 const flattenInput = document.getElementById(
 	"toggle-flatten",
