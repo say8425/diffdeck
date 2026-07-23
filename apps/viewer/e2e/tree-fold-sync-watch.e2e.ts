@@ -6,8 +6,7 @@
 // 가드다.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
-import { expect, launchViewer, test as base } from "./fixtures/app.ts";
+import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
 
 const test = base.extend<{ watchViewer: { url: string; repoDir: string } }>({
 	watchViewer: async ({}, use) => {
@@ -20,12 +19,6 @@ const test = base.extend<{ watchViewer: { url: string; repoDir: string } }>({
 		await stop();
 	},
 });
-
-const hasCode = (page: Page, fileId: string): Promise<boolean> =>
-	page
-		.locator("diffs-container")
-		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
-		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
 test("a directory collapsed via the tree stays collapsed across a watch poll, and a new file added under it while collapsed is auto-folded", async ({
 	page,
