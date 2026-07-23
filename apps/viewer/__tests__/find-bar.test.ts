@@ -102,6 +102,8 @@ const keydown = (target: EventTarget, init: KeyboardEventInit): boolean =>
 // happy-dom은 프로세스 전역으로 한 번만 등록되므로(happydom.ts), destroy 없이
 // 매 테스트가 새 인스턴스를 만들면 리스너가 테스트 파일 끝까지 계속 쌓인다.
 // 모든 테스트가 이 헬퍼로만 인스턴스를 만들어 afterEach가 자동으로 정리한다.
+// 테스트당 인스턴스 하나만 추적한다 — 한 테스트에서 두 번째 인스턴스를 만들면
+// 첫 번째가 activeFindBar에서 덮어써져 destroy 없이 새듯이 샌다.
 let activeFindBar: FindBar | null = null;
 const makeFindBar = (deps: FindBarDeps): FindBar => {
 	activeFindBar = createFindBar(deps);
