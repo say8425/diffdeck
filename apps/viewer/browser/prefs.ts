@@ -51,3 +51,20 @@ export const resolveFoldWithTree = (
 		: urlParam === "0"
 			? false
 			: get(FOLD_WITH_TREE_KEY) === "1";
+
+export const TREE_WIDTH_KEY = "cc-statusline:tree-width";
+export const DEFAULT_TREE_WIDTH = 300;
+export const MIN_TREE_WIDTH = 180;
+export const MAX_TREE_WIDTH = 600;
+
+export const clampTreeWidth = (width: number): number =>
+	Number.isFinite(width)
+		? Math.min(MAX_TREE_WIDTH, Math.max(MIN_TREE_WIDTH, width))
+		: DEFAULT_TREE_WIDTH;
+
+// No URL-param layer (unlike resolveTreeSide/resolveFlatten): there is no
+// launch-time flag for width, so this reads localStorage only.
+export const readTreeWidth = (get: Getter): number => {
+	const stored = get(TREE_WIDTH_KEY);
+	return stored === null ? DEFAULT_TREE_WIDTH : clampTreeWidth(Number(stored));
+};
