@@ -1,8 +1,7 @@
 // Fold-with-tree + Unified/Split 토글: CodeView가 재생성돼도 트리 유래 접힘이
 // 그대로 반영되는지 검증한다 — renderPatch()가 트리 동기화(syncTreeFold) 이후에
 // 아이템 배열을 만들도록 순서를 바꾼 것에 대한 회귀 가드.
-import type { Page } from "@playwright/test";
-import { expect, launchViewer, test as base } from "./fixtures/app.ts";
+import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
 
 const test = base.extend<{ foldUrl: string }>({
 	foldUrl: async ({}, use) => {
@@ -11,12 +10,6 @@ const test = base.extend<{ foldUrl: string }>({
 		await stop();
 	},
 });
-
-const hasCode = (page: Page, fileId: string): Promise<boolean> =>
-	page
-		.locator("diffs-container")
-		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
-		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
 test("switching Unified/Split keeps tree-driven folds correct after CodeView is recreated", async ({
 	page,

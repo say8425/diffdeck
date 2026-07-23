@@ -6,8 +6,7 @@
 // buildDirDescendants가 모든 조상 depth를 개별 검사하지만, 실제로 "접힘"으로
 // 관측되는 건 사용자가 실제로 접을 수 있는 종단 경로뿐이므로 이 설계는 별도
 // 처리 없이도 올바르게 동작한다.
-import type { Page } from "@playwright/test";
-import { expect, launchViewer, test as base } from "./fixtures/app.ts";
+import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
 
 const test = base.extend<{ nestedUrl: string }>({
 	nestedUrl: async ({}, use) => {
@@ -18,12 +17,6 @@ const test = base.extend<{ nestedUrl: string }>({
 		await stop();
 	},
 });
-
-const hasCode = (page: Page, fileId: string): Promise<boolean> =>
-	page
-		.locator("diffs-container")
-		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
-		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
 test("collapsing a flatten-compressed directory row folds its diff file", async ({
 	page,

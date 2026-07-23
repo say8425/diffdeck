@@ -10,14 +10,7 @@
 // 대신 하나의 파일에 대해 (a) 트리 유래 접힘이 토글 off에 해제되는지, (b)
 // 그 뒤 개별 헤더 클릭으로 다시 수동 접으면 토글 off에도 유지되는지를 순서대로
 // 검증해 "토글 off는 트리 유래 접힘만 지운다"는 속성을 파일 하나로 커버한다.
-import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures/app.ts";
-
-const hasCode = (page: Page, fileId: string): Promise<boolean> =>
-	page
-		.locator("diffs-container")
-		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
-		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
+import { expect, hasCode, test } from "./fixtures/app.ts";
 
 test("collapsing a directory folds its diff file; individual overrides persist; toggling off restores only tree-driven folds", async ({
 	page,

@@ -3,8 +3,7 @@
 // 접힘 근거가 사라지면, 검색을 닫아도 잘못 재접히지 않고 펼쳐진 채로 남아야
 // 한다 — restoreAutoExpanded가 무조건 collapsed:true가 아니라
 // effectiveCollapsed를 재평가하도록 고친 것에 대한 회귀 가드.
-import type { Page } from "@playwright/test";
-import { expect, launchViewer, test as base } from "./fixtures/app.ts";
+import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
 
 const test = base.extend<{ foldUrl: string }>({
 	foldUrl: async ({}, use) => {
@@ -13,12 +12,6 @@ const test = base.extend<{ foldUrl: string }>({
 		await stop();
 	},
 });
-
-const hasCode = (page: Page, fileId: string): Promise<boolean> =>
-	page
-		.locator("diffs-container")
-		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
-		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
 test("a search-expanded file stays expanded if its directory is expanded in the tree before the search closes", async ({
 	page,

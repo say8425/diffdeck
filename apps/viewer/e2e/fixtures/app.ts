@@ -3,7 +3,7 @@
 // repo, capture its printed (tokened) viewer URL, and tear both down
 // afterwards. Mirrors the spawn + readUrlFromStdout pattern from
 // apps/viewer/__tests__/cli-smoke.test.ts.
-import { test as base } from "@playwright/test";
+import { type Page, test as base } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -67,6 +67,18 @@ export const launchViewer = async (
 
 	return { url, repoDir: repo.dir, stop };
 };
+
+/**
+ * Does the diff item for `fileId` currently render its code body? A rendered
+ * (expanded) file's `<diffs-container>` shadow root contains a `<pre>`; a
+ * header-only (folded) one doesn't. Shared by the tree-fold-sync specs, which
+ * all assert fold state through this same real-DOM signal.
+ */
+export const hasCode = (page: Page, fileId: string): Promise<boolean> =>
+	page
+		.locator("diffs-container")
+		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
+		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
 type WorkerFixtures = {
 	viewerUrl: string;
