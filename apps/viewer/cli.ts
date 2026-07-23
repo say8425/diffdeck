@@ -31,6 +31,7 @@ Options:
   --tree-right  Start with the file tree on the right
   --split       Start in split view (unified is the default)
   --hide-tree   Start with the file tree hidden
+  --fold-with-tree  Start with sidebar-directory-collapse synced to diff folds
   -h, --help    Show this help
   -v, --version Show version
 
@@ -104,6 +105,7 @@ export const run = (argv: string[], deps: CliDeps): void => {
 		treeSide: args.treeSide,
 		diffStyle: args.diffStyle,
 		treeHidden: args.treeHidden,
+		foldWithTree: args.foldWithTree,
 	});
 
 	deps.log("diffdeck viewer running at:");
