@@ -256,7 +256,27 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       this.highlighter = undefined;
     }
     this.diff = undefined;
-    this.clearRenderCache();
+    // [diffdeck] Deviation from upstream @pierre/diffs: keep a fully
+    // highlighted render cache across recycle instead of dropping it
+    // unconditionally. The viewer runs the non-worker path, where
+    // renderDiffWithHighlighter re-tokenizes the ENTIRE file (both sides,
+    // range ignored for syntax correctness) synchronously on the main thread
+    // — so every re-entry into the overscan window froze the mounting frame
+    // for hundreds of ms (measured 333-359ms for a 1.5k-line file). Keeping
+    // the cache is safe: renderDiff re-validates it against the incoming
+    // diff/options on every render (areDiffTargetsEqual /
+    // areDiffRenderOptionsEqual) and force-rehighlights on mismatch, and
+    // expandHunk already relies on the same "highlighted caches stay"
+    // invariant. Partial (non-highlighted) and empty-window (collapsed,
+    // zero-line) caches are still dropped, exactly as before — the latter
+    // also naturally bounds memory: massive plain-text files never keep an
+    // AST. Regression net: retokenize-cache.e2e.ts.
+    if (
+      this.renderCache?.highlighted !== true ||
+      this.renderCache.emptyWindow === true
+    ) {
+      this.clearRenderCache();
+    }
     this.additionAnnotations = {};
     this.deletionAnnotations = {};
     this.workerManager?.cleanUpTasks(this);
