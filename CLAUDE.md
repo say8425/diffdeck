@@ -96,9 +96,10 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 ### 수정 시 주의사항
 
 - **CodeView(diffs) 재작성 금지** — 27k줄 vendored 엔진을 blackbox로 사용. 가상화·shiki 스트리밍·shadow DOM 등 상용급 난이도, 재작성 이득 없음.
-- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만. 현재 예외 2건 (둘 다 `packages/diffs`):
+- **포크 패키지는 import 경로 + 재구성 타입만 수정** — 렌더/로직 변경 금지 (Foundation 원칙). 오버홀은 별도 plan에서. 예외는 건별 합의 + `[diffdeck]` 주석으로 upstream 이탈을 코드에 표기 + e2e 회귀망 동반일 때만. 현재 예외 3건 (셋 다 `packages/diffs`):
   1. `DiffHunksRenderer.recycle()`의 하이라이터 동기 재획득 — 빠른 스크롤 headerless blink 완치 (`header-mount.e2e.ts` 극한 프로브가 회귀망).
   2. 빈 렌더 윈도우(totalLines 0 = collapsed) 렌더를 plain-text + zero-range로 — 하이라이트 렌더가 범위를 무시하고 전체 파일을 동기 토크나이즈해 대형 lockfile 마운트가 수 초 프리징하던 것 완치. `renderDiff` sync/async 두 경로 + `RenderedDiffASTCache.emptyWindow` 표식(빈 풀을 확장 렌더가 재사용하면 processDiffResult가 throw — 표식이 확장 시 재렌더를 강제). 회귀망: `lockfile-freeze.e2e.ts` (30k줄 프리징 게이트 + 8k줄 sub-cutoff 펼침 무오류).
+  3. `DiffHunksRenderer.recycle()`의 renderCache 조건부 보존 — 하이라이트 완료된(비-emptyWindow) 토크나이즈 AST를 언마운트 후에도 유지해, 오버스캔 재진입 때마다 파일 전체를 동기 재토크나이즈하던 100~360ms 프레임 스파이크(스크롤 끊김의 주범, 프로파일로 busy의 84~86% 확인)를 근절. 스테일은 renderDiff의 diff/options 동등성 검증이 자동 무효화. 회귀망: `retokenize-cache.e2e.ts` (재진입 프레임 상한 + watch 스테일 가드).
 - **JSX 설정**: `tsconfig.base.json`은 `jsx: react-jsx` + `jsxImportSource: preact`를 여전히 선언하지만, Plan 3(de-preact) 완료 이후 리포 전체에 `.tsx` 파일이 하나도 없어 이 설정은 현재 미사용(vestigial) 상태다. `packages/diffs`·`packages/trees`의 tsconfig는 base를 extend만 하고 별도 JSX override가 없다. 루트 typecheck가 flat이 아니라 패키지별 루프인 건 JSX 때문이 아니라 TS project references가 안 걸려 있어서다.
 - **외부 deps는 정확 버전 핀** (캐럿 금지). vendored 패키지는 workspace 내부.
 - **preact/react 런타임 의존 없음** — Plan 3(de-preact)에서 trees의 preact 렌더 스킨을 vanilla로 완전히 포팅했고, 어느 `packages/*/package.json`·`apps/viewer/package.json`에도 preact/react가 없다(devDep·peer 포함).
