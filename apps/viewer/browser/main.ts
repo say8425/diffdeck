@@ -4,6 +4,7 @@ import {
 	DIFFS_TAG_NAME,
 	DIFFS_TITLE_ATTR,
 	type FileDiffMetadata,
+	getOrCreateWorkerPoolSingleton,
 	parseDiffFromFile,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
@@ -135,6 +136,30 @@ let foldWithTree: boolean = resolveFoldWithTree(params.get("foldtree"), (k) =>
 let treeWidth: number = readTreeWidth((k) => localStorage.getItem(k));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
+
+// 워커 하이라이트 풀: 토크나이즈를 메인스레드 밖으로 — 파일 진입 시 plain이
+// 즉시 그려지고 색은 워커 완료 시 입혀진다. 생성 실패 시 undefined로 두면
+// 엔진이 기존 non-worker 동기 경로로 동작한다(폴백 불변식).
+// poolSize 2: 로컬 단일 사용자 — 목적은 처리량이 아니라 스파이크 제거이고
+// 워커마다 shiki 문법 메모리가 중복된다.
+const workerManager = (() => {
+	try {
+		return getOrCreateWorkerPoolSingleton({
+			poolOptions: {
+				workerFactory: () =>
+					new Worker(new URL("worker.js", import.meta.url), {
+						type: "module",
+					}),
+				poolSize: 2,
+			},
+			// 워커 자체 기본값(worker.ts:34-40)이 메인스레드 기대 옵션과 일치함을
+			// Step 4에서 대조 확인했다 — 불일치 필드가 있으면 여기에 명시한다.
+			highlighterOptions: {},
+		});
+	} catch {
+		return undefined;
+	}
+})();
 
 // 마지막 200 응답의 ETag(폴링 304 조건부 요청용)와 파일 목록(스타일/flatten
 // 토글처럼 서버 데이터가 그대로인 재렌더에 재사용).
@@ -508,7 +533,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	if (!codeView || renderedDiffStyle !== diffStyle) {
 		codeView?.cleanUp();
 		diffMount.replaceChildren();
-		codeView = new CodeView(codeViewOptions());
+		codeView = new CodeView(codeViewOptions(), workerManager);
 		// Render further ahead of the viewport than CodeView's 200px default.
 		// The old headerless-remount blink is cured at the source — the forked
 		// DiffHunksRenderer.recycle() re-acquires the shared highlighter
