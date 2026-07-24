@@ -9,7 +9,7 @@ Pierre の [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs) と [`
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#ライセンス)
 
-![diffdeck ビューア — git ステータスバッジ付きのファイルツリー、インライン画像 diff、シンタックスハイライトされた diff](screenshot.png)
+![diffdeck のデモ — 大規模 diff のスクロール、ツリーからファイルへ移動、クリックで折りたたみ、アプリ内検索、split ビュー](demo.gif)
 
 ## diffdeck とは
 
@@ -31,7 +31,7 @@ diff レンダリングエンジンが提供する機能:
 
 このエンジンをラップするインタラクティブなビューア chrome — クリックでの折りたたみ、パスのコピー、アプリ内検索、watch(自動更新)、working-tree-vs-base モード — は [cc-statusline](https://github.com/say8425/cc-statusline) のビューアに由来し、現在は diffdeck の `apps/viewer/` に置かれています。
 
-![diffdeck のデモ — 大規模 diff のスクロール、ツリーからファイルへ移動、クリックで折りたたみ、アプリ内検索、split ビュー](demo.gif)
+![diffdeck ビューア — git ステータスバッジ付きのファイルツリー、インライン画像 diff、シンタックスハイライトされた diff](screenshot.png)
 
 ## インストール
 

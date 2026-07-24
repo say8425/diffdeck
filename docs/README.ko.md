@@ -9,7 +9,7 @@ Pierre의 [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs)와 [`@p
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#라이선스)
 
-![diffdeck 뷰어 — git 상태 배지가 있는 파일 트리, 인라인 이미지 diff, 구문 강조된 diff](screenshot.png)
+![diffdeck 데모 — 대규모 diff 스크롤, 트리에서 파일로 이동, 클릭으로 접기, 인앱 검색, split 뷰](demo.gif)
 
 ## diffdeck란?
 
@@ -31,7 +31,7 @@ diff 렌더링 엔진이 제공하는 기능:
 
 이 엔진을 감싸는 인터랙티브 뷰어 chrome — 클릭으로 접기, 경로 복사, 인앱 검색, watch/자동 새로고침, working-tree-vs-base 모드 — 는 [cc-statusline](https://github.com/say8425/cc-statusline) 뷰어에서 왔으며, 현재는 diffdeck의 `apps/viewer/`에 있습니다.
 
-![diffdeck 데모 — 대규모 diff 스크롤, 트리에서 파일로 이동, 클릭으로 접기, 인앱 검색, split 뷰](demo.gif)
+![diffdeck 뷰어 — git 상태 배지가 있는 파일 트리, 인라인 이미지 diff, 구문 강조된 diff](screenshot.png)
 
 ## 설치
 

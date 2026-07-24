@@ -9,7 +9,7 @@
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#许可证)
 
-![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
+![diffdeck 演示 —— 滚动大型 diff、从文件树跳转到文件、点击折叠、应用内搜索、split 视图](demo.gif)
 
 ## 这是什么？
 
@@ -31,7 +31,7 @@ diff 渲染引擎提供的功能：
 
 包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及 working-tree 与 base 对比模式——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
 
-![diffdeck 演示 —— 滚动大型 diff、从文件树跳转到文件、点击折叠、应用内搜索、split 视图](demo.gif)
+![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
 
 ## 安装
 

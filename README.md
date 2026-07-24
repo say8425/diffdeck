@@ -9,7 +9,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
-![The diffdeck viewer — file tree with git-status badges, an inline image diff, and syntax-highlighted diffs](docs/screenshot.png)
+![diffdeck demo — scrolling a large diff, jumping to a file from the tree, click-to-fold, in-app search, and split view](docs/demo.gif)
 
 ## What is this?
 
@@ -31,7 +31,7 @@ What the diff-rendering engine provides:
 
 The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
 
-![diffdeck demo — scrolling a large diff, jumping to a file from the tree, click-to-fold, in-app search, and split view](docs/demo.gif)
+![The diffdeck viewer — file tree with git-status badges, an inline image diff, and syntax-highlighted diffs](docs/screenshot.png)
 
 ## Installation
 
