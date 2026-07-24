@@ -63,3 +63,24 @@ describe("createFileHeaderElement emits the contracted attributes", () => {
 		).toBeGreaterThan(0);
 	});
 });
+
+// NOTE: "data-prev-name" is not exported from packages/diffs/src/constants.ts
+// (unlike DIFFS_TITLE_ATTR), so apps/viewer/browser/main.ts reads it via a
+// local literal (PREV_NAME_ATTR). Pin it here so a rename in
+// createFileHeaderElement.ts is caught even without a shared constant.
+describe("createFileHeaderElement emits data-prev-name for renames", () => {
+	const header = createFileHeaderElement({
+		fileOrDiff: {
+			name: "src/renamed.ts",
+			prevName: "src/old-name.ts",
+			type: "change",
+			hunks: [],
+		} as never,
+		mode: "default",
+		stickyHeader: false,
+	});
+
+	test("a node carries data-prev-name", () => {
+		expect(nodesWithAttr(header, "data-prev-name").length).toBeGreaterThan(0);
+	});
+});
