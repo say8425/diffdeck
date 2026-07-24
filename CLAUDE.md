@@ -105,6 +105,7 @@ cd scripts/parity && python3 -m http.server 8099 # http://127.0.0.1:8099/index.h
 - **라이선스**: 각 `packages/*/LICENSE`(Apache-2.0) + `packages/trees/NOTICE.md`(headless-tree MIT 유래) + 최상위 `NOTICE` 보존. 파일 수정 사실 고지 유지.
 - **`*.css?inline` ambient 선언**: 소비자(앱)의 tsconfig가 패키지 `src/**`를 glob include하지 않으면 안 보임 — Plan 2 앱 tsconfig에서 배선 필요.
 - **cc-statusline 잔재 데드코드 제거됨**: `server/ensure.ts`(spawn-if-not-running 데몬 ensure)와 `server.ts`의 `idleTimeoutMs` idle-shutdown을 제거했다. diffdeck의 CLI는 서버를 **foreground**로 띄워 Ctrl+C로 종료하는 모델이라(cc-statusline처럼 statusline이 백그라운드 데몬을 spawn-if-not-running으로 관리하는 구조가 아님) 두 기능 모두 미사용 상태였다.
+- **CLI 플래그 변경 시 `skills/diffdeck/SKILL.md` 동기화 필수**: `apps/viewer/cli/args.ts`(파싱)·`cli.ts`(`--help` 텍스트)에 플래그를 추가·변경·삭제하면 `skills/diffdeck/SKILL.md`의 `## Options` 섹션도 같은 커밋에서 갱신한다. 이 파일은 `install-skill`로 `~/.claude/skills/`에 배포되고(`--codex` 시 `~/.agents/skills/`에도) Claude Code 플러그인은 `skills/` 디렉터리를 자동 스캔해 로드하는, 에이전트가 diffdeck를 구동할 때 참조하는 유일한 문서라 — CLI 표면과 조용히 드리프트하면 에이전트가 존재하는 옵션(`--untracked`/`--watch`/`--split` 등)을 모른 채 구동하게 된다. `apps/viewer/__tests__/skill-flags-parity.test.ts`가 `cli.ts`의 `HELP` Options 블록과 SKILL.md를 비교해 드리프트를 자동으로 잡아낸다.
 
 ### 로드맵 (각각 별도 sub-plan)
 

@@ -53,6 +53,13 @@ share the printed URL.
 
 - `--port <n>` — serve on a specific port (default 49573, or `$DIFFDECK_PORT`).
 - `--no-open` — don't open a browser; print the URL to share.
+- `--untracked` — start with untracked files included in the diff.
+- `--watch` — start with watch (auto-refresh) on.
+- `--no-flatten` — start with the file tree un-flattened (flatten is on by default).
+- `--tree-right` — start with the file tree on the right.
+- `--split` — start in split view (unified is the default).
+- `--hide-tree` — start with the file tree hidden.
+- `--fold-with-tree` — start with sidebar directory collapse synced to diff folds.
 
 ## Stopping
 
