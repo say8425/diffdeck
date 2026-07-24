@@ -11,7 +11,7 @@ import { buildDiffViewerUrl } from "./server/link.ts";
 import { prewarmDiff } from "./server/prewarm.ts";
 import { startDiffServer } from "./server/server.ts";
 
-const HELP = `diffdeck — local git diff viewer
+export const HELP = `diffdeck — local git diff viewer
 
 Usage:
   bunx @say8425/diffdeck [options]
