@@ -270,7 +270,11 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     // invariant. Partial (non-highlighted) and empty-window (collapsed,
     // zero-line) caches are still dropped, exactly as before — the latter
     // also naturally bounds memory: massive plain-text files never keep an
-    // AST. Regression net: retokenize-cache.e2e.ts.
+    // AST. One subtlety: renderDiff's argless default (diff =
+    // this.renderCache?.diff) now resolves to the retained diff after a
+    // recycle instead of undefined — audited all call sites (they all pass
+    // diff explicitly), but keep that in mind if an argless call ever
+    // appears. Regression net: retokenize-cache.e2e.ts.
     if (
       this.renderCache?.highlighted !== true ||
       this.renderCache.emptyWindow === true
