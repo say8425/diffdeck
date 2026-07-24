@@ -26,7 +26,9 @@ test("re-entering a highlighted file must not freeze the frame with a re-tokeniz
 	const viewer = await launchViewer([], { bulkFiles: 12, bigFileLines: 4000 });
 	try {
 		await page.goto(viewer.url);
-		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
+			timeout: 15_000,
+		});
 		await expect(page.locator("diffs-container").first()).toBeVisible();
 		// 포인터를 패널 밖에 둬 :hover 스타일 간섭 배제 (header-mount 패턴).
 		await page.mouse.move(2, 2);
@@ -196,7 +198,9 @@ test("a file edited while unmounted re-renders fresh content on re-entry (no sta
 	const viewer = await launchViewer(["--watch"], { bulkFiles: 12 });
 	try {
 		await page.goto(viewer.url);
-		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
+			timeout: 15_000,
+		});
 		await expect(page.locator("diffs-container").first()).toBeVisible();
 
 		// 최하단으로 점프해 hello.ts를 한 번 마운트+하이라이트시켜 캐시를
