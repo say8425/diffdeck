@@ -157,7 +157,10 @@ let fileTree: FileTree | null = null;
 // 싱글톤을 terminate하고 workerManager를 undefined로 되돌린 뒤, renderPatch의
 // 기존 재구성 경로(codeView를 null로 비우면 다음 renderPatch 호출의 `!codeView`
 // 분기가 CodeView를 새로 만든다)를 그대로 재사용해 마지막 데이터를 non-worker
-// 동기 경로로 다시 렌더한다.
+// 동기 경로로 다시 렌더한다. Worker 'error'는 스크립트 로드 실패뿐 아니라 워커 내
+// 미처리 런타임 예외에도 발화한다 — 그 경우에도 결과는 동기 경로로의 보수적
+// 강등이라 안전하다(워커 내 메시지 처리 에러는 handleMessage의 try/catch가
+// 프로토콜 응답으로 흡수하므로 실제 발화는 드물다).
 let workerLoadRecovered = false;
 
 const recoverFromWorkerLoadFailure = (): void => {
