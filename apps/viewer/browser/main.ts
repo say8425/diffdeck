@@ -230,6 +230,22 @@ const ensureCopyButton = (container: HTMLElement): void => {
 	title.after(createCopyButton(fileId));
 };
 
+// [data-title]/[data-prev-name]의 <bdi> 텍스트는 CSS ellipsis로 시각적으로만
+// 잘린다 — hover 시 전체 경로가 보이도록 title 속성을 렌더마다 동기화한다
+// (idempotent 체크 없이 매번 갱신: 가상화 recycle이 노드를 재사용하며
+// textContent만 바꾸는 경우, 이전 파일명이 남은 stale title이 될 수 있어서).
+const PREV_NAME_ATTR = "data-prev-name";
+const syncTitleTooltip = (root: Element | ShadowRoot, attr: string): void => {
+	const el = root.querySelector<HTMLElement>(`[${attr}]`);
+	const text = el?.textContent;
+	if (el && text && el.title !== text) el.title = text;
+};
+const ensureTitleTooltips = (container: HTMLElement): void => {
+	const root = container.shadowRoot ?? container;
+	syncTitleTooltip(root, DIFFS_TITLE_ATTR);
+	syncTitleTooltip(root, PREV_NAME_ATTR);
+};
+
 // 이미지 아이템 컨테이너에 Old/New 카드를 주입/제거 (onPostRender에서 호출).
 const syncImageCard = (container: HTMLElement): void => {
 	const fileId = containerFileId(container);
@@ -269,6 +285,7 @@ const codeViewOptions = (): ConstructorParameters<
 			(node.closest?.(DIFFS_TAG_NAME) as HTMLElement | null) ?? node;
 		highlightContainer(container);
 		ensureCopyButton(container);
+		ensureTitleTooltips(container);
 		syncImageCard(container);
 	},
 	unsafeCSS:
