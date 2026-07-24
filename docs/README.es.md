@@ -9,7 +9,7 @@ Un visor de diff local, construido sobre un fork vendorizado de los paquetes de 
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#licencia)
 
-![diffdeck renderizando un diff grande de múltiples archivos con resaltado de sintaxis y un árbol de archivos profundo y aplanado](screenshot.png)
+![El visor de diffdeck — árbol de archivos con insignias de estado de git, diff de imagen en línea y diffs con resaltado de sintaxis](screenshot.png)
 
 ## ¿Qué es esto?
 
@@ -19,7 +19,7 @@ El resultado es un monorepo de workspaces de Bun donde un motor de diff sólido 
 
 ## Características
 
-Lo que ofrece el motor de renderizado de diffs (todo demostrado en el render de arriba):
+Lo que ofrece el motor de renderizado de diffs:
 
 - **Diffs con resaltado de sintaxis** vía [Shiki](https://shiki.style/) con temas TextMate (claro + oscuro).
 - **Diffs completos de archivo old/new**, no solo patches — de modo que el contexto sin cambios puede colapsarse y **expandirse bajo demanda**.
@@ -30,6 +30,8 @@ Lo que ofrece el motor de renderizado de diffs (todo demostrado en el render de 
 - **Encapsulación con Shadow DOM** por archivo, de modo que los estilos del visor nunca se filtran a la página.
 
 El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada, watch/auto-actualización, y modos working-tree-vs-base — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck.
+
+![Demo de diffdeck — desplazamiento por un diff grande, salto a un archivo desde el árbol, plegado con clic, búsqueda integrada y vista split](demo.gif)
 
 ## Instalación
 
@@ -158,7 +160,7 @@ Tres carriles:
 
 ### Arnés de paridad de renderizado
 
-Reproduce la captura de pantalla de arriba — confirma que el `CodeView` + `FileTree` bifurcados realmente renderizan:
+Confirma que el `CodeView` + `FileTree` bifurcados realmente renderizan:
 
 ```bash
 bun run scripts/parity/build.ts

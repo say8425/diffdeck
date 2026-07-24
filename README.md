@@ -9,7 +9,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
-![diffdeck rendering a large multi-file diff with syntax highlighting and a deep, flattened file tree](docs/screenshot.png)
+![The diffdeck viewer — file tree with git-status badges, an inline image diff, and syntax-highlighted diffs](docs/screenshot.png)
 
 ## What is this?
 
@@ -19,7 +19,7 @@ The result is a Bun-workspace monorepo where a commodity-hard, framework-agnosti
 
 ## Features
 
-What the diff-rendering engine provides (all demonstrated by the render above):
+What the diff-rendering engine provides:
 
 - **Syntax-highlighted diffs** via [Shiki](https://shiki.style/) with TextMate themes (light + dark).
 - **Full old/new file diffs**, not just patches — so unchanged context can be collapsed and **expanded on demand**.
@@ -30,6 +30,8 @@ What the diff-rendering engine provides (all demonstrated by the render above):
 - **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
 
 The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
+
+![diffdeck demo — scrolling a large diff, jumping to a file from the tree, click-to-fold, in-app search, and split view](docs/demo.gif)
 
 ## Installation
 
@@ -176,7 +178,7 @@ Three lanes:
 
 ### Render-parity harness
 
-Reproduces the screenshot above — confirms the forked `CodeView` + `FileTree` actually render:
+Confirms the forked `CodeView` + `FileTree` actually render:
 
 ```bash
 bun run scripts/parity/build.ts
