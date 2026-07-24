@@ -9,7 +9,7 @@ Un visor de diff local, construido sobre un fork vendorizado de los paquetes de 
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#licencia)
 
-![El visor de diffdeck — árbol de archivos con insignias de estado de git, diff de imagen en línea y diffs con resaltado de sintaxis](screenshot.png)
+![Demo de diffdeck — desplazamiento por un diff grande, salto a un archivo desde el árbol, plegado con clic, búsqueda integrada y vista split](demo.gif)
 
 ## ¿Qué es esto?
 
@@ -31,7 +31,7 @@ Lo que ofrece el motor de renderizado de diffs:
 
 El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada, watch/auto-actualización, y modos working-tree-vs-base — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck.
 
-![Demo de diffdeck — desplazamiento por un diff grande, salto a un archivo desde el árbol, plegado con clic, búsqueda integrada y vista split](demo.gif)
+![El visor de diffdeck — árbol de archivos con insignias de estado de git, diff de imagen en línea y diffs con resaltado de sintaxis](screenshot.png)
 
 ## Instalación
 
