@@ -164,3 +164,37 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		await viewer.stop();
 	}
 });
+
+test("viewer renders highlighted output even when the worker script fails to load", async ({
+	page,
+}) => {
+	// 폴백 불변식: 워커가 죽으면(스크립트 404/차단 → 풀 비가동) 엔진이
+	// non-worker 동기 경로로 렌더한다 — 뷰어는 여전히 하이라이트된 diff를
+	// 보여줘야 한다. 워커 요청을 route로 차단해 재현한다.
+	await page.route("**/worker.js", (route) => route.abort());
+	const viewer = await launchViewer([]);
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
+			timeout: 15_000,
+		});
+		// 기본 픽스처의 hello.ts가 하이라이트되어 렌더된다 (span[style] 존재).
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() =>
+						[...document.querySelectorAll("diffs-container")].some(
+							(c) =>
+								(c.shadowRoot?.textContent ?? "").includes("hello, world") &&
+								c.shadowRoot
+									?.querySelector("pre")
+									?.querySelector("span[style]") != null,
+						),
+					),
+				{ timeout: 20_000 },
+			)
+			.toBe(true);
+	} finally {
+		await viewer.stop();
+	}
+});

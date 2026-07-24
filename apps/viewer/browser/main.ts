@@ -6,6 +6,7 @@ import {
 	type FileDiffMetadata,
 	getOrCreateWorkerPoolSingleton,
 	parseDiffFromFile,
+	terminateWorkerPoolSingleton,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
 import {
@@ -138,18 +139,48 @@ let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
 
 // 워커 하이라이트 풀: 토크나이즈를 메인스레드 밖으로 — 파일 진입 시 plain이
-// 즉시 그려지고 색은 워커 완료 시 입혀진다. 생성 실패 시 undefined로 두면
-// 엔진이 기존 non-worker 동기 경로로 동작한다(폴백 불변식).
+// 즉시 그려지고 색은 워커 완료 시 입혀진다.
 // poolSize 2: 로컬 단일 사용자 — 목적은 처리량이 아니라 스파이크 제거이고
 // 워커마다 shiki 문법 메모리가 중복된다.
-const workerManager = (() => {
+//
+// 폴백 불변식의 실제 메커니즘: 동기 생성 실패(Worker 생성자 자체가 던지는 경우)는
+// 아래 try/catch가 잡아 workerManager를 처음부터 undefined로 남긴다 — 이 경우는
+// 엔진이 알아서 non-worker 동기 경로로 동작한다. 하지만 워커 *스크립트*의 비동기
+// 로드 실패(네트워크 차단·404 등)는 엔진 스스로 감지하지 못한다: vendored
+// WorkerPoolManager의 worker 'error' 리스너는 로그만 남기고 그 워커의 init
+// promise를 정리/거부하지 않으므로 initialize()의 Promise.all이 영구 pending으로
+// 남고, isWorkingPool()은 계속 true를 반환하며 메인 하이라이터도 끝내 할당되지
+// 않아 diff 본문이 영구 공백으로 렌더된다(실측: worker-highlight.e2e.ts의 "...
+// fails to load" 케이스). 그래서 이 비동기 실패는 엔진이 아니라 여기 앱 레벨
+// 워치독이 담당한다: workerFactory가 만든 각 Worker에 'error' 리스너를 달아 두고,
+// 첫 발생 시(poolSize 2라 최대 2번 온다 — workerLoadRecovered로 1회만 처리) 풀
+// 싱글톤을 terminate하고 workerManager를 undefined로 되돌린 뒤, renderPatch의
+// 기존 재구성 경로(codeView를 null로 비우면 다음 renderPatch 호출의 `!codeView`
+// 분기가 CodeView를 새로 만든다)를 그대로 재사용해 마지막 데이터를 non-worker
+// 동기 경로로 다시 렌더한다.
+let workerLoadRecovered = false;
+
+const recoverFromWorkerLoadFailure = (): void => {
+	if (workerLoadRecovered) return;
+	workerLoadRecovered = true;
+	terminateWorkerPoolSingleton();
+	workerManager = undefined;
+	codeView?.cleanUp();
+	codeView = null;
+	if (lastFiles) renderPatch(lastFiles);
+};
+
+let workerManager = (() => {
 	try {
 		return getOrCreateWorkerPoolSingleton({
 			poolOptions: {
-				workerFactory: () =>
-					new Worker(new URL("worker.js", import.meta.url), {
+				workerFactory: () => {
+					const worker = new Worker(new URL("worker.js", import.meta.url), {
 						type: "module",
-					}),
+					});
+					worker.addEventListener("error", recoverFromWorkerLoadFailure);
+					return worker;
+				},
 				poolSize: 2,
 			},
 			// 워커 자체 기본값(worker.ts:34-40)이 메인스레드 기대 옵션과 일치함을
