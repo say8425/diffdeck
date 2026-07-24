@@ -153,3 +153,51 @@ test("fast scrolling never paints a headerless file in the diff pane", async ({
 		await viewer.stop();
 	}
 });
+
+test("fallback (non-worker) path: fast scrolling never paints a headerless file", async ({
+	page,
+}) => {
+	// 워커 배선 이후 위 테스트는 워커 경로(plain 동기 렌더 — blink가 설계상
+	// 불가능)에서 돈다. Foundation 예외 1호(recycle의 하이라이터 동기 재획득)는
+	// non-worker 경로 전용 이탈이므로, 워커 스크립트 로드를 route.abort()로
+	// 차단해 앱 워치독(recoverFromWorkerLoadFailure)의 non-worker 폴백을
+	// 강제한 뒤 동일한 극한 플링 프로브를 반복한다 — 예외 1호의 회귀망은 이
+	// 테스트다.
+	await page.route("**/worker.js", (route) => route.abort());
+	const viewer = await launchViewer([], { bulkFiles: 16 });
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
+			timeout: 15_000,
+		});
+		await expect(page.locator("diffs-container").first()).toBeVisible();
+		// 워치독 복구(CodeView 재구성 → non-worker 동기 하이라이트)가 끝났음을
+		// 하이라이트된 span으로 확인한 뒤에 프로브를 시작한다 — 복구 도중의
+		// 재구성 프레임을 극한 프로브가 오탐하지 않게 한다.
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() =>
+						[...document.querySelectorAll("diffs-container")].some(
+							(c) =>
+								c.shadowRoot
+									?.querySelector("pre")
+									?.querySelector("span[style]") != null,
+						),
+					),
+				{ timeout: 20_000 },
+			)
+			.toBe(true);
+		await page.mouse.move(2, 2);
+
+		// 위 첫 테스트의 800px/frame 극한 프로브와 동일 강도 — non-worker
+		// 경로에서도 recycle이 헤더 없는 프레임을 만들지 않는지 확인한다.
+		const extreme = await probeScroll(page, 800, 40);
+		expect(extreme.hitBottom).toBe(false);
+		expect(extreme.scrolled).toBe(800 * 40);
+		expect(extreme.filesMounted).toBeGreaterThanOrEqual(4);
+		expect(extreme.defectiveFrames).toBe(0);
+	} finally {
+		await viewer.stop();
+	}
+});
