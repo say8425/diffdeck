@@ -12,6 +12,8 @@
 //
 // 프로브: big.ts가 하이라이트된 상태에서 최하단으로 점프해 언마운트(=recycle)
 // 시킨 뒤, 원위치로 점프해 재마운트되는 120 rAF 동안 최대 프레임 간격을 잰다.
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 test("re-entering a highlighted file must not freeze the frame with a re-tokenize", async ({
@@ -177,6 +179,101 @@ test("re-entering a highlighted file must not freeze the frame with a re-tokeniz
 		// 60fps 정상 프레임 ~16ms, 캐시 렌더(윈도우 분량 DOM 마운트)는 CI에서도
 		// 수십 ms. 8천 줄 동기 재토크나이즈(수백 ms)와 차원이 다른 250ms 상한.
 		expect(reentryMaxGapMs).toBeLessThan(250);
+	} finally {
+		await viewer.stop();
+	}
+});
+
+test("a file edited while unmounted re-renders fresh content on re-entry (no stale cache)", async ({
+	page,
+}) => {
+	// 캐시 보존의 유일한 실질 회귀 시나리오: 화면 밖(언마운트 = recycle로
+	// 캐시가 보존된 상태)에서 파일이 바뀌었는데, 재진입 렌더가 보존된 옛
+	// AST를 그대로 내보내는 것. renderDiff의 areDiffTargetsEqual 검증이
+	// 이를 막는다는 계약을 실브라우저로 고정한다.
+	// bulk 12개(≈11만 px)가 hello.ts(정렬상 최하단)를 초기 뷰포트+오버스캔
+	// 밖에 두므로, 첫 화면에서 hello.ts는 언마운트 상태다.
+	const viewer = await launchViewer(["--watch"], { bulkFiles: 12 });
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+		await expect(page.locator("diffs-container").first()).toBeVisible();
+
+		// 최하단으로 점프해 hello.ts를 한 번 마운트+하이라이트시켜 캐시를
+		// 만든 뒤, 다시 최상단으로 — recycle이 캐시를 보존한 상태를 만든다.
+		await page.evaluate(() => {
+			const scroller = document.getElementById("diff") as HTMLElement;
+			scroller.scrollTop = scroller.scrollHeight;
+		});
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() =>
+						[...document.querySelectorAll("diffs-container")].some((el) =>
+							(el.shadowRoot?.textContent ?? "").includes("hello, world"),
+						),
+					),
+				{ timeout: 15_000 },
+			)
+			.toBe(true);
+		await page.evaluate(() => {
+			const scroller = document.getElementById("diff") as HTMLElement;
+			scroller.scrollTop = 0;
+		});
+		// hello.ts 언마운트(recycle 실행) 확인.
+		await expect
+			.poll(
+				() =>
+					page.evaluate(
+						() =>
+							![...document.querySelectorAll("diffs-container")].some(
+								(el) =>
+									el.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ===
+									"src/hello.ts",
+							),
+					),
+				{ timeout: 15_000 },
+			)
+			.toBe(true);
+
+		// 언마운트 상태에서 워킹트리 편집 → 다음 폴(2s)이 200으로 새 payload를
+		// 받는다 (watch-refresh.e2e.ts와 동일 계약).
+		writeFileSync(
+			join(viewer.repoDir, "src", "hello.ts"),
+			'export const hello = (): string => "hello, recycled world";\n',
+		);
+		await page.waitForResponse(
+			(res) => res.url().includes("/api/diff") && res.status() === 200,
+			{ timeout: 15_000 },
+		);
+
+		// 재진입: 최하단으로 되돌아가면 보존된 캐시가 아니라 새 diff가
+		// 렌더돼야 한다.
+		await page.evaluate(() => {
+			const scroller = document.getElementById("diff") as HTMLElement;
+			scroller.scrollTop = scroller.scrollHeight;
+		});
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() =>
+						[...document.querySelectorAll("diffs-container")].some((el) =>
+							(el.shadowRoot?.textContent ?? "").includes(
+								"hello, recycled world",
+							),
+						),
+					),
+				{ timeout: 15_000 },
+			)
+			.toBe(true);
+		// 옛 내용이 남아 있으면 안 된다.
+		expect(
+			await page.evaluate(() =>
+				[...document.querySelectorAll("diffs-container")].some((el) =>
+					(el.shadowRoot?.textContent ?? "").includes('"hello, world"'),
+				),
+			),
+		).toBe(false);
 	} finally {
 		await viewer.stop();
 	}
