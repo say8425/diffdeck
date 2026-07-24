@@ -143,10 +143,22 @@ let fileTree: FileTree | null = null;
 // poolSize 2: 로컬 단일 사용자 — 목적은 처리량이 아니라 스파이크 제거이고
 // 워커마다 shiki 문법 메모리가 중복된다.
 //
-// 폴백 불변식의 실제 메커니즘: 동기 생성 실패(Worker 생성자 자체가 던지는 경우)는
-// 아래 try/catch가 잡아 workerManager를 처음부터 undefined로 남긴다 — 이 경우는
-// 엔진이 알아서 non-worker 동기 경로로 동작한다. 하지만 워커 *스크립트*의 비동기
-// 로드 실패(네트워크 차단·404 등)는 엔진 스스로 감지하지 못한다: vendored
+// 폴백 불변식의 실제 메커니즘: 아래 try/catch는 "동기 생성 실패를 잡아
+// workerManager를 undefined로 남긴다"는 방어처럼 보이지만, 실제로는 그 역할을
+// 거의 하지 못하는 방어적 장식이다 — JS 스펙상 async 함수 안의 throw는 (첫
+// await 이전이라도) 호출자에게 동기 전파되지 않고 그 함수가 반환하는 Promise의
+// reject로만 흡수된다. workerFactory()(= new Worker(...))는 WorkerPoolManager
+// 생성자 → queueInitialization → initialize() → (Promise executor 안의) 비동기
+// IIFE → initializeWorkers()로 이어지는 체인 안에서 호출되는데, 이 체인의 모든
+// 단계가 async 함수이므로 Worker 생성자가 던져도 그 예외는 체인 안에서
+// 흡수되고 new WorkerPoolManager(...) 호출 자체는 절대 동기적으로 던지지
+// 않는다. 실제 세이프티넷은 두 갈래다: ① 엔진 내부 initialize()의 catch가
+// (비동기적으로) workersFailed=true를 세워 isWorkingPool()이 false가 되는
+// 경로 — DiffHunksRenderer/FileRenderer 생성자(및 그 외 isWorkingPool 체크
+// 지점)가 이를 보고 non-worker로 구성되므로, initializeWorkers 내부의
+// 프로토콜류 실패는 이 경로로 커버된다. ② 워커 *스크립트*의 비동기 로드 실패
+// (네트워크 차단·404 등)는 위 경로로 잡히지 않는다 — 엔진 스스로 감지하지
+// 못한다: vendored
 // WorkerPoolManager의 worker 'error' 리스너는 로그만 남기고 그 워커의 init
 // promise를 정리/거부하지 않으므로 initialize()의 Promise.all이 영구 pending으로
 // 남고, isWorkingPool()은 계속 true를 반환하며 메인 하이라이터도 끝내 할당되지
