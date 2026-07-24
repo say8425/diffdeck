@@ -168,9 +168,10 @@ test("first entry into the overscan window must not freeze the frame", async ({
 test("viewer renders highlighted output even when the worker script fails to load", async ({
 	page,
 }) => {
-	// 폴백 불변식: 워커가 죽으면(스크립트 404/차단 → 풀 비가동) 엔진이
-	// non-worker 동기 경로로 렌더한다 — 뷰어는 여전히 하이라이트된 diff를
-	// 보여줘야 한다. 워커 요청을 route로 차단해 재현한다.
+	// 폴백: 워커 스크립트 로드가 실패하면(404/차단) 엔진은 이를 감지하지 못해
+	// diff가 영구 공백이 된다 — main.ts의 앱 레벨 워치독(recoverFromWorkerLoadFailure)이
+	// error 이벤트에서 풀을 종료하고 CodeView를 workerManager 없이 재구성해
+	// non-worker 동기 경로로 복구한다. 워커 요청을 route로 차단해 그 복구를 검증한다.
 	await page.route("**/worker.js", (route) => route.abort());
 	const viewer = await launchViewer([]);
 	try {

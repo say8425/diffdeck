@@ -7,8 +7,8 @@
 // constructor could re-acquire it synchronously (:228-232). So on re-mount
 // renderDiff() returns null, and FileDiff.render() appends the (empty) <pre>
 // at FileDiff.ts:859 and then bails at :885 — above applyHeaderToDOM at :896.
-// (The viewer never passes a workerManager — main.ts constructs CodeView with
-// one argument — so it is always on the branch where that highlighter matters.)
+// (The viewer now injects a workerManager; this highlighter branch is the
+// non-worker FALLBACK path, still exercised when worker creation fails.)
 // The file is therefore mounted headerless and 0-height until an async
 // highlight lands a couple of frames later. The engine hides that gap by
 // rendering ahead of the viewport (VirtualizerConfig.overscrollSize: "extra
