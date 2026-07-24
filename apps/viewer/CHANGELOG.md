@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0](https://github.com/say8425/diffdeck/compare/diffdeck-v0.3.0...diffdeck-v1.0.0) (2026-07-24)
+
+
+### Features
+
+* **viewer:** add draggable sidebar resize ([#13](https://github.com/say8425/diffdeck/issues/13)) ([f5879d7](https://github.com/say8425/diffdeck/commit/f5879d7da63bcdd9349e733c23f856790f7b0bf0))
+* **viewer:** sync sidebar directory collapse to diff fold state ([#14](https://github.com/say8425/diffdeck/issues/14)) ([5a0bf71](https://github.com/say8425/diffdeck/commit/5a0bf71db7e0bba3d1302e599717c705c8420e9c))
+
+
+### Bug Fixes
+
+* **viewer:** plug findBar listener leak, fix un-awaited rejection assertions, harden test isolation ([#20](https://github.com/say8425/diffdeck/issues/20)) ([2101323](https://github.com/say8425/diffdeck/commit/2101323beee7fb705617bf19cf5392475c5a0dd3))
+* **viewer:** stop diff content going empty/garbled for non-ASCII filenames ([#17](https://github.com/say8425/diffdeck/issues/17)) ([7ce05be](https://github.com/say8425/diffdeck/commit/7ce05beec5f4d83bfa547c2a001dfe95e8a56355))
+* **viewer:** tooltip for truncated diff header filenames ([#23](https://github.com/say8425/diffdeck/issues/23)) ([afc35e3](https://github.com/say8425/diffdeck/commit/afc35e39b7a896c1386429dec4a76229d7a800ab))
+
 ## [0.3.0](https://github.com/say8425/diffdeck/compare/diffdeck-v0.2.2...diffdeck-v0.3.0) (2026-07-22)
 
 
