@@ -43,6 +43,22 @@ if (!viewer.success) {
 	process.exit(1);
 }
 
+// 워커 하이라이트 번들: vendored 워커 엔트리를 별도 모듈 워커로 빌드한다.
+// main.ts의 workerFactory가 new URL("worker.js", import.meta.url)로 로드.
+// worker.ts는 css를 import하지 않으므로 css-inline 플러그인은 불필요하다(viewer
+// 번들 블록에서 복붙됐던 흔적).
+const worker = await Bun.build({
+	entrypoints: [`${import.meta.dir}/../../packages/diffs/src/worker/worker.ts`],
+	target: "browser",
+	outdir: `${dist}/viewer`,
+	minify: true,
+});
+for (const log of worker.logs) console.log(log);
+if (!worker.success) {
+	console.error("worker build failed");
+	process.exit(1);
+}
+
 await Bun.write(
 	`${dist}/viewer/index.html`,
 	Bun.file(`${import.meta.dir}/index.html`),

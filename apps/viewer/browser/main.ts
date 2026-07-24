@@ -4,7 +4,9 @@ import {
 	DIFFS_TAG_NAME,
 	DIFFS_TITLE_ATTR,
 	type FileDiffMetadata,
+	getOrCreateWorkerPoolSingleton,
 	parseDiffFromFile,
+	terminateWorkerPoolSingleton,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
 import {
@@ -135,6 +137,75 @@ let foldWithTree: boolean = resolveFoldWithTree(params.get("foldtree"), (k) =>
 let treeWidth: number = readTreeWidth((k) => localStorage.getItem(k));
 let codeView: CodeView | null = null;
 let fileTree: FileTree | null = null;
+
+// 워커 하이라이트 풀: 토크나이즈를 메인스레드 밖으로 — 파일 진입 시 plain이
+// 즉시 그려지고 색은 워커 완료 시 입혀진다.
+// poolSize 2: 로컬 단일 사용자 — 목적은 처리량이 아니라 스파이크 제거이고
+// 워커마다 shiki 문법 메모리가 중복된다.
+//
+// 폴백 불변식의 실제 메커니즘: 아래 try/catch는 "동기 생성 실패를 잡아
+// workerManager를 undefined로 남긴다"는 방어처럼 보이지만, 실제로는 그 역할을
+// 거의 하지 못하는 방어적 장식이다 — JS 스펙상 async 함수 안의 throw는 (첫
+// await 이전이라도) 호출자에게 동기 전파되지 않고 그 함수가 반환하는 Promise의
+// reject로만 흡수된다. workerFactory()(= new Worker(...))는 WorkerPoolManager
+// 생성자 → queueInitialization → initialize() → (Promise executor 안의) 비동기
+// IIFE → initializeWorkers()로 이어지는 체인 안에서 호출되는데, 이 체인의 모든
+// 단계가 async 함수이므로 Worker 생성자가 던져도 그 예외는 체인 안에서
+// 흡수되고 new WorkerPoolManager(...) 호출 자체는 절대 동기적으로 던지지
+// 않는다. 실제 세이프티넷은 두 갈래다: ① 엔진 내부 initialize()의 catch가
+// (비동기적으로) workersFailed=true를 세워 isWorkingPool()이 false가 되는
+// 경로 — DiffHunksRenderer/FileRenderer 생성자(및 그 외 isWorkingPool 체크
+// 지점)가 이를 보고 non-worker로 구성되므로, initializeWorkers 내부의
+// 프로토콜류 실패는 이 경로로 커버된다. ② 워커 *스크립트*의 비동기 로드 실패
+// (네트워크 차단·404 등)는 위 경로로 잡히지 않는다 — 엔진 스스로 감지하지
+// 못한다: vendored
+// WorkerPoolManager의 worker 'error' 리스너는 로그만 남기고 그 워커의 init
+// promise를 정리/거부하지 않으므로 initialize()의 Promise.all이 영구 pending으로
+// 남고, isWorkingPool()은 계속 true를 반환하며 메인 하이라이터도 끝내 할당되지
+// 않아 diff 본문이 영구 공백으로 렌더된다(실측: worker-highlight.e2e.ts의 "...
+// fails to load" 케이스). 그래서 이 비동기 실패는 엔진이 아니라 여기 앱 레벨
+// 워치독이 담당한다: workerFactory가 만든 각 Worker에 'error' 리스너를 달아 두고,
+// 첫 발생 시(poolSize 2라 최대 2번 온다 — workerLoadRecovered로 1회만 처리) 풀
+// 싱글톤을 terminate하고 workerManager를 undefined로 되돌린 뒤, renderPatch의
+// 기존 재구성 경로(codeView를 null로 비우면 다음 renderPatch 호출의 `!codeView`
+// 분기가 CodeView를 새로 만든다)를 그대로 재사용해 마지막 데이터를 non-worker
+// 동기 경로로 다시 렌더한다. Worker 'error'는 스크립트 로드 실패뿐 아니라 워커 내
+// 미처리 런타임 예외에도 발화한다 — 그 경우에도 결과는 동기 경로로의 보수적
+// 강등이라 안전하다(워커 내 메시지 처리 에러는 handleMessage의 try/catch가
+// 프로토콜 응답으로 흡수하므로 실제 발화는 드물다).
+let workerLoadRecovered = false;
+
+const recoverFromWorkerLoadFailure = (): void => {
+	if (workerLoadRecovered) return;
+	workerLoadRecovered = true;
+	terminateWorkerPoolSingleton();
+	workerManager = undefined;
+	codeView?.cleanUp();
+	codeView = null;
+	if (lastFiles) renderPatch(lastFiles);
+};
+
+let workerManager = (() => {
+	try {
+		return getOrCreateWorkerPoolSingleton({
+			poolOptions: {
+				workerFactory: () => {
+					const worker = new Worker(new URL("worker.js", import.meta.url), {
+						type: "module",
+					});
+					worker.addEventListener("error", recoverFromWorkerLoadFailure);
+					return worker;
+				},
+				poolSize: 2,
+			},
+			// 워커 자체 기본값(worker.ts:34-40)이 메인스레드 기대 옵션과 일치함을
+			// Step 4에서 대조 확인했다 — 불일치 필드가 있으면 여기에 명시한다.
+			highlighterOptions: {},
+		});
+	} catch {
+		return undefined;
+	}
+})();
 
 // 마지막 200 응답의 ETag(폴링 304 조건부 요청용)와 파일 목록(스타일/flatten
 // 토글처럼 서버 데이터가 그대로인 재렌더에 재사용).
@@ -508,7 +579,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	if (!codeView || renderedDiffStyle !== diffStyle) {
 		codeView?.cleanUp();
 		diffMount.replaceChildren();
-		codeView = new CodeView(codeViewOptions());
+		codeView = new CodeView(codeViewOptions(), workerManager);
 		// Render further ahead of the viewport than CodeView's 200px default.
 		// The old headerless-remount blink is cured at the source — the forked
 		// DiffHunksRenderer.recycle() re-acquires the shared highlighter
