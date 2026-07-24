@@ -4,7 +4,6 @@
 		"apps/viewer": {
 			"release-type": "node",
 			"package-name": "@say8425/diffdeck",
-			"release-as": "1.0.0",
 			"extra-files": [
 				{
 					"type": "json",
