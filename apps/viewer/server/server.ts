@@ -208,6 +208,12 @@ export const startDiffServer = (opts: {
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
+		// Bun.serve 기본 idleTimeout(10초)은 콜드스타트 자원 경합(브라우저 기동
+		// + prewarm git 서브프로세스 버스트)으로 첫 diff 응답이 10초를 넘는 순간
+		// 커넥션을 강제 종료한다("request timed out after 10 seconds"). 클라이언트
+		// fetchDiff엔 재시도가 없어 뷰어가 "Loading…"에 영구 고착되는 행이 됐다
+		// (경합 시 간헐 재현). 평시 응답은 1초대이므로 60초는 순수 여유분이다.
+		idleTimeout: 60,
 		fetch: handler,
 	});
 	if (existing == null) persistToken(token, env);
