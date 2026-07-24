@@ -9,7 +9,7 @@
 [![Bun](https://img.shields.io/badge/Bun-black?style=flat&logo=bun)](https://bun.sh)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#许可证)
 
-![diffdeck 渲染带语法高亮的大型多文件 diff 及扁平化的深层文件树](screenshot.png)
+![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
 
 ## 这是什么？
 
@@ -19,7 +19,7 @@ diffdeck 最初是内置在 [cc-statusline](https://github.com/say8425/cc-status
 
 ## 功能
 
-diff 渲染引擎提供的功能（以上渲染效果均已展示）：
+diff 渲染引擎提供的功能：
 
 - **语法高亮 diff**：通过 [Shiki](https://shiki.style/) 实现，支持 TextMate 主题（浅色 + 深色）。
 - **完整的新旧文件 diff**，而非仅有 patch —— 未变更的上下文可以折叠，并可**按需展开**。
@@ -30,6 +30,8 @@ diff 渲染引擎提供的功能（以上渲染效果均已展示）：
 - **每个文件独立的 Shadow DOM 封装**，确保查看器的样式不会泄漏到页面中。
 
 包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及 working-tree 与 base 对比模式——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
+
+![diffdeck 演示 —— 滚动大型 diff、从文件树跳转到文件、点击折叠、应用内搜索、split 视图](demo.gif)
 
 ## 安装
 
@@ -158,7 +160,7 @@ bun run format      # oxfmt
 
 ### 渲染一致性验证工具
 
-复现上方截图效果——用于确认 fork 出来的 `CodeView` + `FileTree` 确实能够正常渲染：
+用于确认 fork 出来的 `CodeView` + `FileTree` 确实能够正常渲染：
 
 ```bash
 bun run scripts/parity/build.ts
