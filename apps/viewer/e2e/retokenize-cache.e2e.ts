@@ -4,11 +4,13 @@
 // CodeView는 파일이 오버스캔 윈도우를 벗어나면 releaseRenderedItem →
 // FileDiff.cleanUp(true) → DiffHunksRenderer.recycle()로 인스턴스를 재활용
 // 하는데, recycle()이 토크나이즈된 AST(renderCache)까지 폐기하면 재진입
-// 마운트 프레임에서 파일 전체(양쪽)를 메인 스레드에서 동기 재토크나이즈한다
-// (뷰어는 workerManager를 넘기지 않으므로 항상 non-worker 경로). 4천 줄
-// 파일이면 수백 ms 프리징 — 스크롤을 되돌릴 때마다 반복된다. 수정: recycle이
-// 하이라이트 완료된 캐시를 보존한다 (스테일은 renderDiff의 diff/options
-// 동등성 검증이 자동 무효화 — watch 가드는 이 파일의 두 번째 테스트).
+// 마운트 프레임에서 파일 전체(양쪽)를 메인 스레드에서 동기 재토크나이즈한다.
+// (뷰어는 이제 workerManager를 주입한다 — non-worker 경로는 워커 로드 실패 시
+// 앱 워치독이 복구하는 폴백이다. 캐시 보존은 양쪽 경로에서 동일하게 동작한다.)
+// 4천 줄 파일이면 수백 ms 프리징 — 스크롤을 되돌릴 때마다 반복된다. 수정:
+// recycle이 하이라이트 완료된 캐시를 보존한다 (스테일은 renderDiff의
+// diff/options 동등성 검증이 자동 무효화 — watch 가드는 이 파일의 두 번째
+// 테스트).
 //
 // 프로브: big.ts가 하이라이트된 상태에서 최하단으로 점프해 언마운트(=recycle)
 // 시킨 뒤, 원위치로 점프해 재마운트되는 120 rAF 동안 최대 프레임 간격을 잰다.
