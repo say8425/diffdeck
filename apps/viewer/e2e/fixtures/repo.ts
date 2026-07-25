@@ -64,14 +64,22 @@ export interface FixtureRepoOptions {
 	 * apps/viewer/server/diff.ts's `parseNameStatusZ`).
 	 */
 	koreanFilename?: boolean;
+	/**
+	 * Opt-in: commit `src/big.ts` with this many lines and fully rewrite it in
+	 * the working tree. bulkFiles(200줄)보다 훨씬 큰 하이라이트 대상 파일로,
+	 * 오버스캔 이탈 → 재진입 시의 전체 파일 동기 재토크나이즈 비용(수백 ms)을
+	 * 측정하는 retokenize-cache.e2e.ts 전용. 다른 스펙의 픽스처를 바꾸지 않도록
+	 * opt-in (bulkFiles/lockfileLines와 같은 이유).
+	 */
+	bigFileLines?: number;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
 // other specs search for (e.g. "hello"), so opting in can never shift their
 // match counts.
-const bulkFileLines = (marker: string): string =>
+const bulkFileLines = (marker: string, length = 200): string =>
 	`${Array.from(
-		{ length: 200 },
+		{ length },
 		(_, i) =>
 			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
 	).join("\n")}\n`;
@@ -126,6 +134,13 @@ export const makeFixtureRepo = (
 			lockfileContents(lockfileLines, false),
 		);
 	}
+	const bigFileLines = options.bigFileLines ?? 0;
+	if (bigFileLines > 0) {
+		writeFileSync(
+			join(dir, "src", "big.ts"),
+			bulkFileLines("base", bigFileLines),
+		);
+	}
 	if (options.nestedChainFile) {
 		mkdirSync(join(dir, "src", "mid", "deep"), { recursive: true });
 		writeFileSync(
@@ -164,6 +179,12 @@ export const makeFixtureRepo = (
 		writeFileSync(
 			join(dir, "pnpm-lock.yaml"),
 			lockfileContents(lockfileLines, true),
+		);
+	}
+	if (bigFileLines > 0) {
+		writeFileSync(
+			join(dir, "src", "big.ts"),
+			bulkFileLines("edited", bigFileLines),
 		);
 	}
 	if (options.nestedChainFile) {
