@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.0.0...diffdeck-v1.1.0) (2026-07-25)
+
+
+### Features
+
+* **viewer:** wire the vendored worker highlight pool — plain-first render, async colors ([#34](https://github.com/say8425/diffdeck/issues/34)) ([01b9147](https://github.com/say8425/diffdeck/commit/01b9147c103db42fda418a06dcce60ed42a6dfde))
+
+
+### Bug Fixes
+
+* **diffs:** keep highlighted render cache across recycle to stop re-tokenize scroll jank ([#31](https://github.com/say8425/diffdeck/issues/31)) ([e04b777](https://github.com/say8425/diffdeck/commit/e04b777f96587061cfb018042ecccf0941641b97))
+
 ## [1.0.0](https://github.com/say8425/diffdeck/compare/diffdeck-v0.3.0...diffdeck-v1.0.0) (2026-07-24)
 
 
