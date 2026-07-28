@@ -15,7 +15,7 @@
 //    않음) — 40px 이상 띄워야 실제 텍스트 위에서 시작한다.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 const readClipboard = (page: Page): Promise<string> =>
@@ -42,7 +42,7 @@ const dragSelect = async (
 // 읽으면 순간적으로 null이 된다(retokenize-cache 계열과 같은 근본 원인).
 // 텍스트 행(gutter 셀이 아니라 [data-line])의 좌표를 읽는 스펙은 색이 실제로
 // 착지한 뒤에 진행해 이 경합을 피한다.
-const waitForHighlighted = (container: import("@playwright/test").Locator) =>
+const waitForHighlighted = (container: Locator) =>
 	expect
 		.poll(() =>
 			container.evaluate(
