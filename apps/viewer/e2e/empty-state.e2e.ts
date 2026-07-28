@@ -32,8 +32,10 @@ test.describe("informative empty state", () => {
 			await page.goto(url);
 			const card = page.locator("#empty.empty-card");
 			await expect(card).toBeVisible();
+			// untracked data.txt가 숨겨져 있으므로 "Working tree clean"이 아니라
+			// 측정한 것만 주장하는 헤드라인이어야 한다.
 			await expect(card.locator(".empty-headline")).toHaveText(
-				"Working tree clean",
+				"No tracked changes",
 			);
 			await expect(card.locator(".empty-context")).toHaveText(
 				"on feature · 1 commit(s) ahead of main",
@@ -82,11 +84,22 @@ test.describe("informative empty state", () => {
 			rmSync(join(repoDir, "data.txt"));
 			await page.goto(url);
 			const card = page.locator("#empty.empty-card");
+			await expect(card.locator(".empty-headline")).toHaveText(
+				"Working tree clean",
+			);
 			await expect(card.locator(".empty-quiet")).toHaveText(
-				"Branch matches main — nothing to show in any mode",
+				"Nothing to show in any mode",
 			);
 			await expect(card.locator(".empty-context")).toHaveText("on main");
 			await expect(card.locator("button.empty-action")).toHaveCount(0);
+
+			// 회귀: 양쪽 모드가 다 빈 상태에서 모드를 전환해도 카드가 새 모드
+			// 문구로 갱신되어야 한다 — 빈 payload의 etag가 모드와 무관하게 같아
+			// 304로 이전 카드에 고착되던 버그의 가드 (모드 전환 시 lastEtag 리셋).
+			await page.selectOption("#diff-mode", "base");
+			await expect(
+				page.locator("#empty.empty-card .empty-headline"),
+			).toHaveText("No changes vs main");
 		} finally {
 			await stop();
 		}

@@ -72,14 +72,40 @@ describe("buildEmptyStateModel", () => {
 		expect(m.quietNote).toBe("Nothing to show in any mode");
 	});
 
-	test("all quiet on a resolved base mentions the base", () => {
+	test("all measured zeros yield the quiet note", () => {
 		const m = buildEmptyStateModel(summary({ branch: "main" }), {
 			mode: "working",
 			untrackedShown: false,
 		});
-		expect(m.quietNote).toBe(
-			"Branch matches main — nothing to show in any mode",
+		expect(m.quietNote).toBe("Nothing to show in any mode");
+	});
+
+	test("unknown base counts suppress the quiet note", () => {
+		// merge-base 실패(orphan 브랜치 등): base 이름은 있지만 측정은 실패한
+		// 모양 — 측정 못 한 것을 '아무것도 없음'이라고 주장하면 안 된다.
+		const m = buildEmptyStateModel(
+			summary({ branch: "lonely", baseFiles: null, aheadCommits: null }),
+			{ mode: "working", untrackedShown: false },
 		);
+		expect(m.quietNote).toBeNull();
+	});
+
+	test("hidden untracked files change the working-mode headline", () => {
+		// git 어휘상 untracked도 워킹트리 상태 — 숨겨진 untracked가 있는데
+		// "Working tree clean"이라고 말하면 자기모순이다.
+		const m = buildEmptyStateModel(summary({ untrackedFiles: 3 }), {
+			mode: "working",
+			untrackedShown: false,
+		});
+		expect(m.headline).toBe("No tracked changes");
+	});
+
+	test("base mode with nonzero baseFiles offers no switch action", () => {
+		const m = buildEmptyStateModel(summary({ baseFiles: 5 }), {
+			mode: "base",
+			untrackedShown: false,
+		});
+		expect(m.actions).toEqual([]);
 	});
 
 	test("ahead commits with an empty base diff: context only, not quiet", () => {

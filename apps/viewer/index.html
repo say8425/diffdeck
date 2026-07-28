@@ -410,7 +410,8 @@
 			}
 			/* 정보형 빈 상태 카드 — diff가 0건일 때 /api/summary의 실개수로
 			   "변경이 실제로 어디 있는지"를 안내한다 (browser/emptyState.ts). */
-			.empty-card {
+			/* id 셀렉터(#empty { padding: 24px })보다 이겨야 하므로 id로 스코프. */
+			#empty.empty-card {
 				display: flex;
 				flex-direction: column;
 				align-items: center;

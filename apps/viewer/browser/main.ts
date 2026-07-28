@@ -491,12 +491,17 @@ const fetchSummary = async (): Promise<RepoSummary | null> => {
 const enrichEmptyState = async (): Promise<void> => {
 	const marker = diffMount.querySelector("#empty");
 	if (!marker) return;
+	// 모드/untracked를 fetch 시작 시점에 스냅샷 — fetch 중 사용자가 모드를
+	// 바꾸면(새 diff가 로딩 중) 새 모드 문구의 카드를 그리면 모순이므로 버린다.
+	const mode = diffMode;
+	const untrackedShown = includeUntracked;
 	const summary = await fetchSummary();
 	if (!summary) return;
 	if (diffMount.querySelector("#empty") !== marker) return;
+	if (mode !== diffMode || untrackedShown !== includeUntracked) return;
 	const model = buildEmptyStateModel(summary, {
-		mode: diffMode,
-		untrackedShown: includeUntracked,
+		mode,
+		untrackedShown,
 	});
 	const card = renderEmptyState(document, model, {
 		onSwitchMode: () => {
@@ -799,6 +804,10 @@ const untrackedInput = document.getElementById(
 if (untrackedInput) untrackedInput.checked = includeUntracked;
 untrackedInput?.addEventListener("change", () => {
 	includeUntracked = untrackedInput.checked;
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 — 빈 payload의 etag는 모드/
+	// untracked와 무관하게 동일해서, 유지하면 304로 빈 상태 카드가 이전
+	// 토글 기준 문구에 고착된다.
+	lastEtag = null;
 	void load();
 });
 document
@@ -809,6 +818,8 @@ window.addEventListener("focus", () => void load());
 modeSelect?.addEventListener("change", () => {
 	diffMode = modeSelect.value === "base" ? "base" : "working";
 	localStorage.setItem("cc-statusline:diff-mode", diffMode);
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
+	lastEtag = null;
 	void load();
 });
 

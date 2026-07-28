@@ -27,9 +27,13 @@ export const buildEmptyStateModel = (
 	opts: { mode: "working" | "base"; untrackedShown: boolean },
 ): EmptyStateModel => {
 	const { base } = summary;
+	// working 모드 헤드라인: 숨겨진 untracked가 있으면 "Working tree clean"은
+	// git 어휘상 거짓(untracked도 워킹트리 상태)이므로 측정한 것만 주장한다.
 	const headline =
 		opts.mode === "working"
-			? "Working tree clean"
+			? summary.untrackedFiles > 0
+				? "No tracked changes"
+				: "Working tree clean"
 			: base
 				? `No changes vs ${base}`
 				: "No changes";
@@ -58,16 +62,16 @@ export const buildEmptyStateModel = (
 		});
 	}
 
-	const allQuiet =
-		summary.workingFiles === 0 &&
-		baseFiles === 0 &&
-		summary.untrackedFiles === 0 &&
-		ahead === 0;
-	const quietNote = allQuiet
-		? base
-			? `Branch matches ${base} — nothing to show in any mode`
-			: "Nothing to show in any mode"
-		: null;
+	// quiet note는 측정한 사실만 주장한다: 네 카운터가 전부 "측정된 0"일 때만.
+	// base 이름이 있는데 카운트가 null(merge-base 실패 등)이면 base 모드 내용을
+	// 알 수 없으므로 아무 주장도 하지 않는다. base 자체가 없으면(드롭다운의
+	// base 옵션이 비활성) working/untracked 0만으로 "어느 모드에도 없음"이 성립.
+	const localQuiet = summary.workingFiles === 0 && summary.untrackedFiles === 0;
+	const baseQuiet = base
+		? summary.baseFiles === 0 && summary.aheadCommits === 0
+		: true;
+	const quietNote =
+		localQuiet && baseQuiet ? "Nothing to show in any mode" : null;
 
 	return { headline, context, actions, quietNote };
 };
