@@ -6,7 +6,7 @@
 // 트리 존재 확인은 render.e2e.ts와 같은 이유로 shadow root의
 // `data-item-path` 속성을 직접 본다 (트리 텍스트는 middle-truncation 때문에
 // 로케이터 텍스트 매칭이 불안정).
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
@@ -77,7 +77,7 @@ test.describe("informative empty state", () => {
 		}
 	});
 
-	test("all quiet: card says the branch matches the base", async ({ page }) => {
+	test("all quiet: card says nothing to show in any mode", async ({ page }) => {
 		const { url, repoDir, stop } = await launchViewer([], { clean: true });
 		try {
 			// 픽스처가 항상 남기는 untracked data.txt를 지워 완전 무변경 상태로.
@@ -100,6 +100,18 @@ test.describe("informative empty state", () => {
 			await expect(
 				page.locator("#empty.empty-card .empty-headline"),
 			).toHaveText("No changes vs main");
+
+			// 회귀: 304(unchanged) 응답이라도 빈 상태가 유지되는 동안엔 카드를
+			// 재계산해야 한다 — untracked 개수는 지문 밖 사실이라, 새 untracked
+			// 파일이 생겨도 diff 지문은 그대로(untracked=0은 -uno)여서 304가
+			// 온다. focus 리프레시 후 카드에 안내가 나타나야 한다.
+			writeFileSync(join(repoDir, "late.txt"), "new untracked\n");
+			await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+			await expect(
+				page.locator("#empty.empty-card button.empty-action", {
+					hasText: "untracked",
+				}),
+			).toHaveText("1 untracked file(s) hidden — show");
 		} finally {
 			await stop();
 		}

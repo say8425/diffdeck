@@ -182,12 +182,12 @@ describe("renderEmptyState", () => {
 				headline: "Working tree clean",
 				context: "",
 				actions: [],
-				quietNote: "Branch matches main — nothing to show in any mode",
+				quietNote: "Nothing to show in any mode",
 			},
 			{ onSwitchMode: () => {}, onShowUntracked: () => {} },
 		);
 		expect(el.querySelector(".empty-quiet")?.textContent).toBe(
-			"Branch matches main — nothing to show in any mode",
+			"Nothing to show in any mode",
 		);
 		expect(el.querySelector(".empty-context")).toBeNull();
 		expect(el.querySelectorAll("button.empty-action").length).toBe(0);

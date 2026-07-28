@@ -745,6 +745,11 @@ const applyFetched = (result: FetchDiffResult): void => {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
 			lastFiles && lastFiles.length > 0 ? `${lastFiles.length} file(s)` : "";
+		// 단, 빈 상태 카드가 떠 있는 동안엔 요약을 재계산한다 — untracked
+		// 개수·base 이동은 diff 지문 밖 사실이라(untracked=0은 -uno) 새
+		// untracked 파일이 생겨도 304가 오고, 카드가 낡은 개수를 확신 있게
+		// 계속 주장하게 된다. marker/스냅샷 가드가 재진입을 안전하게 만든다.
+		if (lastFiles && lastFiles.length === 0) void enrichEmptyState();
 		return;
 	}
 	lastEtag = result.etag;
