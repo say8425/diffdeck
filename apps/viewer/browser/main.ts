@@ -15,8 +15,10 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
+import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
+import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -472,6 +474,45 @@ const syncTreeFold = (): void => {
 	for (const id of nextTreeCollapsed) treeCollapsedIds.add(id);
 };
 
+const fetchSummary = async (): Promise<RepoSummary | null> => {
+	try {
+		const query = new URLSearchParams({ repo, token });
+		const res = await fetch(`/api/summary?${query.toString()}`);
+		if (!res.ok) return null;
+		return (await res.json()) as RepoSummary;
+	} catch {
+		return null;
+	}
+};
+
+// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패하면 기존
+// "No changes." 폴백이 그대로 남는다. marker 동일성 가드 — fetch 동안 다른
+// 렌더가 #empty를 갈아치웠으면(새 diff 도착 등) 낡은 카드를 덮어쓰지 않는다.
+const enrichEmptyState = async (): Promise<void> => {
+	const marker = diffMount.querySelector("#empty");
+	if (!marker) return;
+	const summary = await fetchSummary();
+	if (!summary) return;
+	if (diffMount.querySelector("#empty") !== marker) return;
+	const model = buildEmptyStateModel(summary, {
+		mode: diffMode,
+		untrackedShown: includeUntracked,
+	});
+	const card = renderEmptyState(document, model, {
+		onSwitchMode: () => {
+			if (!modeSelect) return;
+			modeSelect.value = "base";
+			modeSelect.dispatchEvent(new Event("change"));
+		},
+		onShowUntracked: () => {
+			if (!untrackedInput) return;
+			untrackedInput.checked = true;
+			untrackedInput.dispatchEvent(new Event("change"));
+		},
+	});
+	marker.replaceWith(card);
+};
+
 const renderPatch = (unsorted: DiffFile[]): void => {
 	// 사이드바 트리와 같은 순서(디렉터리 우선·자연 정렬)로 diff 아이템을 배치.
 	const files = unsorted.toSorted((a, b) =>
@@ -483,6 +524,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		diffMount.replaceChildren();
 		diffMount.innerHTML = '<div id="empty">No changes.</div>';
 		statusEl.textContent = "";
+		void enrichEmptyState();
 		return;
 	}
 	statusEl.textContent = `${files.length} file(s)`;

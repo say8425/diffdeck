@@ -408,6 +408,40 @@
 				align-items: center;
 				gap: 10px;
 			}
+			/* 정보형 빈 상태 카드 — diff가 0건일 때 /api/summary의 실개수로
+			   "변경이 실제로 어디 있는지"를 안내한다 (browser/emptyState.ts). */
+			.empty-card {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 8px;
+				padding: 48px 24px;
+				text-align: center;
+			}
+			.empty-headline {
+				font-size: 15px;
+				font-weight: 600;
+				color: var(--vd-fg);
+			}
+			.empty-context {
+				font-size: 12px;
+			}
+			.empty-action {
+				font: inherit;
+				font-size: 12px;
+				padding: 4px 10px;
+				border: 1px solid var(--vd-border);
+				border-radius: var(--vd-radius);
+				background: var(--vd-inset);
+				color: var(--vd-fg);
+				cursor: pointer;
+			}
+			.empty-action:hover {
+				background: var(--vd-hover);
+			}
+			.empty-quiet {
+				font-size: 12px;
+			}
 			.loading-spinner {
 				width: 14px;
 				height: 14px;
