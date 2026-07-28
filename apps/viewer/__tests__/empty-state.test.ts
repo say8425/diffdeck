@@ -19,10 +19,13 @@ const summary = (over: Partial<RepoSummary> = {}): RepoSummary => ({
 
 describe("buildEmptyStateModel", () => {
 	test("working mode: committed branch work becomes a switch action", () => {
-		const m = buildEmptyStateModel(summary({ baseFiles: 12, aheadCommits: 3 }), {
-			mode: "working",
-			untrackedShown: false,
-		});
+		const m = buildEmptyStateModel(
+			summary({ baseFiles: 12, aheadCommits: 3 }),
+			{
+				mode: "working",
+				untrackedShown: false,
+			},
+		);
 		expect(m.headline).toBe("Working tree clean");
 		expect(m.context).toBe("on feature · 3 commit(s) ahead of main");
 		expect(m.actions).toEqual([
@@ -116,7 +119,10 @@ describe("renderEmptyState", () => {
 				context: "on feature · 3 commit(s) ahead of main",
 				actions: [
 					{ kind: "switch-mode", label: "12 file(s) changed vs main — view" },
-					{ kind: "show-untracked", label: "3 untracked file(s) hidden — show" },
+					{
+						kind: "show-untracked",
+						label: "3 untracked file(s) hidden — show",
+					},
 				],
 				quietNote: null,
 			},

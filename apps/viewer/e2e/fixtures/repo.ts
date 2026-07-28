@@ -72,6 +72,20 @@ export interface FixtureRepoOptions {
 	 * opt-in (bulkFiles/lockfileLines와 같은 이유).
 	 */
 	bigFileLines?: number;
+	/**
+	 * Opt-in: skip every working-tree edit so the diff is empty on launch
+	 * (the untracked `data.txt` is still written — hidden behind the
+	 * untracked toggle). Also renames the branch to `main` so the resolved
+	 * base label is deterministic. empty-state.e2e.ts 전용.
+	 */
+	clean?: boolean;
+	/**
+	 * Opt-in (clean과 함께 사용): rename to main, then branch to `feature`
+	 * and commit one edit of src/hello.ts there — the "work is committed,
+	 * working tree clean" shape the empty-state card points at.
+	 * empty-state.e2e.ts 전용.
+	 */
+	featureBranchCommit?: boolean;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -158,46 +172,61 @@ export const makeFixtureRepo = (
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
 
-	// Working-tree changes: two text diffs, one binary image diff.
-	writeFileSync(
-		join(dir, "src", "hello.ts"),
-		'export const hello = (): string => "hello, world";\n',
-	);
-	writeFileSync(
-		join(dir, "README.md"),
-		"# diffdeck e2e fixture\n\nBase line.\n\nWorking-tree edit.\n",
-	);
-	writeFileSync(
-		join(dir, "assets", "logo.png"),
-		Buffer.from(BLUE_PNG_BASE64, "base64"),
-	);
+	if (options.clean || options.featureBranchCommit) {
+		git(dir, ["branch", "-M", "main"]);
+	}
+	if (options.featureBranchCommit) {
+		git(dir, ["checkout", "-qb", "feature"]);
+		writeFileSync(
+			join(dir, "src", "hello.ts"),
+			'export const hello = (): string => "hello, branch";\n',
+		);
+		git(dir, ["add", "src/hello.ts"]);
+		git(dir, ["commit", "-qm", "feature work"]);
+	}
 
-	for (let i = 0; i < bulkFiles; i++) {
-		writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("edited"));
-	}
-	if (lockfileLines > 0) {
+	if (!options.clean) {
+		// Working-tree changes: two text diffs, one binary image diff.
 		writeFileSync(
-			join(dir, "pnpm-lock.yaml"),
-			lockfileContents(lockfileLines, true),
+			join(dir, "src", "hello.ts"),
+			'export const hello = (): string => "hello, world";\n',
 		);
-	}
-	if (bigFileLines > 0) {
 		writeFileSync(
-			join(dir, "src", "big.ts"),
-			bulkFileLines("edited", bigFileLines),
+			join(dir, "README.md"),
+			"# diffdeck e2e fixture\n\nBase line.\n\nWorking-tree edit.\n",
 		);
-	}
-	if (options.nestedChainFile) {
 		writeFileSync(
-			join(dir, "src", "mid", "deep", "nested.ts"),
-			"export const nested = 2;\n",
+			join(dir, "assets", "logo.png"),
+			Buffer.from(BLUE_PNG_BASE64, "base64"),
 		);
-	}
-	if (options.koreanFilename) {
-		writeFileSync(
-			join(dir, "src", "한글파일.ts"),
-			"export const korean = 2; // edited\n",
-		);
+
+		for (let i = 0; i < bulkFiles; i++) {
+			writeFileSync(join(dir, "src", `bulk-${i}.ts`), bulkFileLines("edited"));
+		}
+		if (lockfileLines > 0) {
+			writeFileSync(
+				join(dir, "pnpm-lock.yaml"),
+				lockfileContents(lockfileLines, true),
+			);
+		}
+		if (bigFileLines > 0) {
+			writeFileSync(
+				join(dir, "src", "big.ts"),
+				bulkFileLines("edited", bigFileLines),
+			);
+		}
+		if (options.nestedChainFile) {
+			writeFileSync(
+				join(dir, "src", "mid", "deep", "nested.ts"),
+				"export const nested = 2;\n",
+			);
+		}
+		if (options.koreanFilename) {
+			writeFileSync(
+				join(dir, "src", "한글파일.ts"),
+				"export const korean = 2; // edited\n",
+			);
+		}
 	}
 
 	// Untracked file for `--untracked`.
