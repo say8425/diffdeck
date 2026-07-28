@@ -39,7 +39,7 @@ export const resolveSelectionRange = (
 	if (typeof selection.getComposedRanges === "function") {
 		const range = selection.getComposedRanges({ shadowRoots: roots })[0];
 		if (!range) return null;
-		// collapsed StaticRange (start == end) を除外
+		// collapsed StaticRange(start == end)는 제외
 		if (
 			range.startContainer === range.endContainer &&
 			range.startOffset === range.endOffset
