@@ -154,10 +154,11 @@ const buildRowDecoration = (
 // clip element instead, so the joined path clips once at its end via CSS
 // text-overflow, matching GitHub's tree ("apps/cms/src/…").
 //
-// The wrapper/clip split matters: virtualized rows are absolutely positioned,
-// so their width is shrink-to-fit from the row's INTRINSIC min-content — and
-// a nowrap text run's min-content is its full width, which would blow the row
-// out past the sidebar. The wrapper is therefore a grid with a single
+// The wrapper/clip split matters: a nowrap text run's intrinsic min-content
+// is its full width, and that minimum propagates up the row's flex chain, so
+// a naive nowrap ellipsis container widens the whole row past the sidebar
+// (measured 715px in a 300px sidebar — git dot off-screen, no ellipsis ever
+// renders). The wrapper is therefore a grid with a single
 // `minmax(0, max-content)` column (the same intrinsic-min-zeroing trick the
 // upstream Truncate grid uses, style.css `[data-truncate-container]`), and
 // the inner clip element carries nowrap + text-overflow: ellipsis.

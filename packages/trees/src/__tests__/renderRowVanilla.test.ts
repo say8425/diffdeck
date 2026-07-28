@@ -255,6 +255,20 @@ test("flattened row: segments are plain text in one clip element, no per-segment
 	expect(clip?.textContent).toBe("src / deep");
 });
 
+// [diffdeck] Guard for the untouched half of deviation #4: non-flattened
+// rows keep upstream's extension-preserving middle-truncate widget (only
+// flattened chains switched to the single end-clip).
+test("non-flattened row: name still renders through the upstream middle-truncate widget", () => {
+	const button = buildRow(
+		baseRow({ name: "longfilename.ts", path: "longfilename.ts" }),
+		baseCtx({ ariaLabel: "longfilename.ts" }),
+	);
+	const content = button.querySelector('[data-item-section="content"]');
+	expect(
+		content?.querySelector('[data-truncate-group-container="middle"]'),
+	).not.toBeNull();
+});
+
 // [diffdeck] Hovering any row shows its full path as a native tooltip — the
 // visual text can be ellipsis-clipped (flattened chains, narrow sidebar), so
 // the row button carries `title` with the untruncated path.

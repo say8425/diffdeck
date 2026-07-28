@@ -7,13 +7,13 @@
 // text-overflow — and every row carries `title` with its full path so
 // hovering reveals what the ellipsis hides.
 //
-// The deep-chain test below is the load-bearing one: virtualized tree rows
-// are absolutely positioned, so their width is shrink-to-fit from the row's
-// INTRINSIC min-content — a naive nowrap ellipsis container has min-content
-// equal to the full text and silently blows the row out past the sidebar
-// (the git dot lands off-screen and no ellipsis ever renders). The
-// wrapper's single minmax(0, max-content) grid column zeroes that intrinsic
-// contribution; this spec pins the observable outcome.
+// The deep-chain test below is the load-bearing one: a nowrap text run's
+// intrinsic min-content is its full width, and that minimum propagates up
+// the row's flex chain — a naive nowrap ellipsis container silently widened
+// the row past the sidebar (715px in a 300px sidebar: the git dot landed
+// off-screen and no ellipsis ever rendered). The wrapper's single
+// minmax(0, max-content) grid column zeroes that intrinsic contribution;
+// this spec pins the observable outcome.
 //
 // Tree rows live in `<file-tree-container>`'s open shadow root and are
 // matched on `data-item-path` (see tree-nav.e2e.ts's header comment). A
@@ -39,31 +39,37 @@ const DEEP_CHAIN = [
 ];
 const DEEP_CHAIN_PATH = `${DEEP_CHAIN.join("/")}/`;
 
-const test = base.extend<{ nestedUrl: string }>({
-	nestedUrl: async ({}, use) => {
-		const viewer = await launchViewer([], { nestedChainFile: true });
-		// Extend the fixture repo with the deep chain: committed once, then
-		// edited in the working tree so the file shows up in the diff.
-		const chainDir = join(viewer.repoDir, ...DEEP_CHAIN);
-		const chainFile = join(chainDir, "GoodsReviewPolicyBottomSheet.test.tsx");
-		mkdirSync(chainDir, { recursive: true });
-		writeFileSync(chainFile, "export const t = 1;\n");
-		for (const args of [
-			// Stage ONLY the new chain — `add -A` would sweep the fixture's
-			// pre-existing working-tree edits into the commit and empty the diff.
-			["add", "--", DEEP_CHAIN[0] as string],
-			["commit", "-qm", "deep chain"],
-		]) {
-			const result = spawnSync("git", ["-C", viewer.repoDir, ...args], {
-				stdio: "pipe",
-			});
-			expect(result.status).toBe(0);
-		}
-		writeFileSync(chainFile, "export const t = 2;\n");
+const test = base.extend<object, { nestedUrl: string }>({
+	// Worker-scoped (like `viewerUrl` in fixtures/app.ts): the repo is mutated
+	// once at setup and only read afterwards, so all three tests share one
+	// viewer launch.
+	nestedUrl: [
+		async ({}, use) => {
+			const viewer = await launchViewer([], { nestedChainFile: true });
+			// Extend the fixture repo with the deep chain: committed once, then
+			// edited in the working tree so the file shows up in the diff.
+			const chainDir = join(viewer.repoDir, ...DEEP_CHAIN);
+			const chainFile = join(chainDir, "GoodsReviewPolicyBottomSheet.test.tsx");
+			mkdirSync(chainDir, { recursive: true });
+			writeFileSync(chainFile, "export const t = 1;\n");
+			for (const args of [
+				// Stage ONLY the new chain — `add -A` would sweep the fixture's
+				// pre-existing working-tree edits into the commit and empty the diff.
+				["add", "--", DEEP_CHAIN[0] as string],
+				["commit", "-qm", "deep chain"],
+			]) {
+				const result = spawnSync("git", ["-C", viewer.repoDir, ...args], {
+					stdio: "pipe",
+				});
+				expect(result.status).toBe(0);
+			}
+			writeFileSync(chainFile, "export const t = 2;\n");
 
-		await use(viewer.url);
-		await viewer.stop();
-	},
+			await use(viewer.url);
+			await viewer.stop();
+		},
+		{ scope: "worker" },
+	],
 });
 
 test("flattened chain row renders plain segments in one end-clip element", async ({
