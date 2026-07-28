@@ -457,6 +457,63 @@
 					transform: rotate(360deg);
 				}
 			}
+			#grab-trigger {
+				position: fixed;
+				z-index: 20;
+				padding: 3px 10px;
+				font-size: 12px;
+				line-height: 1.5;
+				border: 1px solid #3a3a40;
+				border-radius: var(--vd-radius);
+				background: #232329;
+				color: #d6d6da;
+				cursor: pointer;
+				box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+			}
+			#grab-trigger:hover {
+				background: #2c2c33;
+			}
+			#grab-popover {
+				position: fixed;
+				z-index: 20;
+				width: 340px;
+				padding: 8px;
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				border: 1px solid #3a3a40;
+				border-radius: 8px;
+				background: #232329;
+				color: #d6d6da;
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+			}
+			#grab-trigger[hidden],
+			#grab-popover[hidden] {
+				display: none;
+			}
+			#grab-popover .grab-label {
+				font-size: 11px;
+				color: var(--vd-fg-muted);
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			#grab-popover input {
+				background: #1a1a1f;
+				border: 1px solid #3a3a40;
+				border-radius: var(--vd-radius);
+				color: #e6e6ea;
+				padding: 5px 8px;
+				font-size: 12px;
+				outline: none;
+			}
+			#grab-popover input:focus {
+				border-color: #5b8def;
+			}
+			#grab-popover .grab-hint {
+				font-size: 10px;
+				color: var(--vd-fg-muted);
+			}
 		</style>
 	</head>
 	<body>
