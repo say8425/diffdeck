@@ -1,6 +1,7 @@
-// Fold-with-tree + Unified/Split 토글: CodeView가 재생성돼도 트리 유래 접힘이
-// 그대로 반영되는지 검증한다 — renderPatch()가 트리 동기화(syncTreeFold) 이후에
-// 아이템 배열을 만들도록 순서를 바꾼 것에 대한 회귀 가드.
+// Fold-with-tree + Unified/Split 토글: 스타일이 바뀌며 아이템 배열이 다시
+// 만들어져도 트리 유래 접힘이 그대로 반영되는지 검증한다 — renderPatch()가
+// 트리 동기화(syncTreeFold) 이후에 아이템 배열을 만들도록 순서를 바꾼 것에
+// 대한 회귀 가드.
 import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
 
 const test = base.extend<{ foldUrl: string }>({
@@ -11,7 +12,7 @@ const test = base.extend<{ foldUrl: string }>({
 	},
 });
 
-test("switching Unified/Split keeps tree-driven folds correct after CodeView is recreated", async ({
+test("switching Unified/Split keeps tree-driven folds correct after the items are rebuilt", async ({
 	page,
 	foldUrl,
 }) => {
@@ -30,7 +31,7 @@ test("switching Unified/Split keeps tree-driven folds correct after CodeView is 
 		page.locator('#diff-style-group [data-style="split"]'),
 	).toHaveAttribute("aria-pressed", "true");
 
-	// CodeView was recreated for the style change; the tree-driven fold must
-	// still be reflected in the freshly-built items.
+	// The style change rebuilt the item array (setOptions + setItems on the
+	// surviving CodeView); the tree-driven fold must still be reflected in it.
 	expect(await hasCode(page, "src/hello.ts")).toBe(false);
 });

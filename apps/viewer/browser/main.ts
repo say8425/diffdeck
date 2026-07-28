@@ -637,11 +637,15 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();
 
-	// Diff panel: recreate the CodeView on first render, when transitioning from
-	// empty, or when diffStyle changed; otherwise reuse it so scroll is
-	// preserved across updates.
-	if (!codeView || renderedDiffStyle !== diffStyle) {
-		codeView?.cleanUp();
+	// Diff panel: recreate the CodeView only on first render or when
+	// transitioning from empty; otherwise reuse it so scroll is preserved
+	// across updates. A diffStyle change also reuses it — see the setOptions
+	// branch below.
+	if (!codeView) {
+		// No cleanUp() needed: codeView is null here by definition, and the one
+		// path that clears it (recoverFromWorkerLoadFailure) tears the old
+		// instance down before nulling. replaceChildren still matters — the
+		// mount may hold the loading/empty-state placeholder.
 		diffMount.replaceChildren();
 		codeView = new CodeView(codeViewOptions(), workerManager);
 		// Render further ahead of the viewport than CodeView's 200px default.
@@ -663,8 +667,8 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		// grows (:963). Accepted: one frame's cost on a jump vs. visible
 		// blanking during every fast scroll.
 		//
-		// Set per instance: main.ts rebuilds the CodeView on diffStyle change,
-		// and setOptions never touches config.
+		// Set per instance, and only here: setOptions never touches config, so
+		// the value survives every later option change (including diffStyle).
 		codeView.config.overscrollSize = 1000;
 		codeView.setup(diffMount);
 		codeView.setItems(items);
@@ -681,6 +685,28 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 				if (cv === codeView) cv.render();
 			});
 		});
+	} else if (renderedDiffStyle !== diffStyle) {
+		// Unified↔Split: hand the change to the engine instead of rebuilding.
+		// Recreating the CodeView emptied diffMount (which *is* the scroll
+		// container), collapsing scrollHeight so the browser clamped scrollTop
+		// to 0 — the toggle threw you back to the top of the diff.
+		//
+		// The engine already models this transition: diffStyle is an item-layout
+		// option (CodeView.ts hasItemLayoutOptionChanged), so setOptions resets
+		// the layout caches, and it opens by calling capturePendingLayoutAnchor()
+		// so the render path can resolveAnchoredScrollTop() and hold the viewport
+		// across the reflow. That anchor is semantic (item + line), which is what
+		// this transition needs: unified and split have genuinely different
+		// content heights, so restoring the old scrollTop in pixels would land on
+		// a different file entirely.
+		//
+		// shouldClearPool() deliberately ignores diffStyle, so the element pool
+		// survives; diffstyle-scroll.e2e.ts asserts the recycled nodes still
+		// render as split (data-diff-type) alongside the anchoring itself.
+		codeView.setOptions(codeViewOptions());
+		codeView.setItems(items);
+		codeView.render();
+		renderedDiffStyle = diffStyle;
 	} else {
 		const scrollTop = codeView.getScrollTop();
 		codeView.setItems(items);
