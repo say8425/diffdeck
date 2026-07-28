@@ -3,12 +3,19 @@ import { encodeGrab, grabLabel } from "../browser/grab/encode.ts";
 import type { Snippet } from "../browser/grab/snippet.ts";
 
 const sideSnip: Snippet = {
-	kind: "side", side: "new", startLine: 84, endLine: 98,
+	kind: "side",
+	side: "new",
+	startLine: 84,
+	endLine: 98,
 	lines: ["if (a) return;", "const b = 1;"],
 };
 const base = {
-	path: "apps/viewer/browser/main.ts", status: "modified" as const,
-	mode: "working" as const, baseName: "", snippet: sideSnip, prompt: "여기 클릭 핸들러를 분리해줘",
+	path: "apps/viewer/browser/main.ts",
+	status: "modified" as const,
+	mode: "working" as const,
+	baseName: "",
+	snippet: sideSnip,
+	prompt: "여기 클릭 핸들러를 분리해줘",
 };
 
 describe("encodeGrab", () => {
@@ -27,29 +34,51 @@ describe("encodeGrab", () => {
 	});
 	test("old side + 단일 라인 + base 모드(베이스명)", () => {
 		const out = encodeGrab({
-			...base, mode: "base", baseName: "origin/main",
-			snippet: { kind: "side", side: "old", startLine: 7, endLine: 7, lines: ["x"] },
+			...base,
+			mode: "base",
+			baseName: "origin/main",
+			snippet: {
+				kind: "side",
+				side: "old",
+				startLine: 7,
+				endLine: 7,
+				lines: ["x"],
+			},
 			prompt: "",
 		});
 		expect(out).toContain("Lines: 7 (old side, base diff vs origin/main)");
 		expect(out.endsWith("```")).toBe(true); // 빈 프롬프트 생략
 	});
 	test("base 모드 + 베이스명 없음 → 'base diff'", () => {
-		expect(encodeGrab({ ...base, mode: "base", baseName: "" })).toContain("(new side, base diff)");
+		expect(encodeGrab({ ...base, mode: "base", baseName: "" })).toContain(
+			"(new side, base diff)",
+		);
 	});
 	test("untracked 상태 주석", () => {
-		expect(encodeGrab({ ...base, status: "untracked" })).toContain("(new side, working diff, untracked)");
+		expect(encodeGrab({ ...base, status: "untracked" })).toContain(
+			"(new side, working diff, untracked)",
+		);
 	});
 	test("renamed → File 행에 prevPath, Lines에 주석 없음", () => {
-		const out = encodeGrab({ ...base, status: "renamed", prevPath: "old/main.ts" });
-		expect(out).toContain("File: apps/viewer/browser/main.ts (renamed from old/main.ts)");
+		const out = encodeGrab({
+			...base,
+			status: "renamed",
+			prevPath: "old/main.ts",
+		});
+		expect(out).toContain(
+			"File: apps/viewer/browser/main.ts (renamed from old/main.ts)",
+		);
 		expect(out).toContain("Lines: 84-98 (new side, working diff)\n");
 	});
 	test("mixed: old/new 범위 헤더 + 마커 본문", () => {
 		const out = encodeGrab({
 			...base,
 			snippet: {
-				kind: "mixed", oldStart: 2, oldEnd: 2, newStart: 2, newEnd: 3,
+				kind: "mixed",
+				oldStart: 2,
+				oldEnd: 2,
+				newStart: 2,
+				newEnd: 3,
 				rows: [
 					{ marker: "-", text: "l2-old", oldNo: 2, newNo: null },
 					{ marker: "+", text: "l2-new", oldNo: null, newNo: 2 },
@@ -63,7 +92,13 @@ describe("encodeGrab", () => {
 	test("본문에 백틱 3연속 포함 → 펜스가 4개로 승격", () => {
 		const out = encodeGrab({
 			...base,
-			snippet: { kind: "side", side: "new", startLine: 1, endLine: 1, lines: ["```json"] },
+			snippet: {
+				kind: "side",
+				side: "new",
+				startLine: 1,
+				endLine: 1,
+				lines: ["```json"],
+			},
 		});
 		expect(out.startsWith("````\n")).toBe(true);
 		expect(out).toContain("\n````\n여기");
@@ -74,10 +109,18 @@ describe("encodeGrab", () => {
 });
 
 describe("grabLabel", () => {
-	test("side", () => expect(grabLabel(base.path, sideSnip)).toBe("main.ts:84-98 · new side"));
+	test("side", () =>
+		expect(grabLabel(base.path, sideSnip)).toBe("main.ts:84-98 · new side"));
 	test("mixed", () => {
 		expect(
-			grabLabel("a/b.ts", { kind: "mixed", oldStart: 2, oldEnd: 2, newStart: 2, newEnd: 3, rows: [] }),
+			grabLabel("a/b.ts", {
+				kind: "mixed",
+				oldStart: 2,
+				oldEnd: 2,
+				newStart: 2,
+				newEnd: 3,
+				rows: [],
+			}),
 		).toBe("b.ts: old 2 / new 2-3");
 	});
 });

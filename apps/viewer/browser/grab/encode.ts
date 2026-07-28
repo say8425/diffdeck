@@ -2,7 +2,12 @@
 // 승격해 스니펫 내 ``` 충돌을 막는다. 프롬프트는 펜스 밖 마지막 줄.
 import type { Snippet } from "./snippet.ts";
 
-export type GrabFileStatus = "modified" | "added" | "deleted" | "renamed" | "untracked";
+export type GrabFileStatus =
+	| "modified"
+	| "added"
+	| "deleted"
+	| "renamed"
+	| "untracked";
 
 export interface EncodeInput {
 	path: string;
@@ -17,7 +22,8 @@ export interface EncodeInput {
 const fmtRange = (start: number, end: number): string =>
 	start === end ? `${start}` : `${start}-${end}`;
 
-const sideText = (side: "old" | "new"): string => (side === "new" ? "new side" : "old side");
+const sideText = (side: "old" | "new"): string =>
+	side === "new" ? "new side" : "old side";
 
 const modeText = (mode: "working" | "base", baseName: string): string => {
 	if (mode !== "base") return "working diff";
@@ -46,8 +52,12 @@ export const encodeGrab = (input: EncodeInput): string => {
 			? `Lines: ${fmtRange(snippet.startLine, snippet.endLine)} (${sideText(snippet.side)}, ${meta})`
 			: `Lines: old ${fmtRange(snippet.oldStart, snippet.oldEnd)} / new ${fmtRange(snippet.newStart, snippet.newEnd)} (${meta})`;
 	const body =
-		snippet.kind === "side" ? snippet.lines : snippet.rows.map((r) => `${r.marker}${r.text}`);
-	const content = ["diffdeck selection", fileLine, linesLine, "", ...body].join("\n");
+		snippet.kind === "side"
+			? snippet.lines
+			: snippet.rows.map((r) => `${r.marker}${r.text}`);
+	const content = ["diffdeck selection", fileLine, linesLine, "", ...body].join(
+		"\n",
+	);
 	const runs = content.match(/`+/g) ?? [];
 	const fence = "`".repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
 	const prompt = input.prompt.trim();

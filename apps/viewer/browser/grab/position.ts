@@ -34,7 +34,8 @@ export const computePlacement = (
 	viewport: Viewport,
 ): Placement => {
 	let top = anchor.bottom + GAP;
-	if (top + size.height > viewport.height - MARGIN) top = anchor.top - size.height - GAP;
+	if (top + size.height > viewport.height - MARGIN)
+		top = anchor.top - size.height - GAP;
 	return {
 		left: clamp(anchor.left, MARGIN, viewport.width - size.width - MARGIN),
 		top: clamp(top, MARGIN, viewport.height - size.height - MARGIN),

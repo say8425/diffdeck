@@ -16,7 +16,9 @@ export interface SelectionLike {
 	isCollapsed: boolean;
 	rangeCount?: number;
 	direction?: string;
-	getComposedRanges?: (options: { shadowRoots: readonly GrabRoot[] }) => readonly RangeEndpoints[];
+	getComposedRanges?: (options: {
+		shadowRoots: readonly GrabRoot[];
+	}) => readonly RangeEndpoints[];
 	getRangeAt?: (index: number) => RangeEndpoints;
 }
 
@@ -38,14 +40,22 @@ export const resolveSelectionRange = (
 		const range = selection.getComposedRanges({ shadowRoots: roots })[0];
 		if (!range) return null;
 		// collapsed StaticRange (start == end) を除外
-		if (range.startContainer === range.endContainer && range.startOffset === range.endOffset) {
+		if (
+			range.startContainer === range.endContainer &&
+			range.startOffset === range.endOffset
+		) {
 			return null;
 		}
 		return { range, backward: selection.direction === "backward" };
 	}
 	for (const root of roots) {
 		const sel = root.getSelection?.();
-		if (sel && !sel.isCollapsed && (sel.rangeCount ?? 0) > 0 && sel.getRangeAt) {
+		if (
+			sel &&
+			!sel.isCollapsed &&
+			(sel.rangeCount ?? 0) > 0 &&
+			sel.getRangeAt
+		) {
 			return { range: sel.getRangeAt(0), backward: false };
 		}
 	}

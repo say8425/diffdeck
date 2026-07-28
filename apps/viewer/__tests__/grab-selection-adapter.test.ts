@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
-	type RangeEndpoints, resolveSelectionRange, type SelectionLike,
+	type RangeEndpoints,
+	resolveSelectionRange,
+	type SelectionLike,
 } from "../browser/grab/selectionAdapter.ts";
 
 const node = {} as Node;
-const range: RangeEndpoints = { startContainer: node, startOffset: 0, endContainer: node, endOffset: 3 };
+const range: RangeEndpoints = {
+	startContainer: node,
+	startOffset: 0,
+	endContainer: node,
+	endOffset: 3,
+};
 
 describe("resolveSelectionRange", () => {
 	test("null selection → null", () => {
@@ -37,12 +44,18 @@ describe("resolveSelectionRange", () => {
 			},
 		};
 		const roots = [{}, {}];
-		expect(resolveSelectionRange(sel, roots)).toEqual({ range, backward: true });
+		expect(resolveSelectionRange(sel, roots)).toEqual({
+			range,
+			backward: true,
+		});
 		expect(seen).toEqual({ shadowRoots: roots });
 	});
 	test("primary가 빈 배열을 주면 null", () => {
 		expect(
-			resolveSelectionRange({ isCollapsed: false, getComposedRanges: () => [] }, []),
+			resolveSelectionRange(
+				{ isCollapsed: false, getComposedRanges: () => [] },
+				[],
+			),
 		).toBeNull();
 	});
 	test("primary が collapsed StaticRange(start === end) を返す → null", () => {
@@ -53,7 +66,10 @@ describe("resolveSelectionRange", () => {
 			endOffset: 5,
 		};
 		expect(
-			resolveSelectionRange({ isCollapsed: false, getComposedRanges: () => [collapsedRange] }, []),
+			resolveSelectionRange(
+				{ isCollapsed: false, getComposedRanges: () => [collapsedRange] },
+				[],
+			),
 		).toBeNull();
 	});
 	test("fallback: root.getSelection()의 첫 non-collapsed range, backward=false", () => {
@@ -62,16 +78,28 @@ describe("resolveSelectionRange", () => {
 			{ getSelection: () => ({ isCollapsed: true }) as SelectionLike },
 			{
 				getSelection: () =>
-					({ isCollapsed: false, rangeCount: 1, getRangeAt: () => range }) as SelectionLike,
+					({
+						isCollapsed: false,
+						rangeCount: 1,
+						getRangeAt: () => range,
+					}) as SelectionLike,
 			},
 		];
-		expect(resolveSelectionRange(sel, roots)).toEqual({ range, backward: false });
+		expect(resolveSelectionRange(sel, roots)).toEqual({
+			range,
+			backward: false,
+		});
 	});
 	test("fallback 전멸(getSelection 없음/rangeCount 0) → null", () => {
 		const sel: SelectionLike = { isCollapsed: false };
-		const roots = [{}, { getSelection: () => null }, {
-			getSelection: () => ({ isCollapsed: false, rangeCount: 0 }) as SelectionLike,
-		}];
+		const roots = [
+			{},
+			{ getSelection: () => null },
+			{
+				getSelection: () =>
+					({ isCollapsed: false, rangeCount: 0 }) as SelectionLike,
+			},
+		];
 		expect(resolveSelectionRange(sel, roots)).toBeNull();
 	});
 });
