@@ -113,10 +113,28 @@ describe("createGrabPopover", () => {
 		document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 		expect(popover.isOpen()).toBe(false);
 	});
+	test("IME 조합 중 Escape(input)는 무시 — 조합 취소가 팝오버를 닫지 않음", () => {
+		openDefault();
+		input().dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "Escape",
+				cancelable: true,
+				isComposing: true,
+			}),
+		);
+		expect(popover.isOpen()).toBe(true);
+	});
 	test("doc 레벨 Escape로도 닫힘", () => {
 		openDefault();
 		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 		expect(popover.isOpen()).toBe(false);
+	});
+	test("IME 조합 중 doc 레벨 Escape는 무시", () => {
+		openDefault();
+		document.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Escape", isComposing: true }),
+		);
+		expect(popover.isOpen()).toBe(true);
 	});
 	test("destroy 후 doc 리스너 무반응", () => {
 		openDefault();

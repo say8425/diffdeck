@@ -108,6 +108,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 			if (event.isComposing || event.keyCode === 229) return;
 			submit();
 		} else if (event.key === "Escape") {
+			if (event.isComposing || event.keyCode === 229) return;
 			close();
 		}
 	});
@@ -118,7 +119,9 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		close();
 	};
 	const onDocKeydown = (event: KeyboardEvent): void => {
-		if (opened && event.key === "Escape") close();
+		if (!opened || event.key !== "Escape") return;
+		if (event.isComposing || event.keyCode === 229) return;
+		close();
 	};
 	doc.addEventListener("pointerdown", onDocDismiss);
 	doc.addEventListener("mousedown", onDocDismiss);
