@@ -61,6 +61,10 @@ describe("createGrabPopover", () => {
 		expect(popover.element.style.left).toBe("10px");
 		expect(document.activeElement).toBe(input());
 	});
+	test("접근성: role=dialog + input aria-label", () => {
+		expect(popover.element.getAttribute("role")).toBe("dialog");
+		expect(input().getAttribute("aria-label")).toBe("Grab prompt");
+	});
 	test("Enter → buildOutput(프롬프트) 복사 + Copied 상태 + onCopied + 자동 닫힘", async () => {
 		jest.useFakeTimers();
 		openDefault();

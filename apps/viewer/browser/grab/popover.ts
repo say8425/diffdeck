@@ -35,6 +35,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	const element = doc.createElement("div");
 	element.id = "grab-popover";
 	element.hidden = true;
+	element.setAttribute("role", "dialog");
 
 	const label = doc.createElement("div");
 	label.className = "grab-label";
@@ -43,6 +44,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.type = "text";
 	input.className = "grab-input";
 	input.placeholder = "Prompt… (Enter to copy)";
+	input.setAttribute("aria-label", "Grab prompt");
 
 	const hint = doc.createElement("span");
 	hint.className = "grab-hint";
