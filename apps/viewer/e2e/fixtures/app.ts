@@ -80,6 +80,22 @@ export const hasCode = (page: Page, fileId: string): Promise<boolean> =>
 		.filter({ has: page.locator(`[data-fold="${fileId}"]`) })
 		.evaluate((el) => el.shadowRoot?.querySelector("pre") != null);
 
+/**
+ * Which diff style is currently on screen? The engine's `createPreElement`
+ * tags the `<pre>` with `data-diff-type="split"` in split mode and `"single"`
+ * in unified. The head of the render window can be an image diff (a card with
+ * no `<pre>`), so this scans for the first container that actually has one.
+ * Returns null when nothing is rendered at all.
+ */
+export const renderedDiffType = (page: Page): Promise<string | null> =>
+	page.evaluate(() => {
+		for (const c of document.querySelectorAll("diffs-container")) {
+			const pre = c.shadowRoot?.querySelector("pre");
+			if (pre) return pre.getAttribute("data-diff-type");
+		}
+		return null;
+	});
+
 type WorkerFixtures = {
 	viewerUrl: string;
 };

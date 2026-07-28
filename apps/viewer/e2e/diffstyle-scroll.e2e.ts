@@ -17,7 +17,12 @@
 // 있는지를 본다(anchorOffset — 왜 "뷰포트 안에 있다"로는 부족한지는 그
 // 헬퍼의 주석 참고).
 import type { Locator, Page } from "@playwright/test";
-import { expect, launchViewer, test } from "./fixtures/app.ts";
+import {
+	expect,
+	launchViewer,
+	renderedDiffType,
+	test,
+} from "./fixtures/app.ts";
 
 // 어떤 수치가 정착할 때까지 기다린다 — sleep 대신 "연속 두 번 같은 값".
 const waitForStable = async (
@@ -67,19 +72,6 @@ const topVisibleFileId = (page: Page): Promise<string | null> =>
 					c.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ?? null
 				);
 			}
-		}
-		return null;
-	});
-
-// 현재 렌더된 텍스트 diff가 어떤 스타일로 그려졌는지. createPreElement가
-// split일 때만 data-diff-type="split"을 달고, unified는 "single"이다.
-// 렌더 윈도우의 맨 앞은 이미지 diff(assets/logo.png — 카드만 있고 <pre>가
-// 없다)일 수 있으므로, 첫 컨테이너가 아니라 <pre>를 가진 첫 컨테이너를 본다.
-const renderedDiffType = (page: Page): Promise<string | null> =>
-	page.evaluate(() => {
-		for (const c of document.querySelectorAll("diffs-container")) {
-			const pre = c.shadowRoot?.querySelector("pre");
-			if (pre) return pre.getAttribute("data-diff-type");
 		}
 		return null;
 	});
