@@ -15,6 +15,7 @@ import {
 	payloadEtag,
 } from "./payloadCache.ts";
 import { createSingleFlight } from "./singleFlight.ts";
+import { getRepoSummary } from "./summary.ts";
 import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
 type Env = Record<string, string | undefined>;
@@ -141,6 +142,22 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 					"x-diff-base": base ?? "",
 					etag,
 				},
+			});
+		}
+
+		if (url.pathname === "/api/summary") {
+			if (url.searchParams.get("token") !== cfg.token) {
+				return new Response("forbidden", { status: 403 });
+			}
+			const repo = url.searchParams.get("repo") ?? "";
+			if (!repo || !(await isGitRepo(repo))) {
+				return new Response("not a git repository", { status: 400 });
+			}
+			const { base, ref } = await resolveBaseCached(repo);
+			const summary = await getRepoSummary(repo, { base, ref });
+			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
+			return new Response(JSON.stringify(summary), {
+				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
 

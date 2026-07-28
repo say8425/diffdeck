@@ -358,3 +358,36 @@ describe("diff server base mode", () => {
 		expect(res.headers.get("x-diff-base")).toBe("main");
 	});
 });
+
+describe("diff server summary", () => {
+	test("api/summary rejects a bad token", async () => {
+		const res = await fetch(
+			`${base}/api/summary?repo=${encodeURIComponent(repo)}&token=nope`,
+		);
+		expect(res.status).toBe(403);
+	});
+
+	test("api/summary rejects a non-repo path", async () => {
+		const res = await fetch(
+			`${base}/api/summary?repo=${encodeURIComponent(viewerDir)}&token=${handle.token}`,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	test("api/summary reports counts for the fixture repo", async () => {
+		await $`git -C ${repo} branch -M main`;
+		const res = await fetch(
+			`${base}/api/summary?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
+		);
+		expect(res.status).toBe(200);
+		const s = (await res.json()) as {
+			branch: string;
+			base: string;
+			workingFiles: number;
+		};
+		// beforeEach 픽스처는 a.txt를 워킹트리에서 수정해 둔다.
+		expect(s.branch).toBe("main");
+		expect(s.base).toBe("main");
+		expect(s.workingFiles).toBe(1);
+	});
+});
