@@ -194,7 +194,7 @@ const parseNameStatusZ = (
 	return specs;
 };
 
-const resolveDiffBaseRev = async (
+export const resolveDiffBaseRev = async (
 	repo: string,
 	opts: { mode?: "working" | "base"; ref?: string },
 ): Promise<string> =>

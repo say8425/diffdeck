@@ -15,8 +15,10 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
+import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
+import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -472,6 +474,50 @@ const syncTreeFold = (): void => {
 	for (const id of nextTreeCollapsed) treeCollapsedIds.add(id);
 };
 
+const fetchSummary = async (): Promise<RepoSummary | null> => {
+	try {
+		const query = new URLSearchParams({ repo, token });
+		const res = await fetch(`/api/summary?${query.toString()}`);
+		if (!res.ok) return null;
+		return (await res.json()) as RepoSummary;
+	} catch {
+		return null;
+	}
+};
+
+// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패하면 기존
+// "No changes." 폴백이 그대로 남는다. marker 동일성 가드 — fetch 동안 다른
+// 렌더가 #empty를 갈아치웠으면(새 diff 도착 등) 낡은 카드를 덮어쓰지 않는다.
+const enrichEmptyState = async (): Promise<void> => {
+	const marker = diffMount.querySelector("#empty");
+	if (!marker) return;
+	// 모드/untracked를 fetch 시작 시점에 스냅샷 — fetch 중 사용자가 모드를
+	// 바꾸면(새 diff가 로딩 중) 새 모드 문구의 카드를 그리면 모순이므로 버린다.
+	const mode = diffMode;
+	const untrackedShown = includeUntracked;
+	const summary = await fetchSummary();
+	if (!summary) return;
+	if (diffMount.querySelector("#empty") !== marker) return;
+	if (mode !== diffMode || untrackedShown !== includeUntracked) return;
+	const model = buildEmptyStateModel(summary, {
+		mode,
+		untrackedShown,
+	});
+	const card = renderEmptyState(document, model, {
+		onSwitchMode: () => {
+			if (!modeSelect) return;
+			modeSelect.value = "base";
+			modeSelect.dispatchEvent(new Event("change"));
+		},
+		onShowUntracked: () => {
+			if (!untrackedInput) return;
+			untrackedInput.checked = true;
+			untrackedInput.dispatchEvent(new Event("change"));
+		},
+	});
+	marker.replaceWith(card);
+};
+
 const renderPatch = (unsorted: DiffFile[]): void => {
 	// 사이드바 트리와 같은 순서(디렉터리 우선·자연 정렬)로 diff 아이템을 배치.
 	const files = unsorted.toSorted((a, b) =>
@@ -483,6 +529,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		diffMount.replaceChildren();
 		diffMount.innerHTML = '<div id="empty">No changes.</div>';
 		statusEl.textContent = "";
+		void enrichEmptyState();
 		return;
 	}
 	statusEl.textContent = `${files.length} file(s)`;
@@ -698,6 +745,11 @@ const applyFetched = (result: FetchDiffResult): void => {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
 			lastFiles && lastFiles.length > 0 ? `${lastFiles.length} file(s)` : "";
+		// 단, 빈 상태 카드가 떠 있는 동안엔 요약을 재계산한다 — untracked
+		// 개수·base 이동은 diff 지문 밖 사실이라(untracked=0은 -uno) 새
+		// untracked 파일이 생겨도 304가 오고, 카드가 낡은 개수를 확신 있게
+		// 계속 주장하게 된다. marker/스냅샷 가드가 재진입을 안전하게 만든다.
+		if (lastFiles && lastFiles.length === 0) void enrichEmptyState();
 		return;
 	}
 	lastEtag = result.etag;
@@ -757,6 +809,10 @@ const untrackedInput = document.getElementById(
 if (untrackedInput) untrackedInput.checked = includeUntracked;
 untrackedInput?.addEventListener("change", () => {
 	includeUntracked = untrackedInput.checked;
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 — 빈 payload의 etag는 모드/
+	// untracked와 무관하게 동일해서, 유지하면 304로 빈 상태 카드가 이전
+	// 토글 기준 문구에 고착된다.
+	lastEtag = null;
 	void load();
 });
 document
@@ -767,6 +823,8 @@ window.addEventListener("focus", () => void load());
 modeSelect?.addEventListener("change", () => {
 	diffMode = modeSelect.value === "base" ? "base" : "working";
 	localStorage.setItem("cc-statusline:diff-mode", diffMode);
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
+	lastEtag = null;
 	void load();
 });
 
