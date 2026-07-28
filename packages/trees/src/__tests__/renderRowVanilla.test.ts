@@ -219,3 +219,66 @@ test("flattened row: content wraps segments in data-item-flattened-subitems with
 	// data-item-path uses the terminal flattened segment's path, not row.path.
 	expect(button.getAttribute("data-item-path")).toBe("src/deep.ts");
 });
+
+// [diffdeck] GitHub-style flattened-path truncation: segments render as plain
+// text (no per-segment Truncate widgets) inside a single clip element, so the
+// whole joined path clips once at its end via CSS text-overflow instead of
+// each segment collapsing to "…" independently. The wrapper/clip split keeps
+// the row's intrinsic min-content at zero (see buildFlattenedSegments).
+test("flattened row: segments are plain text in one clip element, no per-segment truncate widgets", () => {
+	const row = baseRow({
+		isFlattened: true,
+		flattenedSegments: [
+			{ name: "src", path: "src", isTerminal: false },
+			{ name: "deep", path: "src/deep", isTerminal: true },
+		],
+		name: "deep",
+		path: "src/deep",
+		kind: "directory",
+	});
+	const button = buildRow(row, baseCtx({ ariaLabel: "src / deep" }));
+
+	const wrapper = button.querySelector("[data-item-flattened-subitems]");
+	expect(wrapper?.querySelector("[data-truncate-container]")).toBeNull();
+	expect(wrapper?.querySelector("[data-truncate-group-container]")).toBeNull();
+
+	// All segments live inside the single clip child (the CSS end-clip point).
+	const clip = wrapper?.querySelector("[data-item-flattened-clip]");
+	expect(clip).not.toBeNull();
+	expect(clip?.parentElement).toBe(wrapper as HTMLElement);
+	expect(wrapper?.childNodes.length).toBe(1);
+
+	const subitems = clip?.querySelectorAll("[data-item-flattened-subitem]");
+	expect(subitems?.length).toBe(2);
+	expect(subitems?.[0]?.textContent).toBe("src");
+	expect(subitems?.[1]?.textContent).toBe("deep");
+	expect(clip?.textContent).toBe("src / deep");
+});
+
+// [diffdeck] Hovering any row shows its full path as a native tooltip — the
+// visual text can be ellipsis-clipped (flattened chains, narrow sidebar), so
+// the row button carries `title` with the untruncated path.
+test("row button carries title with the full path for hover tooltip", () => {
+	const fileButton = buildRow(
+		baseRow({ name: "deep.ts", path: "src/mid/deep.ts" }),
+		baseCtx({ ariaLabel: "deep.ts" }),
+	);
+	expect(fileButton.getAttribute("title")).toBe("src/mid/deep.ts");
+
+	// Flattened directory chain: title is the terminal segment's full path
+	// (same value as data-item-path), not the " / "-joined display text.
+	const flattenedButton = buildRow(
+		baseRow({
+			isFlattened: true,
+			flattenedSegments: [
+				{ name: "mid", path: "src/mid", isTerminal: false },
+				{ name: "deep", path: "src/mid/deep", isTerminal: true },
+			],
+			name: "deep",
+			path: "src/mid/deep",
+			kind: "directory",
+		}),
+		baseCtx({ ariaLabel: "mid / deep" }),
+	);
+	expect(flattenedButton.getAttribute("title")).toBe("src/mid/deep");
+});

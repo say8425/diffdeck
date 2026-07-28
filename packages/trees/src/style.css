@@ -412,10 +412,25 @@
     border-top-right-radius: 0;
   }
 
+  /* [diffdeck] Upstream lays segments out as inline-flex so each one shrinks
+   * through its own Truncate widget ("eng… / r… / … / p…"). The segments are
+   * now plain text (renderRowVanilla.ts buildFlattenedSegments), clipped once
+   * at the end of the joined path, GitHub-style ("apps/cms/src/…"). The
+   * single minmax(0, max-content) column zeroes the wrapper's intrinsic
+   * min-content contribution — virtualized rows are absolutely positioned, so
+   * their shrink-to-fit width follows the row's intrinsic minimum, and a
+   * nowrap run would otherwise blow the row out past the sidebar (same trick
+   * as the upstream Truncate grid above). */
   [data-item-flattened-subitems] {
-    align-items: center;
-    gap: 2px;
-    display: inline-flex;
+    grid-template-columns: minmax(0, max-content);
+    min-width: 0;
+    display: grid;
+  }
+
+  [data-item-flattened-clip] {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
   }
 
   [data-item-flattened-subitem]:hover, [data-item-flattened-subitem-drag-target="true"] {
