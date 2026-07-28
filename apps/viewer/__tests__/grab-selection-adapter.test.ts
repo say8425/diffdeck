@@ -7,9 +7,24 @@ const node = {} as Node;
 const range: RangeEndpoints = { startContainer: node, startOffset: 0, endContainer: node, endOffset: 3 };
 
 describe("resolveSelectionRange", () => {
-	test("null/collapsed selection → null", () => {
+	test("null selection → null", () => {
 		expect(resolveSelectionRange(null, [])).toBeNull();
-		expect(resolveSelectionRange({ isCollapsed: true }, [])).toBeNull();
+	});
+	test("outer isCollapsed=true だが getComposedRanges なし + fallback 全滅 → null", () => {
+		// Chrome の shadow rescope: outer isCollapsed は信頼不可
+		const sel: SelectionLike = { isCollapsed: true };
+		expect(resolveSelectionRange(sel, [])).toBeNull();
+		expect(resolveSelectionRange(sel, [{}])).toBeNull();
+	});
+	test("Chrome実測: outer isCollapsed=true だが getComposedRanges は有効な range → resolve", () => {
+		// Chrome が shadow root をrescope したとき、outer isCollapsed=true だが
+		// getComposedRanges({shadowRoots}) は実際のドラッグ選択を返す
+		const sel: SelectionLike = {
+			isCollapsed: true,
+			direction: "forward",
+			getComposedRanges: () => [range],
+		};
+		expect(resolveSelectionRange(sel, [])).toEqual({ range, backward: false });
 	});
 	test("primary: getComposedRanges 옵션백 호출 + direction backward 전파", () => {
 		let seen: unknown;
@@ -28,6 +43,17 @@ describe("resolveSelectionRange", () => {
 	test("primary가 빈 배열을 주면 null", () => {
 		expect(
 			resolveSelectionRange({ isCollapsed: false, getComposedRanges: () => [] }, []),
+		).toBeNull();
+	});
+	test("primary が collapsed StaticRange(start === end) を返す → null", () => {
+		const collapsedRange: RangeEndpoints = {
+			startContainer: node,
+			startOffset: 5,
+			endContainer: node,
+			endOffset: 5,
+		};
+		expect(
+			resolveSelectionRange({ isCollapsed: false, getComposedRanges: () => [collapsedRange] }, []),
 		).toBeNull();
 	});
 	test("fallback: root.getSelection()의 첫 non-collapsed range, backward=false", () => {

@@ -4,6 +4,7 @@
 // 레거시는 Chrome이 조용히 무시한다). fallback은 비표준 shadowRoot.getSelection()
 // (단일 root 한정). 덕타입인 이유: happy-dom엔 둘 다 없어, 게이트 안에서 fake로
 // 전 분기를 커버하려면 실 DOM 타입에 묶이면 안 된다.
+// 주의: outer selection.isCollapsed는 Chrome의 shadow rescope 때문에 신뢰 불가.
 export interface RangeEndpoints {
 	startContainer: Node;
 	startOffset: number;
@@ -32,10 +33,14 @@ export const resolveSelectionRange = (
 	selection: SelectionLike | null,
 	roots: readonly GrabRoot[],
 ): ResolvedSelection | null => {
-	if (!selection || selection.isCollapsed) return null;
+	if (!selection) return null;
 	if (typeof selection.getComposedRanges === "function") {
 		const range = selection.getComposedRanges({ shadowRoots: roots })[0];
 		if (!range) return null;
+		// collapsed StaticRange (start == end) を除外
+		if (range.startContainer === range.endContainer && range.startOffset === range.endOffset) {
+			return null;
+		}
 		return { range, backward: selection.direction === "backward" };
 	}
 	for (const root of roots) {
