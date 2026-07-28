@@ -717,10 +717,43 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		codeView.render();
 		renderedDiffStyle = diffStyle;
 	} else {
-		const scrollTop = codeView.getScrollTop();
+		// Plain data update (refresh / --watch poll). Let the engine anchor this
+		// too, exactly as the style change above does — do NOT restore the old
+		// scrollTop in pixels.
+		//
+		// setItems → reconcileItems marks layout dirty from the first changed
+		// item, and the render path re-arms its scroll correction unconditionally
+		// whenever layoutDirtyIndex is set, deriving a fresh anchor from
+		// renderState when no pendingLayoutAnchor is cached. So the correction is
+		// already semantic and already happening; a pixel scrollTo on top of it
+		// is not just redundant but actively wrong in three ways:
+		//
+		//   1. It creeps, on every single update. A `position` target is not an
+		//      identity restore: resolveScrollTargetTop subtracts
+		//      getStickyHeaderOffset() (= diffHeaderHeight, 44, because we pass
+		//      stickyHeaders: true and no disableFileHeader) whenever the value
+		//      isn't clamped. Every refresh and every --watch poll nudged the
+		//      viewport up by 44px.
+		//   2. It drifts. If a file *above* the viewport changed length, the
+		//      content below it moves, so the old pixel offset now points at a
+		//      different line — measured at 1244px of drift for a 60-line growth.
+		//   3. It clobbers the style toggle's anchor. scrollTo() sets
+		//      pendingScrollTarget, and the frame honours that verbatim over the
+		//      resolved anchor. renderedDiffStyle is updated synchronously above
+		//      while that branch's render is still only queued, so an update
+		//      landing in that one-frame window routes here and would overwrite
+		//      the anchored position with a pre-transition pixel value — which,
+		//      against split's roughly halved content, lands near the bottom.
+		//
+		// The correction is not universal, and does not need to be: setItems has
+		// append-only paths that mark nothing dirty (nothing above the viewport
+		// moved, so there is nothing to correct), and anchor resolution can come
+		// back empty — the anchor's item removed, or renderState reset when the
+		// list shrinks past the render window. The fallback there is the clamped
+		// current position, which still beats the old value-minus-44.
+		// Regression net: update-anchor.e2e.ts.
 		codeView.setItems(items);
 		codeView.render();
-		codeView.scrollTo({ type: "position", position: scrollTop });
 	}
 };
 

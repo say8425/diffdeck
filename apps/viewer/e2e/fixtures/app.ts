@@ -3,7 +3,12 @@
 // repo, capture its printed (tokened) viewer URL, and tear both down
 // afterwards. Mirrors the spawn + readUrlFromStdout pattern from
 // apps/viewer/__tests__/cli-smoke.test.ts.
-import { type Page, test as base } from "@playwright/test";
+import {
+	expect,
+	type Locator,
+	type Page,
+	test as base,
+} from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -114,4 +119,84 @@ export const test = base.extend<object, WorkerFixtures>({
 	],
 });
 
-export { expect } from "@playwright/test";
+// 어떤 수치가 정착할 때까지 기다린다 — sleep 대신 "연속 두 번 같은 값".
+const waitForStable = async (
+	read: () => Promise<number>,
+	requirePositive = true,
+): Promise<void> => {
+	let last = Number.NaN;
+	await expect
+		.poll(
+			async () => {
+				const value = await read();
+				const stable = (!requirePositive || value > 0) && value === last;
+				last = value;
+				return stable;
+			},
+			{ timeout: 15_000, intervals: [100] },
+		)
+		.toBe(true);
+};
+
+// 초기 레이아웃 정착. CodeView는 아이템 높이를 추정으로 먼저 채우고 실제
+// 측정되는 대로 늘려가므로, 정착 전에 "높이의 절반"으로 스크롤하면 같은
+// 비율이라도 매번 다른 파일에 떨어진다 — 그 창에서는 엔진이 잡는 앵커와
+// 아래 topVisibleFileId()가 DOM rect로 읽는 앵커가 어긋난다.
+export const waitForStableHeight = (scroller: Locator): Promise<void> =>
+	waitForStable(() => scroller.evaluate((el) => el.scrollHeight));
+
+// 스크롤 위치 정착. scrollTop을 직접 대입해도 엔진은 다음 프레임에 자기
+// 페이지드 스크롤 모델로 위치를 보정할 수 있다. 보정 전에 앵커를 샘플링하면
+// 그 뒤 뷰포트가 움직여 앵커가 화면 밖으로 나갈 수 있으므로, 값이 멈춘 뒤에
+// 읽는다.
+export const waitForStableScrollTop = (scroller: Locator): Promise<void> =>
+	waitForStable(() => scroller.evaluate((el) => el.scrollTop));
+
+// 뷰포트 최상단에 걸친 첫 diff 컨테이너의 파일 id. 스크롤 컨테이너와
+// 컨테이너들의 실제 rect를 비교해 구한다 (가상화로 렌더 윈도우 밖 파일은
+// DOM에 없지만, 최상단 파일은 반드시 있다).
+export const topVisibleFileId = (page: Page): Promise<string | null> =>
+	page.evaluate(() => {
+		const scroller = document.getElementById("diff") as HTMLElement;
+		const { top } = scroller.getBoundingClientRect();
+		for (const c of document.querySelectorAll("diffs-container")) {
+			// 1px 여유: 최상단 파일의 하단 경계가 뷰포트 상단에 정확히 닿은
+			// 경우를 "보인다"로 세지 않는다.
+			if (c.getBoundingClientRect().bottom > top + 1) {
+				return (
+					c.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ?? null
+				);
+			}
+		}
+		return null;
+	});
+
+// 한 파일의 상단이 스크롤 뷰포트 상단으로부터 몇 px 떨어져 있는지.
+//
+// 이게 "앵커됐다"와 "그냥 비례로 늘어났다"를 가르는 신호다. 파일 하나가
+// 뷰포트 여러 개 높이라 "뷰포트 안에 있다"만으로는 둘을 구분할 수 없다 —
+// 엔진이 앵커를 놓치고 scrollTop을 높이 비율로만 환산해도 같은 파일 안에
+// 떨어질 가능성이 높기 때문. 반면 아이템 앵커링은 그 파일의 상단을 뷰포트
+// 기준 같은 위치에 정확히 붙들어 둔다. 두 예측은 실제로 갈린다: 헤더·이미지
+// 카드처럼 스타일에 따라 줄지 않는 고정 높이가 섞여 있어 전체 높이는
+// 균일하게 스케일되지 않는다.
+export const anchorOffset = (page: Page, fileId: string): Promise<number> =>
+	page.evaluate((id) => {
+		const scroller = document.getElementById("diff") as HTMLElement;
+		const container = [...document.querySelectorAll("diffs-container")].find(
+			(el) => el.querySelector<HTMLElement>("[data-fold]")?.dataset.fold === id,
+		);
+		// 렌더 윈도우 밖으로 밀려나 아예 없으면 NaN — 단언이 통과할 수 없다.
+		if (!container) return Number.NaN;
+		return Math.round(
+			container.getBoundingClientRect().top -
+				scroller.getBoundingClientRect().top,
+		);
+	}, fileId);
+
+// 앵커 유지 허용 오차(px). 실측은 전환 전후가 정확히 일치했지만(-100 → -100),
+// 서브픽셀 반올림 여지를 둔다. 비례 스케일로 어긋나면 수백 px씩 벌어지므로
+// 이 폭으로도 회귀는 확실히 잡힌다.
+export const ANCHOR_TOLERANCE_PX = 40;
+
+export { expect };
