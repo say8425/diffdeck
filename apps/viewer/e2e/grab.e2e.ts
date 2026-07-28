@@ -123,8 +123,8 @@ test("② unified 텍스트 드래그 → 트리거 → Escape 숨김 → 재드
 	// 회귀망: trigger.hide()는 element.hidden 토글이라, CSS
 	// 쪽에서 [hidden] 우선순위가 깨지면(예: display 강제 규칙) happy-dom
 	// 유닛 테스트는 절대 못 잡고 실브라우저에서만 드러난다. Escape로 실제
-	// 화면에서 사라지는지 확인한 뒤, armedGrab이 살아있으므로 재드래그로
-	// 다시 뜨는지까지 검증한다.
+	// 화면에서 사라지는지 확인한 뒤, 재드래그가 pointerup 핸들러(main.ts)에서
+	// armedGrab을 새 스냅샷으로 덮어써 트리거가 다시 뜨는지까지 검증한다.
 	await page.keyboard.press("Escape");
 	await expect(trigger).toBeHidden();
 
@@ -273,7 +273,7 @@ test("⑤ 대량 스크롤(recycle) 이후에도 팝오버 생존 → Enter로 �
 	}
 });
 
-test("⑥ find 내비게이션은 grab 팝오버를 열지 않는다", async ({
+test("⑥ find 내비게이션은 grab 팝오버를 열지도, 열려 있는 팝오버를 닫지도 않는다", async ({
 	page,
 	viewerUrl,
 }) => {
@@ -290,6 +290,33 @@ test("⑥ find 내비게이션은 grab 팝오버를 열지 않는다", async ({
 	for (let i = 0; i < 5; i++) {
 		await page.locator("#find-input").press("Enter");
 		await expect(popover).toBeHidden();
+	}
+
+	// 반대 방향(스펙의 나머지 절반): 팝오버가 hidden인 채 시작하면 grab 관련
+	// 코드를 통째로 지워도 위 단언은 전부 통과해버린다(vacuous). 이번엔
+	// 거터 "+"로 팝오버를 실제로 연 뒤, find-input에 포커스한 채 Enter로
+	// 다음 매치를 순회해도 열린 팝오버가 유지되는지 검증한다 — 반드시
+	// 키보드 경로여야 한다: find-bar의 prev/next 버튼 클릭은
+	// mousedown/pointerdown을 던지므로 onDocDismiss가 (설계대로) 팝오버
+	// 바깥 클릭으로 인식해 닫아버린다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+	const cells = container.locator("[data-column-number]");
+	const a = await cells.first().boundingBox();
+	if (!a) throw new Error("gutter cell not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+	);
+	await container.locator("[data-utility-button]").click();
+	await expect(popover).toBeVisible();
+
+	for (let i = 0; i < 5; i++) {
+		await page.locator("#find-input").press("Enter");
+		await expect(popover).toBeVisible();
 	}
 });
 
