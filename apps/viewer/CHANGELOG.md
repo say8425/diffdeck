@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.1.0...diffdeck-v1.2.0) (2026-07-29)
+
+
+### Features
+
+* **trees:** GitHub-style end-ellipsis for flattened tree paths + full-path hover tooltips ([#36](https://github.com/say8425/diffdeck/issues/36)) ([42e56d1](https://github.com/say8425/diffdeck/commit/42e56d18028d2c4b52c657f58db762204f93bf1f))
+* **viewer:** diff-grab — diff 선택 → 프롬프트 → 에이전트용 인코딩 클립보드 복사 ([#42](https://github.com/say8425/diffdeck/issues/42)) ([dee11b8](https://github.com/say8425/diffdeck/commit/dee11b8c6cf949371367df023d30c2846b5d341a))
+* **viewer:** informative empty state — explain where the changes are ([#38](https://github.com/say8425/diffdeck/issues/38)) ([8249ebc](https://github.com/say8425/diffdeck/commit/8249ebcbfeced6168394a3a099c56aa7d109757a))
+
+
+### Bug Fixes
+
+* **viewer:** anchor the scroll on data updates instead of restoring pixels ([#41](https://github.com/say8425/diffdeck/issues/41)) ([37d3ede](https://github.com/say8425/diffdeck/commit/37d3edede12b08946dfd5b57381e94ce09f37dc3))
+* **viewer:** highlight find matches that span intraline/token span boundaries ([#39](https://github.com/say8425/diffdeck/issues/39)) ([21d5830](https://github.com/say8425/diffdeck/commit/21d58301691a21fbb6867fa809d8e9e54f1c4e17))
+* **viewer:** keep the scroll position when toggling Unified/Split ([#40](https://github.com/say8425/diffdeck/issues/40)) ([30f6095](https://github.com/say8425/diffdeck/commit/30f6095b25acf5789eb2c00680b27dd6febeebd0))
+
 ## [1.1.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.0.0...diffdeck-v1.1.0) (2026-07-25)
 
 
