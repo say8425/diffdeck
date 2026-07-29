@@ -1,4 +1,4 @@
-// diff-grab e2e 10종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
+// diff-grab e2e 11종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
 // 선택을 만들고, 팝오버·클립보드 인코딩까지 실 Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
 // getComposedRanges 실측·엔진 옵션 활성화·recycle 생존·watch/find와의 상호작용은
@@ -459,4 +459,57 @@ test("⑩ 팝오버 Esc로 닫으면 엔진 라인 선택도 해제 — 스테�
 
 	await cells.nth(1).hover();
 	await expect(cells.nth(1).locator("[data-utility-button]")).toBeVisible();
+});
+
+test("⑪ find로 선택된 매치는 같은 파일을 건드리는 renderPatch(watch) 이후에도 유지된다", async ({
+	page,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	const viewer = await launchViewer(["--watch"]);
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+		// grab 팝오버의 onClosed(→ clearSelectedLines())는 renderPatch 진입부의
+		// grabPopover.close()에서 팝오버가 열려 있었는지와 무관하게 항상
+		// 호출된다. find 바가 선택해 둔 매치 라인도 엔진의 같은 selectedLines
+		// 슬롯을 공유하므로 이 호출로 매 renderPatch마다 잠깐 지워지지만,
+		// findBar.setData()가 grabPopover.close() 직후 — 같은 renderPatch 호출
+		// 안에서, 실제 codeView.render() 전에 — find 바가 열려 있으면 항상
+		// 현재 매치를 재선택한다(findBar.ts:149-154). 그래서 화면에는 반영되지
+		// 않는다. 매치가 있는 파일 자체의 내용을 바꿔 그 파일의 DOM이 실제로
+		// 재렌더됨을 확인함으로써, "파일이 안 건드려져서 우연히 살아남았다"는
+		// 가능성을 배제한다.
+		await page.keyboard.press("Control+F");
+		await page.locator("#find-input").fill("hello");
+		await expect(page.locator("#find-count")).toHaveText(/\d+\/\d+/);
+		await expect(page.locator("[data-selected-line]").first()).toBeVisible();
+		const before = await page.locator("[data-selected-line]").count();
+
+		const helloContainer = page
+			.locator("diffs-container")
+			.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+		const helloPath = join(viewer.repoDir, "src", "hello.ts");
+		const original = readFileSync(helloPath, "utf8");
+		writeFileSync(
+			helloPath,
+			original.replace("hello, world", "hello, watched"),
+		);
+
+		// renderPatch가 실제로 이 파일의 DOM을 다시 그렸음을 확인한다.
+		await expect
+			.poll(
+				() =>
+					helloContainer.evaluate(
+						(el) => el.shadowRoot?.textContent?.includes("watched") ?? false,
+					),
+				{ timeout: 15_000 },
+			)
+			.toBe(true);
+
+		expect(await page.locator("[data-selected-line]").count()).toBe(before);
+	} finally {
+		await viewer.stop();
+	}
 });
