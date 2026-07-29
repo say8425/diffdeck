@@ -1,4 +1,4 @@
-// diff-grab e2e 7종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
+// diff-grab e2e 9종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
 // 선택을 만들고, 팝오버·클립보드 인코딩까지 실 Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
 // getComposedRanges 실측·엔진 옵션 활성화·recycle 생존·watch/find와의 상호작용은
@@ -358,4 +358,60 @@ test("⑦ watch 폴이 열려 있던 grab 팝오버를 닫는다", async ({
 	} finally {
 		await viewer.stop();
 	}
+});
+
+test("⑧ 단순 클릭(드래그 없음)은 팝오버를 열지 않는다", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// 트리거 제거 회귀망: 트리거가 있던 시절엔 hasSelection()(selectionchange
+	// 리스너)이 "선택 없음"을 걸러 트리거를 숨겼다. 트리거를 없앤 지금은
+	// pointerup 핸들러 안에서 resolveSelectionRange가 진짜 collapsed 선택
+	// (드래그 없는 단순 클릭)을 null로 걸러내는 것이 유일한 방어선이다 —
+	// 이게 깨지면 diff 영역의 모든 클릭이 팝오버를 띄우는 심각한 회귀가 된다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const row = container.locator("[data-line]").first();
+	const box = await row.boundingBox();
+	if (!box) throw new Error("text row not visible");
+	await page.mouse.click(box.x + 40, box.y + box.height / 2);
+	// pointerup 핸들러는 선택 확정을 한 틱(setTimeout 0) 뒤로 미루므로 그
+	// 이후까지 기다렸다가 단언한다.
+	await page.waitForTimeout(80);
+	await expect(page.locator("#grab-popover")).toBeHidden();
+});
+
+test("⑨ 파일 헤더(파일명) 텍스트 드래그는 팝오버를 열지 않는다", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// resolveTextTarget은 [data-line] 밖(헤더 등)에서 끝나는 드래그를 null로
+	// 걸러낸다(rowsBetween이 빈 배열이면 target 없음). 트리거가 있던 시절엔
+	// 이 경우도 "트리거 안 뜸"으로 조용히 무해했지만, 트리거 없이 pointerup
+	// 즉시 여는 지금은 이 가드가 깨지면 곧장 팝오버가 열린다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const title = container.locator("[data-title]");
+	const box = await title.boundingBox();
+	if (!box) throw new Error("file title not visible");
+	await dragSelect(
+		page,
+		{ x: box.x + 2, y: box.y + box.height / 2 },
+		{ x: box.x + box.width - 2, y: box.y + box.height / 2 },
+	);
+	await expect(page.locator("#grab-popover")).toBeHidden();
 });
