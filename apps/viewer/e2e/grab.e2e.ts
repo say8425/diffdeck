@@ -413,5 +413,11 @@ test("⑨ 파일 헤더(파일명) 텍스트 드래그는 팝오버를 열지 �
 		{ x: box.x + 2, y: box.y + box.height / 2 },
 		{ x: box.x + box.width - 2, y: box.y + box.height / 2 },
 	);
+	// vacuous-test 가드: 드래그가 실제로 텍스트를 선택했는지부터 확인한다 —
+	// 그렇지 않으면(예: 폴드 버튼을 맞혀 아무 선택도 안 생김) 아래 "팝오버
+	// 안 열림" 단언이 헤더 가드와 무관하게 항상 통과해버려 회귀를 못 잡는다.
+	await expect
+		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
+		.toContain("README");
 	await expect(page.locator("#grab-popover")).toBeHidden();
 });
