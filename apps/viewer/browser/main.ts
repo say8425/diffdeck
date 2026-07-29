@@ -360,6 +360,13 @@ const grabPopover = createGrabPopover({
 		return clip.writeText(text);
 	},
 	onCopied: () => codeView?.clearSelectedLines(),
+	// 팝오버가 어떤 경로로 닫히든(Esc·외부 dismiss·복사 성공 후 자동 닫힘 포함)
+	// 엔진 라인 선택도 함께 해제한다 — 안 그러면 엔진의 placeUtility()가 스테일
+	// 선택을 계속 붙들고 있어서(선택이 존재하면 호버를 무시하고 "+"를 선택
+	// 하단에 고정, 하단 행이 미렌더면 아예 숨김) 이후 다른 행 호버에서 "+"가
+	// 죽는다. onCopied와 겹쳐 두 번 호출돼도 clearSelectedLines()는 멱등이라
+	// 무해하다.
+	onClosed: () => codeView?.clearSelectedLines(),
 });
 document.body.append(grabPopover.element);
 

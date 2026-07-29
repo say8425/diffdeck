@@ -11,6 +11,7 @@ let writeImpl: (text: string) => Promise<void> = (t) => {
 	return Promise.resolve();
 };
 let copied = 0;
+let closed = 0;
 let popover: GrabPopover;
 
 const openDefault = () =>
@@ -41,10 +42,12 @@ beforeEach(() => {
 		return Promise.resolve();
 	};
 	copied = 0;
+	closed = 0;
 	popover = createGrabPopover({
 		doc: document,
 		writeText: (t) => writeImpl(t),
 		onCopied: () => copied++,
+		onClosed: () => closed++,
 	});
 	document.body.append(popover.element);
 });
@@ -145,5 +148,53 @@ describe("createGrabPopover", () => {
 		popover.destroy();
 		document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 		expect(popover.isOpen()).toBe(true);
+	});
+	test("Esc(input)로 닫힐 때 onClosed 1회", () => {
+		openDefault();
+		input().dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Escape", cancelable: true }),
+		);
+		expect(closed).toBe(1);
+	});
+	test("doc 레벨 Escape로 닫힐 때도 onClosed 1회", () => {
+		openDefault();
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+		expect(closed).toBe(1);
+	});
+	test("외부 mousedown으로 닫힐 때 onClosed 1회", () => {
+		openDefault();
+		document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+		expect(closed).toBe(1);
+	});
+	test("복사 성공 후 자동 닫힘에서도 onClosed 1회 — onCopied와는 별개 타이밍", async () => {
+		jest.useFakeTimers();
+		openDefault();
+		pressEnter();
+		await flush();
+		// 복사 성공 직후엔 아직 열려 있다 — onCopied만 발화하고 onClosed는 아직.
+		expect(copied).toBe(1);
+		expect(closed).toBe(0);
+		jest.advanceTimersByTime(1200);
+		expect(closed).toBe(1);
+		jest.useRealTimers();
+	});
+	test("open→open(재오픈)에서는 onClosed 미호출", () => {
+		openDefault();
+		openDefault();
+		expect(closed).toBe(0);
+	});
+	test("onClosed 미제공이어도 close()가 무해하다", () => {
+		const p = createGrabPopover({
+			doc: document,
+			writeText: (t) => writeImpl(t),
+		});
+		document.body.append(p.element);
+		p.open({
+			label: "x",
+			buildOutput: () => "y",
+			placement: { left: 0, top: 0 },
+		});
+		expect(() => p.close()).not.toThrow();
+		p.destroy();
 	});
 });

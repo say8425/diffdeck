@@ -1,4 +1,4 @@
-// diff-grab e2e 9종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
+// diff-grab e2e 10종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
 // 선택을 만들고, 팝오버·클립보드 인코딩까지 실 Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
 // getComposedRanges 실측·엔진 옵션 활성화·recycle 생존·watch/find와의 상호작용은
@@ -420,4 +420,43 @@ test("⑨ 파일 헤더(파일명) 텍스트 드래그는 팝오버를 열지 �
 		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
 		.toContain("README");
 	await expect(page.locator("#grab-popover")).toBeHidden();
+});
+
+test("⑩ 팝오버 Esc로 닫으면 엔진 라인 선택도 해제 — 스테일 선택이 호버 +를 막지 않는다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// hello.ts는 old/new 각 1행뿐이라 거터 셀이 정확히 2개다. 하나를 선택해
+	// 팝오버를 연 뒤 Esc로 닫고, 다른 셀을 호버해 "+"가 그쪽으로 옮겨오는지
+	// 확인한다. 회귀 시나리오(수정 전): close()가 엔진 라인 선택을 지우지
+	// 않으면 InteractionManager.placeUtility()가 활성 선택을 호버보다 우선해
+	// (packages/diffs/src/managers/InteractionManager.ts:1110-1133) "+"를
+	// 예전 선택 행에 계속 고정하거나, 그 행이 더 이상 대상이 아니면 아예
+	// 숨겨버려 새로 호버한 행에는 뜨지 않는다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+
+	const cells = container.locator("[data-column-number]");
+	const first = await cells.first().boundingBox();
+	if (!first) throw new Error("gutter cell not visible");
+	await dragSelect(
+		page,
+		{ x: first.x + first.width / 2, y: first.y + first.height / 2 },
+		{ x: first.x + first.width / 2, y: first.y + first.height / 2 },
+	);
+	await container.locator("[data-utility-button]").click();
+	await expect(page.locator("#grab-popover")).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(page.locator("#grab-popover")).toBeHidden();
+
+	await cells.nth(1).hover();
+	await expect(cells.nth(1).locator("[data-utility-button]")).toBeVisible();
 });

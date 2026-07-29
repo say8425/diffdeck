@@ -1,13 +1,16 @@
-// 그랩 트리거를 눌렀을 때 뜨는 프롬프트 입력 팝오버. 요소는 항상 DOM에
-// 붙어있고(hidden 토글) main이 body에 append한다 — trigger.ts/findBar.ts와
-// 동일하게 리스너는 생성 시 등록, destroy()에서 해제(happy-dom 전역 window
-// 누적 방지).
+// diff-grab 프롬프트 입력 팝오버 — 거터 "+" 클릭 또는 텍스트 드래그 릴리스
+// 시 뜬다. 요소는 항상 DOM에 붙어있고(hidden 토글) main이 body에 append한다 —
+// findBar.ts와 동일하게 리스너는 생성 시 등록, destroy()에서 해제(happy-dom
+// 전역 window 누적 방지).
 import type { Placement } from "./position.ts";
 
 export interface GrabPopoverDeps {
 	doc: Document;
 	writeText(text: string): Promise<void>; // main: navigator.clipboard 래퍼; 테스트: fake
-	onCopied?(): void; // main: codeView.clearSelectedLines()
+	onCopied?(): void; // main: codeView.clearSelectedLines() — 복사 성공 즉시
+	onClosed?(): void; // main: codeView.clearSelectedLines() — close() 경로 전부
+	// (Esc·외부 dismiss·복사 성공 후 자동 닫힘) 공통. onCopied와 이중 호출돼도
+	// clearSelectedLines()는 멱등이라 무해하다.
 }
 
 export interface GrabOpenOptions {
@@ -68,6 +71,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		element.hidden = true;
 		input.blur();
 		clearAutoCloseTimer();
+		deps.onClosed?.();
 	};
 
 	const open = (options: GrabOpenOptions): void => {
