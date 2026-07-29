@@ -351,6 +351,31 @@ const viewport = (): { width: number; height: number } => ({
 	height: window.innerHeight,
 });
 
+// 선택 소유권 플래그: 그랩 팝오버가 엔진의 라인 선택(codeView.selectedLines —
+// data-selected-line을 낳는 그 슬롯)을 소유 중인지. 거터 "+" 경로
+// (onGutterUtilityClick)로 열 때만 true가 되고, 텍스트 드래그 경로는 절대
+// 세우지 않는다 — 텍스트 경로는 네이티브 브라우저 Selection만 읽을 뿐 엔진의
+// selectedLines를 건드리지 않으므로, 그 슬롯을 소유한 적이 없다. 이 플래그가
+// false일 때 codeView.clearSelectedLines()를 호출하면 그건 항상 남의 상태를
+// 지우는 것이다 — 대표적으로 find 바가 매치 탐색용으로 같은 슬롯을 쓴다
+// (revealMatch/selectMatch → setSelectedLines). 플래그 없이 무조건
+// clearSelectedLines()하면: ① 텍스트 경로 팝오버를 Esc로 닫을 때 find 매치
+// 하이라이트가 사라지고, ② 팝오버를 연 적 없어도 renderPatch가 진입부에서
+// 무조건 grabPopover.close()를 호출하므로(토글·워커 복구 등) 사용자가 거터
+// 드래그로 "파킹"만 해 두고 아직 팝오버를 열지 않은 선택까지 매번 지워진다.
+let grabOwnsLineSelection = false;
+
+// onCopied(복사 성공 즉시)와 onClosed(Esc·외부 dismiss·자동 닫힘 등 close()
+// 경로 전부) 양쪽에서 공유 — 둘 다 "이 팝오버가 소유했던 엔진 선택을
+// 정리한다"는 같은 의도이고, 소유 아닐 때 둘 다 손대면 안 되는 것도 같다.
+// 가드 안쪽에서 플래그를 리셋하므로 onCopied가 먼저 지우면 뒤이은 자동 닫힘의
+// onClosed 호출은 자연히 no-op이 된다(멱등).
+const clearOwnedSelection = (): void => {
+	if (!grabOwnsLineSelection) return;
+	grabOwnsLineSelection = false;
+	codeView?.clearSelectedLines();
+};
+
 const grabPopover = createGrabPopover({
 	doc: document,
 	writeText: (text) => {
@@ -359,14 +384,13 @@ const grabPopover = createGrabPopover({
 			return Promise.reject(new Error("clipboard API unavailable"));
 		return clip.writeText(text);
 	},
-	onCopied: () => codeView?.clearSelectedLines(),
+	onCopied: clearOwnedSelection,
 	// 팝오버가 어떤 경로로 닫히든(Esc·외부 dismiss·복사 성공 후 자동 닫힘 포함)
-	// 엔진 라인 선택도 함께 해제한다 — 안 그러면 엔진의 placeUtility()가 스테일
-	// 선택을 계속 붙들고 있어서(선택이 존재하면 호버를 무시하고 "+"를 선택
-	// 하단에 고정, 하단 행이 미렌더면 아예 숨김) 이후 다른 행 호버에서 "+"가
-	// 죽는다. onCopied와 겹쳐 두 번 호출돼도 clearSelectedLines()는 멱등이라
-	// 무해하다.
-	onClosed: () => codeView?.clearSelectedLines(),
+	// 그 팝오버가 실제로 엔진 선택을 소유했을 때만 해제한다 — 안 그러면 엔진의
+	// placeUtility()가 스테일 선택을 계속 붙들고 있어서(선택이 존재하면 호버를
+	// 무시하고 "+"를 선택 하단에 고정, 하단 행이 미렌더면 아예 숨김) 이후 다른
+	// 행 호버에서 "+"가 죽는다.
+	onClosed: clearOwnedSelection,
 });
 document.body.append(grabPopover.element);
 
@@ -423,7 +447,19 @@ const openGrabPopover = (
 	});
 };
 
-diffMount.addEventListener("pointerup", () => {
+diffMount.addEventListener("pointerup", (event) => {
+	// 드래그 게이트: 스펙은 "드래그 릴리스 시"이지, 선택이 존재하기만 하면
+	// 여는 게 아니다 — 폴드 토글(위 click 핸들러 :87-96)과 동일하게
+	// pointerDown/movedBeyondThreshold로 실제 드래그였는지 확인한다. 이
+	// 가드가 없으면 더블/트리플클릭의 네이티브 단어/문단 선택(마우스 이동
+	// 없이도 비어있지 않은 Selection을 만든다)이 곧장 팝오버를 열어버린다.
+	const upPoint = { x: event.clientX, y: event.clientY };
+	if (
+		!pointerDown ||
+		!movedBeyondThreshold(pointerDown, upPoint, DRAG_THRESHOLD)
+	) {
+		return;
+	}
 	// 선택 확정은 pointerup 직후 이벤트 루프 한 틱 뒤가 안전(워커 하이라이트
 	// DOM 교체·recycle이 선택을 죽여도 스냅샷은 이미 고정된 뒤). 거터 "+"
 	// 경로와 동일하게 트리거 버튼 없이 즉시 팝오버를 연다 — 같은 제스처의
@@ -471,6 +507,10 @@ const codeViewOptions = (): ConstructorParameters<
 	onGutterUtilityClick: (range: SelectedLineRange, context) => {
 		const snap = buildGrabSnapshot(context.item.id, normalizeRange(range));
 		if (!snap) return;
+		// 거터 경로만 엔진 선택을 소유한다 — 이 클릭이 있기 전에 엔진이 이미
+		// range를 selectedLines에 반영해 뒀으므로(GitHub식 거터 드래그
+		// 선택), 그 상태를 "이 팝오버가 책임진다"고 표시한다.
+		grabOwnsLineSelection = true;
 		openGrabPopover(snap, selectedRowRect(context.item.id));
 	},
 	renderHeaderPrefix: (fileDiff) => makeFoldButton(fileDiff.name),
