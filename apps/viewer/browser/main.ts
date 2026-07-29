@@ -6,6 +6,7 @@ import {
 	type FileDiffMetadata,
 	getOrCreateWorkerPoolSingleton,
 	parseDiffFromFile,
+	type SelectedLineRange,
 	terminateWorkerPoolSingleton,
 } from "@diffdeck/diffs";
 import { comparePathsInTreeOrder } from "@diffdeck/path-store";
@@ -19,6 +20,16 @@ import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
 import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
+import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
+import { createGrabPopover, type GrabOpenOptions } from "./grab/popover.ts";
+import { computePlacement } from "./grab/position.ts";
+import { normalizeRange, type NormalizedRange } from "./grab/range.ts";
+import {
+	resolveSelectionRange,
+	type SelectionLike,
+} from "./grab/selectionAdapter.ts";
+import { extractSnippet } from "./grab/snippet.ts";
+import { resolveTextTarget } from "./grab/textSelection.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -334,6 +345,144 @@ const syncImageCard = (container: HTMLElement): void => {
 let expandAll = false; // find bar 활성 중 전역 미변경 context 펼침
 const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용량 파일
 
+const POPOVER_SIZE = { width: 340, height: 76 };
+const viewport = (): { width: number; height: number } => ({
+	width: window.innerWidth,
+	height: window.innerHeight,
+});
+
+// 선택 소유권 플래그: 그랩 팝오버가 엔진의 라인 선택(codeView.selectedLines —
+// data-selected-line을 낳는 그 슬롯)을 소유 중인지. 거터 "+" 경로
+// (onGutterUtilityClick)로 열 때만 true가 되고, 텍스트 드래그 경로는 절대
+// 세우지 않는다 — 텍스트 경로는 네이티브 브라우저 Selection만 읽을 뿐 엔진의
+// selectedLines를 건드리지 않으므로, 그 슬롯을 소유한 적이 없다. 이 플래그가
+// false일 때 codeView.clearSelectedLines()를 호출하면 그건 항상 남의 상태를
+// 지우는 것이다 — 대표적으로 find 바가 매치 탐색용으로 같은 슬롯을 쓴다
+// (revealMatch/selectMatch → setSelectedLines). 플래그 없이 무조건
+// clearSelectedLines()하면: ① 텍스트 경로 팝오버를 Esc로 닫을 때 find 매치
+// 하이라이트가 사라지고, ② 팝오버를 연 적 없어도 renderPatch가 진입부에서
+// 무조건 grabPopover.close()를 호출하므로(토글·워커 복구 등) 사용자가 거터
+// 드래그로 "파킹"만 해 두고 아직 팝오버를 열지 않은 선택까지 매번 지워진다.
+let grabOwnsLineSelection = false;
+
+// onCopied(복사 성공 즉시)와 onClosed(Esc·외부 dismiss·자동 닫힘 등 close()
+// 경로 전부) 양쪽에서 공유 — 둘 다 "이 팝오버가 소유했던 엔진 선택을
+// 정리한다"는 같은 의도이고, 소유 아닐 때 둘 다 손대면 안 되는 것도 같다.
+// 가드 안쪽에서 플래그를 리셋하므로 onCopied가 먼저 지우면 뒤이은 자동 닫힘의
+// onClosed 호출은 자연히 no-op이 된다(멱등).
+const clearOwnedSelection = (): void => {
+	if (!grabOwnsLineSelection) return;
+	grabOwnsLineSelection = false;
+	codeView?.clearSelectedLines();
+};
+
+const grabPopover = createGrabPopover({
+	doc: document,
+	writeText: (text) => {
+		const clip = navigator.clipboard;
+		if (!clip?.writeText)
+			return Promise.reject(new Error("clipboard API unavailable"));
+		return clip.writeText(text);
+	},
+	onCopied: clearOwnedSelection,
+	// 팝오버가 어떤 경로로 닫히든(Esc·외부 dismiss·복사 성공 후 자동 닫힘 포함)
+	// 그 팝오버가 실제로 엔진 선택을 소유했을 때만 해제한다 — 안 그러면 엔진의
+	// placeUtility()가 스테일 선택을 계속 붙들고 있어서(선택이 존재하면 호버를
+	// 무시하고 "+"를 선택 하단에 고정, 하단 행이 미렌더면 아예 숨김) 이후 다른
+	// 행 호버에서 "+"가 죽는다.
+	onClosed: clearOwnedSelection,
+});
+document.body.append(grabPopover.element);
+
+const statusOf = (fileId: string): GrabFileStatus =>
+	lastFiles?.find((f) => f.name === fileId)?.status ?? "modified";
+
+// 스냅샷 = 팝오버가 열려 있는 동안 불변인 데이터 전부(스펙 §팝오버).
+const buildGrabSnapshot = (
+	fileId: string,
+	range: NormalizedRange,
+): Omit<GrabOpenOptions, "placement"> | null => {
+	const item = codeView?.getItem(fileId);
+	if (item?.type !== "diff") return null;
+	const snippet = extractSnippet(item.fileDiff, range);
+	if (!snippet) return null;
+	const input = {
+		path: fileId,
+		prevPath: item.fileDiff.prevName,
+		status: statusOf(fileId),
+		mode: diffMode,
+		baseName: diffBase,
+		snippet,
+	};
+	return {
+		label: grabLabel(fileId, snippet),
+		buildOutput: (prompt) => encodeGrab({ ...input, prompt }),
+	};
+};
+
+// 거터 경로 팝오버 앵커: 엔진이 stamp한 data-selected-line 행(없으면 컨테이너).
+const selectedRowRect = (fileId: string): DOMRect | null => {
+	for (const container of diffMount.querySelectorAll<HTMLElement>(
+		DIFFS_TAG_NAME,
+	)) {
+		if (containerFileId(container) !== fileId) continue;
+		const root = container.shadowRoot ?? container;
+		const row =
+			root.querySelector('[data-line][data-selected-line="last"]') ??
+			root.querySelector('[data-line][data-selected-line="single"]') ??
+			root.querySelector("[data-line][data-selected-line]");
+		return (row ?? container).getBoundingClientRect();
+	}
+	return null;
+};
+
+const openGrabPopover = (
+	snap: Omit<GrabOpenOptions, "placement">,
+	rect: DOMRect | null,
+): void => {
+	const anchor = rect ?? diffMount.getBoundingClientRect();
+	grabPopover.open({
+		...snap,
+		placement: computePlacement(anchor, POPOVER_SIZE, viewport()),
+	});
+};
+
+diffMount.addEventListener("pointerup", (event) => {
+	// 드래그 게이트: 스펙은 "드래그 릴리스 시"이지, 선택이 존재하기만 하면
+	// 여는 게 아니다 — 폴드 토글(위 click 핸들러 :87-96)과 동일하게
+	// pointerDown/movedBeyondThreshold로 실제 드래그였는지 확인한다. 이
+	// 가드가 없으면 더블/트리플클릭의 네이티브 단어/문단 선택(마우스 이동
+	// 없이도 비어있지 않은 Selection을 만든다)이 곧장 팝오버를 열어버린다.
+	const upPoint = { x: event.clientX, y: event.clientY };
+	if (
+		!pointerDown ||
+		!movedBeyondThreshold(pointerDown, upPoint, DRAG_THRESHOLD)
+	) {
+		return;
+	}
+	// 선택 확정은 pointerup 직후 이벤트 루프 한 틱 뒤가 안전(워커 하이라이트
+	// DOM 교체·recycle이 선택을 죽여도 스냅샷은 이미 고정된 뒤). 거터 "+"
+	// 경로와 동일하게 트리거 버튼 없이 즉시 팝오버를 연다 — 같은 제스처의
+	// pointerup에서 열어도 외부 dismiss는 pointerdown/mousedown에만 걸려
+	// 있어 자기-dismiss는 없다.
+	setTimeout(() => {
+		const roots = [...diffMount.querySelectorAll<HTMLElement>(DIFFS_TAG_NAME)]
+			.map((c) => c.shadowRoot)
+			.filter((r): r is ShadowRoot => r !== null);
+		const resolved = resolveSelectionRange(
+			document.getSelection() as unknown as SelectionLike | null,
+			roots,
+		);
+		const target = resolved ? resolveTextTarget(resolved, diffStyle) : null;
+		const snap = target ? buildGrabSnapshot(target.fileId, target.range) : null;
+		if (!target || !snap) return;
+		openGrabPopover(
+			snap,
+			(target.anchorRowEl ?? diffMount).getBoundingClientRect(),
+		);
+	}, 0);
+});
+
 const codeViewOptions = (): ConstructorParameters<
 	typeof CodeView<undefined>
 >[0] => ({
@@ -351,6 +500,19 @@ const codeViewOptions = (): ConstructorParameters<
 	// 무관하게 zero-work다 (DiffHunksRenderer의 emptyWindow 경로).
 	tokenizeMaxLength: 20_000,
 	expandUnchanged: expandAll,
+	// diff-grab: GitHub식 거터 라인 선택 + "+" 버튼 (스펙 §경로 A).
+	// renderGutterUtility는 금지 — onGutterUtilityClick과 병용 시 엔진 throw.
+	enableLineSelection: true,
+	enableGutterUtility: true,
+	onGutterUtilityClick: (range: SelectedLineRange, context) => {
+		const snap = buildGrabSnapshot(context.item.id, normalizeRange(range));
+		if (!snap) return;
+		// 거터 경로만 엔진 선택을 소유한다 — 이 클릭이 있기 전에 엔진이 이미
+		// range를 selectedLines에 반영해 뒀으므로(GitHub식 거터 드래그
+		// 선택), 그 상태를 "이 팝오버가 책임진다"고 표시한다.
+		grabOwnsLineSelection = true;
+		openGrabPopover(snap, selectedRowRect(context.item.id));
+	},
 	renderHeaderPrefix: (fileDiff) => makeFoldButton(fileDiff.name),
 	onPostRender: (node: HTMLElement, _instance: unknown, phase: string) => {
 		if (phase === "unmount") return;
@@ -519,6 +681,7 @@ const enrichEmptyState = async (): Promise<void> => {
 };
 
 const renderPatch = (unsorted: DiffFile[]): void => {
+	grabPopover.close();
 	// 사이드바 트리와 같은 순서(디렉터리 우선·자연 정렬)로 diff 아이템을 배치.
 	const files = unsorted.toSorted((a, b) =>
 		comparePathsInTreeOrder(a.name, b.name),
@@ -807,7 +970,9 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 	}
 };
 
+let diffBase = ""; // x-diff-base — grab 인코딩의 base 표시용 (updateBaseOption은 지역 소비라 별도 보관)
 const applyFetched = (result: FetchDiffResult): void => {
+	diffBase = result.base;
 	updateBaseOption(result.base);
 	if (result.kind === "unchanged") {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
