@@ -123,6 +123,11 @@ test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨
 	const popover = page.locator("#grab-popover");
 	const input = page.locator("#grab-popover input");
 	await expect(popover).toBeVisible();
+	// 네이티브 선택 생존 확인(실측): popover.open()이 input.focus()로 포커스를
+	// 가져가는 순간 네이티브 드래그 선택은 붕괴한다(document.getSelection()이
+	// 빈 문자열) — CLAUDE.md에 트레이드오프로 기록해 뒀다. 그래서 여기엔
+	// "선택이 살아있다" 단언을 남기지 않는다: 죽는 게 확인된 사실이라 그런
+	// 단언은 항상 실패하거나 무의미해진다.
 	await expect(input).toBeFocused();
 
 	// 회귀망: close()는 element.hidden 토글이라, CSS 쪽에서 [hidden] 우선순위가
@@ -360,18 +365,20 @@ test("⑦ watch 폴이 열려 있던 grab 팝오버를 닫는다", async ({
 	}
 });
 
-test("⑧ 단순 클릭(드래그 없음)은 팝오버를 열지 않는다", async ({
+test("⑧ 단순 클릭·더블클릭(드래그 없음)은 팝오버를 열지 않는다 — 드래그 게이트의 positive control", async ({
 	page,
 	viewerUrl,
 }) => {
 	await page.goto(viewerUrl);
 	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 
-	// 트리거 제거 회귀망: 트리거가 있던 시절엔 hasSelection()(selectionchange
-	// 리스너)이 "선택 없음"을 걸러 트리거를 숨겼다. 트리거를 없앤 지금은
-	// pointerup 핸들러 안에서 resolveSelectionRange가 진짜 collapsed 선택
-	// (드래그 없는 단순 클릭)을 null로 걸러내는 것이 유일한 방어선이다 —
-	// 이게 깨지면 diff 영역의 모든 클릭이 팝오버를 띄우는 심각한 회귀가 된다.
+	// 단순 클릭은 애초에 선택 자체가 안 생기므로(진짜 collapsed range →
+	// resolveSelectionRange가 null) 아래 드래그 게이트(main.ts pointerup의
+	// pointerDown/movedBeyondThreshold) 이전에도 걸러졌다 — 이 게이트의 진짜
+	// positive control은 더블클릭이다: 브라우저 네이티브 더블클릭은 마우스
+	// 이동 없이도 단어 하나를 실제로 선택하므로(비어있지 않은 Selection),
+	// 드래그 게이트가 없으면 이 케이스가 곧장 팝오버를 열어버린다. 스펙은
+	// "드래그 릴리스 시"이지 "선택이 존재하면"이 아니므로 둘 다 막혀야 한다.
 	const container = page
 		.locator("diffs-container")
 		.filter({ has: page.locator('[data-fold="README.md"]') });
@@ -381,9 +388,23 @@ test("⑧ 단순 클릭(드래그 없음)은 팝오버를 열지 않는다", asy
 	const row = container.locator("[data-line]").first();
 	const box = await row.boundingBox();
 	if (!box) throw new Error("text row not visible");
+
 	await page.mouse.click(box.x + 40, box.y + box.height / 2);
 	// pointerup 핸들러는 선택 확정을 한 틱(setTimeout 0) 뒤로 미루므로 그
 	// 이후까지 기다렸다가 단언한다.
+	await page.waitForTimeout(80);
+	await expect(page.locator("#grab-popover")).toBeHidden();
+
+	// positive control: 더블클릭으로 실제 단어 선택이 생겼음을 먼저 확인한
+	// 뒤(그렇지 않으면 아래 "팝오버 안 열림" 단언이 드래그 게이트와 무관하게
+	// 항상 통과해버리는 vacuous 테스트가 된다), 그래도 팝오버가 안 열리는지
+	// 확인한다.
+	await page.mouse.click(box.x + 40, box.y + box.height / 2, {
+		clickCount: 2,
+	});
+	await expect
+		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
+		.not.toBe("");
 	await page.waitForTimeout(80);
 	await expect(page.locator("#grab-popover")).toBeHidden();
 });
@@ -419,6 +440,9 @@ test("⑨ 파일 헤더(파일명) 텍스트 드래그는 팝오버를 열지 �
 	await expect
 		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
 		.toContain("README");
+	// pointerup 핸들러는 선택 확정을 한 틱(setTimeout 0) 뒤로 미루므로 그
+	// 이후까지 기다렸다가 단언한다(⑧과 동일).
+	await page.waitForTimeout(80);
 	await expect(page.locator("#grab-popover")).toBeHidden();
 });
 
@@ -461,55 +485,48 @@ test("⑩ 팝오버 Esc로 닫으면 엔진 라인 선택도 해제 — 스테�
 	await expect(cells.nth(1).locator("[data-utility-button]")).toBeVisible();
 });
 
-test("⑪ find로 선택된 매치는 같은 파일을 건드리는 renderPatch(watch) 이후에도 유지된다", async ({
+test("⑪ find 매치 하이라이트는 텍스트 경로 팝오버를 Esc로 닫아도 지워지지 않는다 — 선택 소유권은 거터 경로만 가진다", async ({
 	page,
+	viewerUrl,
 	context,
 }) => {
 	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-	const viewer = await launchViewer(["--watch"]);
-	try {
-		await page.goto(viewer.url);
-		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 
-		// grab 팝오버의 onClosed(→ clearSelectedLines())는 renderPatch 진입부의
-		// grabPopover.close()에서 팝오버가 열려 있었는지와 무관하게 항상
-		// 호출된다. find 바가 선택해 둔 매치 라인도 엔진의 같은 selectedLines
-		// 슬롯을 공유하므로 이 호출로 매 renderPatch마다 잠깐 지워지지만,
-		// findBar.setData()가 grabPopover.close() 직후 — 같은 renderPatch 호출
-		// 안에서, 실제 codeView.render() 전에 — find 바가 열려 있으면 항상
-		// 현재 매치를 재선택한다(findBar.ts:149-154). 그래서 화면에는 반영되지
-		// 않는다. 매치가 있는 파일 자체의 내용을 바꿔 그 파일의 DOM이 실제로
-		// 재렌더됨을 확인함으로써, "파일이 안 건드려져서 우연히 살아남았다"는
-		// 가능성을 배제한다.
-		await page.keyboard.press("Control+F");
-		await page.locator("#find-input").fill("hello");
-		await expect(page.locator("#find-count")).toHaveText(/\d+\/\d+/);
-		await expect(page.locator("[data-selected-line]").first()).toBeVisible();
-		const before = await page.locator("[data-selected-line]").count();
+	// find로 hello.ts의 매치를 선택해 엔진 selectedLines 슬롯을 점유해 둔다
+	// (revealMatch → codeView.setSelectedLines → data-selected-line 스탬프).
+	await page.keyboard.press("Control+F");
+	await page.locator("#find-input").fill("hello");
+	await expect(page.locator("#find-count")).toHaveText(/\d+\/\d+/);
+	await expect(page.locator("[data-selected-line]").first()).toBeVisible();
+	const before = await page.locator("[data-selected-line]").count();
 
-		const helloContainer = page
-			.locator("diffs-container")
-			.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
-		const helloPath = join(viewer.repoDir, "src", "hello.ts");
-		const original = readFileSync(helloPath, "utf8");
-		writeFileSync(
-			helloPath,
-			original.replace("hello, world", "hello, watched"),
-		);
+	// README.md에서 텍스트 드래그로 팝오버를 연다 — 텍스트 경로는
+	// grabOwnsLineSelection 플래그를 세우지 않는다(main.ts의
+	// onGutterUtilityClick에서만 세움). 이 팝오버는 find가 selectedLines
+	// 슬롯을 소유하고 있는 걸 건드릴 권리가 없다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("text rows not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + 40, y: b.y + b.height / 2 },
+	);
+	await expect(page.locator("#grab-popover")).toBeVisible();
 
-		// renderPatch가 실제로 이 파일의 DOM을 다시 그렸음을 확인한다.
-		await expect
-			.poll(
-				() =>
-					helloContainer.evaluate(
-						(el) => el.shadowRoot?.textContent?.includes("watched") ?? false,
-					),
-				{ timeout: 15_000 },
-			)
-			.toBe(true);
+	// 회귀 시나리오(소유권 플래그 없이 onClosed가 무조건 clearSelectedLines()를
+	// 호출했던 이전 구현): 이 Esc가 텍스트 경로 팝오버 자신이 소유한 적도
+	// 없는 find의 매치 선택까지 지워버렸다.
+	await page.keyboard.press("Escape");
+	await expect(page.locator("#grab-popover")).toBeHidden();
 
-		expect(await page.locator("[data-selected-line]").count()).toBe(before);
-	} finally {
-		await viewer.stop();
-	}
+	expect(await page.locator("[data-selected-line]").count()).toBe(before);
 });
