@@ -29,11 +29,7 @@ import {
 	type SelectionLike,
 } from "./grab/selectionAdapter.ts";
 import { extractSnippet } from "./grab/snippet.ts";
-import {
-	resolveTextTarget,
-	type TextGrabTarget,
-} from "./grab/textSelection.ts";
-import { createGrabTrigger } from "./grab/trigger.ts";
+import { resolveTextTarget } from "./grab/textSelection.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -350,7 +346,6 @@ let expandAll = false; // find bar 활성 중 전역 미변경 context 펼침
 const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용량 파일
 
 const POPOVER_SIZE = { width: 340, height: 76 };
-const TRIGGER_SIZE = { width: 96, height: 28 };
 const viewport = (): { width: number; height: number } => ({
 	width: window.innerWidth,
 	height: window.innerHeight,
@@ -414,7 +409,6 @@ const openGrabPopover = (
 	snap: Omit<GrabOpenOptions, "placement">,
 	rect: DOMRect | null,
 ): void => {
-	grabTrigger.hide();
 	const anchor = rect ?? diffMount.getBoundingClientRect();
 	grabPopover.open({
 		...snap,
@@ -422,34 +416,12 @@ const openGrabPopover = (
 	});
 };
 
-// 텍스트 경로: pointerup에서 스냅샷까지 완료(스펙 — 워커 하이라이트 DOM 교체·
-// recycle이 선택을 죽여도 안전), 트리거는 저장분 재사용.
-let armedGrab: {
-	snap: Omit<GrabOpenOptions, "placement">;
-	target: TextGrabTarget;
-} | null = null;
-
-const grabTrigger = createGrabTrigger({
-	doc: document,
-	scrollHost: diffMount,
-	hasSelection: () => {
-		// isCollapsed 금지: Chrome은 shadow root 안 드래그를 outer Selection에서
-		// isCollapsed:true로 보고한다(끝점 rescope). toString()은 신뢰 가능.
-		const sel = document.getSelection();
-		return sel !== null && sel.toString() !== "";
-	},
-	onActivate: () => {
-		if (!armedGrab) return;
-		openGrabPopover(
-			armedGrab.snap,
-			armedGrab.target.anchorRowEl?.getBoundingClientRect() ?? null,
-		);
-	},
-});
-document.body.append(grabTrigger.element);
-
 diffMount.addEventListener("pointerup", () => {
-	// 선택 확정은 pointerup 직후 이벤트 루프 한 틱 뒤가 안전
+	// 선택 확정은 pointerup 직후 이벤트 루프 한 틱 뒤가 안전(워커 하이라이트
+	// DOM 교체·recycle이 선택을 죽여도 스냅샷은 이미 고정된 뒤). 거터 "+"
+	// 경로와 동일하게 트리거 버튼 없이 즉시 팝오버를 연다 — 같은 제스처의
+	// pointerup에서 열어도 외부 dismiss는 pointerdown/mousedown에만 걸려
+	// 있어 자기-dismiss는 없다.
 	setTimeout(() => {
 		const roots = [...diffMount.querySelectorAll<HTMLElement>(DIFFS_TAG_NAME)]
 			.map((c) => c.shadowRoot)
@@ -460,14 +432,11 @@ diffMount.addEventListener("pointerup", () => {
 		);
 		const target = resolved ? resolveTextTarget(resolved, diffStyle) : null;
 		const snap = target ? buildGrabSnapshot(target.fileId, target.range) : null;
-		if (!target || !snap) {
-			grabTrigger.hide();
-			armedGrab = null;
-			return;
-		}
-		armedGrab = { snap, target };
-		const rect = (target.anchorRowEl ?? diffMount).getBoundingClientRect();
-		grabTrigger.show(computePlacement(rect, TRIGGER_SIZE, viewport()));
+		if (!target || !snap) return;
+		openGrabPopover(
+			snap,
+			(target.anchorRowEl ?? diffMount).getBoundingClientRect(),
+		);
 	}, 0);
 });
 
@@ -666,8 +635,6 @@ const enrichEmptyState = async (): Promise<void> => {
 
 const renderPatch = (unsorted: DiffFile[]): void => {
 	grabPopover.close();
-	grabTrigger.hide();
-	armedGrab = null;
 	// 사이드바 트리와 같은 순서(디렉터리 우선·자연 정렬)로 diff 아이템을 배치.
 	const files = unsorted.toSorted((a, b) =>
 		comparePathsInTreeOrder(a.name, b.name),

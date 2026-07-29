@@ -1,5 +1,5 @@
 // diff-grab e2e 7종: 거터/텍스트 두 경로 모두에서 실제 브라우저 드래그로
-// 선택을 만들고, 트리거·팝오버·클립보드 인코딩까지 실 Chrome으로 검증한다.
+// 선택을 만들고, 팝오버·클립보드 인코딩까지 실 Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
 // getComposedRanges 실측·엔진 옵션 활성화·recycle 생존·watch/find와의 상호작용은
 // 여기서만 잡힌다.
@@ -11,8 +11,9 @@
 // 2. enableGutterUtility가 호버 중인 행 위에 20x20 "+" 버튼을 절대좌표로
 //    띄우는데, 이 버튼이 행 콘텐츠 시작 지점에서 ~11px까지 겹친다. 텍스트
 //    드래그의 시작 x좌표를 행 시작에서 5px만 띄우면 mousedown이 이 버튼을
-//    맞혀 거터 경로로 가로채져 팝오버가 곧장 열려버린다(트리거를 거치지
-//    않음) — 40px 이상 띄워야 실제 텍스트 위에서 시작한다.
+//    맞혀 거터 경로로 가로채져 팝오버가 곧장 열려버린다 — 40px 이상 띄워야
+//    실제 텍스트 위에서 시작한다. 텍스트 경로는 트리거 버튼 없이 pointerup
+//    즉시 팝오버가 열린다(거터 "+" 경로와 동일한 즉시성).
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
@@ -92,7 +93,7 @@ test("① 거터 드래그 → + 클릭 → 프롬프트 → Enter → 인코딩
 	expect(out.trim().endsWith("여기 정리해줘")).toBe(true);
 });
 
-test("② unified 텍스트 드래그 → 트리거 → Escape 숨김 → 재드래그 → 빈 프롬프트 Enter", async ({
+test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨김 → 재드래그 → 빈 프롬프트 Enter", async ({
 	page,
 	viewerUrl,
 	context,
@@ -116,22 +117,23 @@ test("② unified 텍스트 드래그 → 트리거 → Escape 숨김 → 재드
 	const from = { x: a.x + 40, y: a.y + a.height / 2 };
 	const to = { x: b.x + 40, y: b.y + b.height / 2 };
 
+	// 트리거 버튼 없이 드래그 릴리스 직후 팝오버가 곧장 열린다(거터 "+" 경로와
+	// 동일한 즉시성).
 	await dragSelect(page, from, to);
-	const trigger = page.locator("#grab-trigger");
-	await expect(trigger).toBeVisible();
-
-	// 회귀망: trigger.hide()는 element.hidden 토글이라, CSS
-	// 쪽에서 [hidden] 우선순위가 깨지면(예: display 강제 규칙) happy-dom
-	// 유닛 테스트는 절대 못 잡고 실브라우저에서만 드러난다. Escape로 실제
-	// 화면에서 사라지는지 확인한 뒤, 재드래그가 pointerup 핸들러(main.ts)에서
-	// armedGrab을 새 스냅샷으로 덮어써 트리거가 다시 뜨는지까지 검증한다.
-	await page.keyboard.press("Escape");
-	await expect(trigger).toBeHidden();
-
-	await dragSelect(page, from, to);
-	await expect(trigger).toBeVisible();
-	await trigger.click();
+	const popover = page.locator("#grab-popover");
 	const input = page.locator("#grab-popover input");
+	await expect(popover).toBeVisible();
+	await expect(input).toBeFocused();
+
+	// 회귀망: close()는 element.hidden 토글이라, CSS 쪽에서 [hidden] 우선순위가
+	// 깨지면(예: display 강제 규칙) happy-dom 유닛 테스트는 절대 못 잡고
+	// 실브라우저에서만 드러난다. Escape로 실제 화면에서 사라지는지 확인한 뒤,
+	// 재드래그로 다시 즉시 열리는지까지 검증한다.
+	await page.keyboard.press("Escape");
+	await expect(popover).toBeHidden();
+
+	await dragSelect(page, from, to);
+	await expect(popover).toBeVisible();
 	await expect(input).toBeFocused();
 	await input.press("Enter");
 	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
@@ -166,9 +168,7 @@ test("③ split old side 텍스트 드래그 → 인코딩에 (old side, 포함"
 			{ x: a.x + a.width - 5, y: a.y + a.height / 2 },
 		);
 
-		const trigger = page.locator("#grab-trigger");
-		await expect(trigger).toBeVisible();
-		await trigger.click();
+		await expect(page.locator("#grab-popover")).toBeVisible();
 		const input = page.locator("#grab-popover input");
 		await expect(input).toBeFocused();
 		await input.press("Enter");
@@ -206,9 +206,7 @@ test("④ unified 크로스 사이드(삭제→추가) 텍스트 드래그 → o
 		{ x: b.x + 40, y: b.y + b.height / 2 },
 	);
 
-	const trigger = page.locator("#grab-trigger");
-	await expect(trigger).toBeVisible();
-	await trigger.click();
+	await expect(page.locator("#grab-popover")).toBeVisible();
 	const input = page.locator("#grab-popover input");
 	await expect(input).toBeFocused();
 	await input.press("Enter");
