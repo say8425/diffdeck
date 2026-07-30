@@ -416,6 +416,104 @@ describe("rowsInRange — chars", () => {
 		);
 		expect(got).toEqual([{ el: rows[0].el }, { el: rows[1].el }]);
 	});
+
+	// 가상화 가드: 렌더 윈도우가 좁아져 선택 경계 행이 안 보이면, 보이는 첫/끝
+	// 행은 선택의 중간일 뿐이다 — chars를 그 행에 붙이면 엉뚱한 지점이
+	// 잘린다(이 작업의 출발점이 된 "선택 안 한 게 선택된 것처럼 보인다" 버그가
+	// 형태만 바꿔 재현). 논리적 범위 10~17 중 15~17만 렌더된 상황을 흉내낸다.
+	test("side: 시작 경계 행이 안 보이면 보이는 첫 행엔 시작 오프셋을 안 붙인다", () => {
+		const rows = [row("new", 15), row("new", 16), row("new", 17)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "side",
+				side: "new",
+				startLine: 10,
+				endLine: 17,
+				chars: { start: 3, end: 5 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([
+			{ el: rows[0].el },
+			{ el: rows[1].el },
+			{ el: rows[2].el, end: 5 },
+		]);
+	});
+
+	test("side: 끝 경계 행이 안 보이면 보이는 마지막 행엔 끝 오프셋을 안 붙인다", () => {
+		const rows = [row("new", 10), row("new", 11), row("new", 12)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "side",
+				side: "new",
+				startLine: 10,
+				endLine: 20,
+				chars: { start: 3, end: 5 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([
+			{ el: rows[0].el, start: 3 },
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+		]);
+	});
+
+	test("side: 양쪽 경계 행이 다 안 보이면 보이는 행 전체를 오프셋 없이 칠한다", () => {
+		const rows = [row("new", 15)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "side",
+				side: "new",
+				startLine: 10,
+				endLine: 20,
+				chars: { start: 3, end: 5 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([{ el: rows[0].el }]);
+	});
+
+	test("mixed: 시작 끝점이 안 보이면(i<0) 보이는 첫 행엔 시작 오프셋을 안 붙인다", () => {
+		const rows = [row("new", 6), row("new", 7), row("new", 8)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "mixed",
+				start: { side: "old", line: 5 },
+				end: { side: "new", line: 8 },
+				chars: { start: 2, end: 4 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([
+			{ el: rows[0].el },
+			{ el: rows[1].el },
+			{ el: rows[2].el, end: 4 },
+		]);
+	});
+
+	test("mixed: 끝 끝점이 안 보이면(j<0) 보이는 마지막 행엔 끝 오프셋을 안 붙인다", () => {
+		const rows = [row("old", 5), row("new", 6), row("new", 7)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "mixed",
+				start: { side: "old", line: 5 },
+				end: { side: "new", line: 99 },
+				chars: { start: 2, end: 4 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([
+			{ el: rows[0].el, start: 2 },
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+		]);
+	});
 });
 
 describe("paint — 부분 범위", () => {
