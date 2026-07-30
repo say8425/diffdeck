@@ -12,6 +12,7 @@
 				--vd-fg-muted: #84848a;
 				--vd-border: #070707;
 				--vd-accent: #009fff;
+				--vd-success: #3fb950;
 				--vd-hover: color-mix(in srgb, #009fff 12%, #141415);
 				--vd-radius: 6px;
 			}
@@ -481,7 +482,14 @@
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
+			#grab-popover .grab-row {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
 			#grab-popover input {
+				flex: 1;
+				min-width: 0;
 				background: #1a1a1f;
 				border: 1px solid #3a3a40;
 				border-radius: var(--vd-radius);
@@ -493,9 +501,42 @@
 			#grab-popover input:focus {
 				border-color: #5b8def;
 			}
+			#grab-popover .grab-submit {
+				flex: none;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 26px;
+				height: 26px;
+				padding: 0;
+				background: #1a1a1f;
+				border: 1px solid #3a3a40;
+				border-radius: var(--vd-radius);
+				color: #84848a;
+				cursor: pointer;
+			}
+			#grab-popover .grab-submit:hover {
+				color: #e6e6ea;
+				border-color: #5b8def;
+			}
+			#grab-popover .grab-submit:focus-visible {
+				outline: 1px solid #5b8def;
+				outline-offset: 1px;
+			}
 			#grab-popover .grab-hint {
 				font-size: 10px;
 				color: var(--vd-fg-muted);
+				display: inline-flex;
+				align-items: center;
+				gap: 3px;
+			}
+			/* author display 선언은 UA [hidden]{display:none}을 이긴다 — 짝지어야
+			   hint.hidden이 실제로 숨긴다. happy-dom은 못 잡고 실브라우저에서만 터진다. */
+			#grab-popover .grab-hint[hidden] {
+				display: none;
+			}
+			#grab-popover .grab-check {
+				color: var(--vd-success);
 			}
 		</style>
 	</head>

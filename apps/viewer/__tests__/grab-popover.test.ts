@@ -17,6 +17,7 @@ let popover: GrabPopover;
 const openDefault = () =>
 	popover.open({
 		label: "main.ts:84-98 · new side",
+		labelTitle: "apps/viewer/browser/main.ts",
 		buildOutput: (prompt) => `OUT[${prompt}]`,
 		placement: { left: 10, top: 20 },
 	});
@@ -32,6 +33,29 @@ const pressEnter = (init: KeyboardEventInit = {}) =>
 const flush = async (): Promise<void> => {
 	await Promise.resolve();
 	await Promise.resolve();
+};
+
+// 새 팝오버 인스턴스가 필요한 테스트 전용 헬퍼(재오픈 계약·다중 인스턴스 id
+// 비교 등은 module-level 공유 popover로는 표현 못 한다) — 기존
+// beforeEach/writeImpl 관례(:102 부근 reject로 실패 만들기)를 그대로 재사용해
+// fresh 인스턴스+독립 writes를 돌려준다. createdPopovers에 쌓아 afterEach에서
+// 함께 destroy한다(doc 리스너 누적 방지, happy-dom 전역 오염 회피).
+const createdPopovers: GrabPopover[] = [];
+const makePopover = (
+	options: { fail?: boolean } = {},
+): { popover: GrabPopover; writes: string[] } => {
+	const localWrites: string[] = [];
+	const p = createGrabPopover({
+		doc: document,
+		writeText: (t) => {
+			if (options.fail) return Promise.reject(new Error("denied"));
+			localWrites.push(t);
+			return Promise.resolve();
+		},
+	});
+	document.body.append(p.element);
+	createdPopovers.push(p);
+	return { popover: p, writes: localWrites };
 };
 
 beforeEach(() => {
@@ -50,9 +74,11 @@ beforeEach(() => {
 		onClosed: () => closed++,
 	});
 	document.body.append(popover.element);
+	createdPopovers.length = 0;
 });
 afterEach(() => {
 	popover.destroy();
+	for (const p of createdPopovers) p.destroy();
 	jest.useRealTimers();
 });
 
@@ -191,10 +217,121 @@ describe("createGrabPopover", () => {
 		document.body.append(p.element);
 		p.open({
 			label: "x",
+			labelTitle: "src/x.ts",
 			buildOutput: () => "y",
 			placement: { left: 0, top: 0 },
 		});
 		expect(() => p.close()).not.toThrow();
 		p.destroy();
+	});
+});
+
+describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
+	test("평상시엔 힌트가 hidden이고 버튼은 ↵ 상태다", () => {
+		const { popover } = makePopover();
+		popover.open({
+			label: "a.ts:1-2 · new side",
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		});
+		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		expect(hint.hidden).toBe(true);
+		const btn = popover.element.querySelector("button.grab-submit");
+		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
+		expect(btn?.getAttribute("title")).toBe("Copy (Enter)");
+	});
+
+	test("제출 버튼 click만으로 복사되고 버튼이 ✓ 상태로 바뀐다", async () => {
+		const { popover, writes } = makePopover();
+		popover.open({
+			label: "a.ts:1-2 · new side",
+			labelTitle: "src/a.ts",
+			buildOutput: (p) => `out:${p}`,
+			placement: { left: 0, top: 0 },
+		});
+		const input = popover.element.querySelector("input") as HTMLInputElement;
+		input.value = "hi";
+		const btn = popover.element.querySelector(
+			"button.grab-submit",
+		) as HTMLButtonElement;
+		btn.click();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(writes).toEqual(["out:hi"]);
+		expect(popover.element.textContent).toContain("Copied");
+		expect(btn.getAttribute("aria-label")).toBe("Copied");
+		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		expect(hint.hidden).toBe(false);
+	});
+
+	test("복사 실패는 버튼 상태를 바꾸지 않고 힌트에만 표시한다", async () => {
+		const { popover } = makePopover({ fail: true });
+		popover.open({
+			label: "a.ts:1-2 · new side",
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		});
+		const btn = popover.element.querySelector(
+			"button.grab-submit",
+		) as HTMLButtonElement;
+		btn.click();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(popover.element.textContent).toContain("Copy failed");
+		expect(btn.getAttribute("aria-label")).toBe("Copy grab");
+	});
+
+	// close()를 거치지 않는 재오픈 경로 — 이전 성공의 ✓가 남으면 실사용에서만 드러난다
+	test("재오픈이 버튼 아이콘과 힌트를 초기화한다", async () => {
+		const { popover } = makePopover();
+		const opts = {
+			label: "a.ts:1-2 · new side",
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		};
+		popover.open(opts);
+		(
+			popover.element.querySelector("button.grab-submit") as HTMLButtonElement
+		).click();
+		await Promise.resolve();
+		await Promise.resolve();
+		popover.open(opts);
+		const btn = popover.element.querySelector("button.grab-submit");
+		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
+		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		expect(hint.hidden).toBe(true);
+	});
+
+	test("라벨에 전체 경로 title이 붙는다", () => {
+		const { popover } = makePopover();
+		popover.open({
+			label: "a.ts:1-2 · new side",
+			labelTitle: "src/deep/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		});
+		const label = popover.element.querySelector(".grab-label");
+		expect(label?.getAttribute("title")).toBe("src/deep/a.ts");
+	});
+
+	test("dialog에 이름이 붙고 인스턴스마다 id가 다르다", () => {
+		const a = makePopover().popover;
+		const b = makePopover().popover;
+		const idA = a.element.getAttribute("aria-labelledby");
+		const idB = b.element.getAttribute("aria-labelledby");
+		expect(idA).toBeTruthy();
+		expect(idB).toBeTruthy();
+		expect(idA).not.toBe(idB);
+		expect(a.element.querySelector(".grab-label")?.id).toBe(idA);
+	});
+
+	test("힌트가 스크린리더에 알려지는 라이브 리전이다", () => {
+		const { popover } = makePopover();
+		const hint = popover.element.querySelector(".grab-hint");
+		expect(hint?.getAttribute("role")).toBe("status");
+		expect(hint?.getAttribute("aria-live")).toBe("polite");
 	});
 });
