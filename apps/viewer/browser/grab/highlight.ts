@@ -6,7 +6,7 @@
 // (isPooledShadowChild는 data-unsafe-css 등을 단 style 노드만 보존).
 // 파사드가 덕타입인 이유: happy-dom엔 CSS.highlights도 Highlight도 없어,
 // 100% 커버리지 게이트 안에서 전 분기를 덮으려면 실 DOM 타입에 묶이면 안 된다.
-import type { GrabSide, NormalizedRange } from "./range.ts";
+import type { GrabPoint, GrabSide, NormalizedRange } from "./range.ts";
 
 export const GRAB_HIGHLIGHT_NAME = "diffdeck-grab";
 
@@ -46,7 +46,7 @@ export const lineFor = (
 
 const indexOfPoint = (
 	rows: readonly GrabRow[],
-	point: { side: GrabSide; line: number },
+	point: GrabPoint,
 	diffStyle: DiffStyle,
 ): number =>
 	rows.findIndex((row) => lineFor(row, point.side, diffStyle) === point.line);
@@ -58,6 +58,16 @@ const indexOfPoint = (
  * mixed kind는 문서순 인덱스로 자른다 — 크로스 사이드는 old/new 번호 체계가
  * 달라 번호 대소 비교가 순서를 뒤집을 수 있다. 한쪽 끝점만 렌더돼 있으면
  * 그 방향으로 클램프하고, 둘 다 없으면 아무것도 칠하지 않는다.
+ *
+ * mixed + split은 원천 차단한다: split의 행 목록은 컬럼별로 통째로 묶여
+ * 나온다(deletions 컬럼 전부 → additions 컬럼 전부) — 문서순 슬라이스가
+ * 컬럼 경계를 넘으면 그럴듯하지만 틀린 범위(반대 컬럼의 무관한 구간)를
+ * 칠하게 된다. 현재는 도달 불가한 조합이다: 텍스트 드래그 경로는 split
+ * 크로스사이드를 이미 side range로 접고(textSelection.ts:117-129의
+ * clampToColumn), 거터 경로(range.ts:20-36의 normalizeRange)는 split에서도
+ * mixed를 만들 수 있지만 grab 하이라이트 채널을 쓰지 않는다(main.ts 배선의
+ * 불변식). 그 불변식이 깨져 이 조합이 실제로 들어오면 배선 버그이고, 그때도
+ * 그럴듯하게 잘못된 영역을 칠하기보다 아무것도 칠하지 않는 쪽이 안전하다.
  */
 export const rowsInRange = (
 	rows: readonly GrabRow[],
@@ -73,6 +83,7 @@ export const rowsInRange = (
 		}
 		return hits;
 	}
+	if (diffStyle === "split") return [];
 	const i = indexOfPoint(rows, range.start, diffStyle);
 	const j = indexOfPoint(rows, range.end, diffStyle);
 	if (i < 0 && j < 0) return [];

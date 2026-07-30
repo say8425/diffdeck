@@ -24,6 +24,33 @@ const row = (
 	altLine,
 });
 
+// createGrabHighlighter 테스트용 fake registry/range. 캡처하는 외부 변수가
+// 없어(unicorn/consistent-function-scoping) describe 밖 모듈 스코프에 둔다.
+const fakeRegistry = () => {
+	const store = new Map<string, unknown>();
+	return {
+		store,
+		registry: {
+			set: (name: string, value: unknown) => {
+				store.set(name, value);
+			},
+			delete: (name: string) => {
+				store.delete(name);
+			},
+		} satisfies HighlightRegistryLike,
+	};
+};
+
+const fakeRange = (): RangeLike & { selected: Node | null } => {
+	const r = {
+		selected: null as Node | null,
+		selectNodeContents(node: Node) {
+			r.selected = node;
+		},
+	};
+	return r;
+};
+
 describe("lineFor", () => {
 	test("자기 side면 data-line 번호를 대표한다", () => {
 		expect(lineFor(row("old", 5), "old", "unified")).toBe(5);
@@ -184,6 +211,24 @@ describe("rowsInRange — mixed kind", () => {
 			),
 		).toEqual([]);
 	});
+
+	// split의 행 목록은 컬럼별로 묶여 있어(deletions 컬럼 전부 → additions 컬럼
+	// 전부) mixed(크로스사이드)의 문서순 슬라이스가 컬럼 경계를 넘으면 반대
+	// 컬럼의 무관한 구간까지 그럴듯하게 칠한다 — 같은 rows·같은 끝점으로 위
+	// "양끝을 찾으면…" 테스트는 3행을 돌려주는데, diffStyle만 split으로 바꾸면
+	// 무조건 빈 배열이어야 한다.
+	test("split이면 mixed 조합은 무조건 빈 배열이다", () => {
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "mixed",
+				start: { side: "old", line: 5 },
+				end: { side: "new", line: 6 },
+			},
+			"split",
+		);
+		expect(got).toEqual([]);
+	});
 });
 
 // 교차 검증: rowsInRange 단독 테스트는 기대값을 구현과 같은 오해로 적게
@@ -228,31 +273,6 @@ describe("extractSnippet과의 교차 검증", () => {
 });
 
 describe("createGrabHighlighter", () => {
-	const fakeRegistry = () => {
-		const store = new Map<string, unknown>();
-		return {
-			store,
-			registry: {
-				set: (name: string, value: unknown) => {
-					store.set(name, value);
-				},
-				delete: (name: string) => {
-					store.delete(name);
-				},
-			} satisfies HighlightRegistryLike,
-		};
-	};
-
-	const fakeRange = (): RangeLike & { selected: Node | null } => {
-		const r = {
-			selected: null as Node | null,
-			selectNodeContents(node: Node) {
-				r.selected = node;
-			},
-		};
-		return r;
-	};
-
 	test("paint는 행마다 Range를 만들어 레지스트리에 등록한다", () => {
 		const { store, registry } = fakeRegistry();
 		const made: (RangeLike & { selected: Node | null })[] = [];
