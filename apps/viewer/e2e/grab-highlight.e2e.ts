@@ -70,6 +70,9 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 	);
 	await expect(page.locator("#grab-popover")).toBeVisible();
 
+	// author display 선언이 [hidden]을 이기는 회귀 방어 (유닛이 못 잡는다)
+	await expect(page.locator("#grab-popover .grab-hint")).toBeHidden();
+
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
 

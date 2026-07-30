@@ -352,7 +352,10 @@ const syncImageCard = (container: HTMLElement): void => {
 let expandAll = false; // find bar 활성 중 전역 미변경 context 펼침
 const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용량 파일
 
-const POPOVER_SIZE = { width: 340, height: 76 };
+// computePlacement(게이트 안)가 먹는 손관리 상수. 상태 줄이 뜬 최대 높이를
+// 선언한다 — 과대 선언은 안전한 방향(뒤집기가 이르게 발동하고 하단 클램프가
+// 보수적일 뿐)이고, 과소 선언만 뷰포트 밖 잘림을 만든다.
+const POPOVER_SIZE = { width: 340, height: 92 };
 const viewport = (): { width: number; height: number } => ({
 	width: window.innerWidth,
 	height: window.innerHeight,
@@ -479,6 +482,7 @@ const buildGrabSnapshot = (
 	};
 	return {
 		label: grabLabel(fileId, snippet),
+		labelTitle: fileId,
 		buildOutput: (prompt) => encodeGrab({ ...input, prompt }),
 	};
 };
