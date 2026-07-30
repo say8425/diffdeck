@@ -232,13 +232,15 @@ describe("extractSnippet — chars (문자 단위)", () => {
 			kind: "mixed",
 			start: { side: "old", line: 2 },
 			end: { side: "new", line: 2 },
-			chars: { start: 1, end: 5 },
+			chars: { start: 1, end: 4 },
 		});
 		if (s?.kind !== "mixed") throw new Error("expected mixed");
 		expect(s.rows[0].text).toBe("ravo");
-		// 끝 행은 slice(0, chars.end) — end는 마지막 행 텍스트 내 오프셋(exclusive)이라
-		// chars.end개 문자가 남는다(위 "여러 줄" 테스트의 "char" = "charlie".slice(0,4)와
-		// 같은 규칙): "bravo-x".slice(0, 5) === "bravo"(5글자).
-		expect(s.rows[s.rows.length - 1].text).toBe("bravo");
+		// "bravo-x".slice(0, 4) === "brav" — 이 값은 픽스처의 어느 행 전체 텍스트와도
+		// 같지 않다(첫 행 "bravo"도, 끝 행 "bravo-x"도 아니다). 그래서 이 단언은
+		// "끝 행(addition)이 잘렸다"만이 아니라 "끝 행이 맞게 골라졌다"까지 함께
+		// 검증한다 — end를 5로 두면 "bravo"가 나오는데, 이는 첫 행 텍스트와 같아서
+		// mixed 분기가 실수로 끝 대신 첫 행을 반환해도 단언이 통과해버린다.
+		expect(s.rows[s.rows.length - 1].text).toBe("brav");
 	});
 });
