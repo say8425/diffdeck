@@ -162,3 +162,84 @@ describe("extractSnippet — mixed", () => {
 		expect(snip).toBeNull();
 	});
 });
+
+describe("extractSnippet — chars (문자 단위)", () => {
+	const CHARS_OLD = ["alpha", "bravo", "charlie"].join("\n");
+	const CHARS_NEW = ["alpha", "bravo-x", "charlie"].join("\n");
+
+	test("한 줄 부분 선택", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+			chars: { start: 1, end: 5 },
+		});
+		expect(s?.kind).toBe("side");
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["ravo"]);
+	});
+
+	test("여러 줄이면 첫 줄 앞·끝 줄 뒤만 잘린다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 1,
+			endLine: 3,
+			chars: { start: 2, end: 4 },
+		});
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["pha", "bravo-x", "char"]);
+	});
+
+	test("경계값: start 0 / end 길이는 줄 전체와 같다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const whole = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+		});
+		const spanned = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+			chars: { start: 0, end: 7 },
+		});
+		if (whole?.kind !== "side" || spanned?.kind !== "side")
+			throw new Error("expected side");
+		expect(spanned.lines).toEqual(whole.lines);
+	});
+
+	test("chars가 없으면 현행 줄 전체 동작", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+		});
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["bravo-x"]);
+	});
+
+	test("mixed도 첫/끝 행이 잘린다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "mixed",
+			start: { side: "old", line: 2 },
+			end: { side: "new", line: 2 },
+			chars: { start: 1, end: 5 },
+		});
+		if (s?.kind !== "mixed") throw new Error("expected mixed");
+		expect(s.rows[0].text).toBe("ravo");
+		// "bravo-x".slice(0, 5) — chars.end=5개 문자를 남긴다(위 "여러 줄" 테스트의
+		// "char" = "charlie".slice(0,4)와 같은 규칙). 브리프 원안은 "brav"였으나
+		// 그 규칙·산술과 맞지 않아(4글자인데 end=5) "bravo"로 정정했다 — team-lead에
+		// 확인 요청 중(응답 대기), report에 근거를 기록했다.
+		expect(s.rows[s.rows.length - 1].text).toBe("bravo");
+	});
+});

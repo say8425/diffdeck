@@ -41,11 +41,23 @@ const fakeRegistry = () => {
 	};
 };
 
-const fakeRange = (): RangeLike & { selected: Node | null } => {
+const fakeRange = (): RangeLike & {
+	selected: Node | null;
+	startArgs: [Node, number] | null;
+	endArgs: [Node, number] | null;
+} => {
 	const r = {
 		selected: null as Node | null,
+		startArgs: null as [Node, number] | null,
+		endArgs: null as [Node, number] | null,
 		selectNodeContents(node: Node) {
 			r.selected = node;
+		},
+		setStart(node: Node, offset: number) {
+			r.startArgs = [node, offset];
+		},
+		setEnd(node: Node, offset: number) {
+			r.endArgs = [node, offset];
 		},
 	};
 	return r;
@@ -86,7 +98,7 @@ describe("rowsInRange — side kind", () => {
 			{ kind: "side", side: "new", startLine: 2, endLine: 3 },
 			"unified",
 		);
-		expect(got).toEqual([rows[1].el, rows[2].el]);
+		expect(got).toEqual([{ el: rows[1].el }, { el: rows[2].el }]);
 	});
 
 	test("다른 side 행은 제외한다", () => {
@@ -96,7 +108,7 @@ describe("rowsInRange — side kind", () => {
 			{ kind: "side", side: "new", startLine: 1, endLine: 9 },
 			"unified",
 		);
-		expect(got).toEqual([rows[1].el]);
+		expect(got).toEqual([{ el: rows[1].el }]);
 	});
 
 	test("범위 밖만 있으면 빈 배열", () => {
@@ -128,7 +140,12 @@ describe("rowsInRange — side kind", () => {
 			"unified",
 		);
 		// drop-1, keep-b, keep-c, drop-2 — 클립보드에 들어가는 4줄과 같다.
-		expect(got).toEqual([rows[1].el, rows[2].el, rows[3].el, rows[4].el]);
+		expect(got).toEqual([
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+			{ el: rows[3].el },
+			{ el: rows[4].el },
+		]);
 	});
 
 	test("split old-side 범위는 additions 컬럼 context 행을 칠하지 않는다", () => {
@@ -139,7 +156,7 @@ describe("rowsInRange — side kind", () => {
 			{ kind: "side", side: "old", startLine: 1, endLine: 9 },
 			"split",
 		);
-		expect(got).toEqual([delCtx.el]);
+		expect(got).toEqual([{ el: delCtx.el }]);
 	});
 });
 
@@ -156,7 +173,11 @@ describe("rowsInRange — mixed kind", () => {
 			},
 			"unified",
 		);
-		expect(got).toEqual([rows[0].el, rows[1].el, rows[2].el]);
+		expect(got).toEqual([
+			{ el: rows[0].el },
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+		]);
 	});
 
 	test("start만 찾으면 그 행부터 끝까지 (아래쪽 잘림)", () => {
@@ -169,7 +190,12 @@ describe("rowsInRange — mixed kind", () => {
 			},
 			"unified",
 		);
-		expect(got).toEqual([rows[0].el, rows[1].el, rows[2].el, rows[3].el]);
+		expect(got).toEqual([
+			{ el: rows[0].el },
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+			{ el: rows[3].el },
+		]);
 	});
 
 	test("end만 찾으면 처음부터 그 행까지 (위쪽 잘림)", () => {
@@ -182,7 +208,11 @@ describe("rowsInRange — mixed kind", () => {
 			},
 			"unified",
 		);
-		expect(got).toEqual([rows[0].el, rows[1].el, rows[2].el]);
+		expect(got).toEqual([
+			{ el: rows[0].el },
+			{ el: rows[1].el },
+			{ el: rows[2].el },
+		]);
 	});
 
 	test("둘 다 못 찾으면 빈 배열", () => {
@@ -287,7 +317,7 @@ describe("createGrabHighlighter", () => {
 		});
 		const a = document.createElement("div");
 		const b = document.createElement("div");
-		hl.paint([a, b]);
+		hl.paint([{ el: a }, { el: b }]);
 
 		expect(made).toHaveLength(2);
 		expect(made[0].selected).toBe(a);
@@ -302,7 +332,7 @@ describe("createGrabHighlighter", () => {
 			createHighlight: (ranges) => ({ ranges }),
 			createRange: fakeRange,
 		});
-		hl.paint([document.createElement("div")]);
+		hl.paint([{ el: document.createElement("div") }]);
 		expect(store.has(GRAB_HIGHLIGHT_NAME)).toBe(true);
 		hl.paint([]);
 		expect(store.has(GRAB_HIGHLIGHT_NAME)).toBe(false);
@@ -315,7 +345,7 @@ describe("createGrabHighlighter", () => {
 			createHighlight: (ranges) => ({ ranges }),
 			createRange: fakeRange,
 		});
-		hl.paint([document.createElement("div")]);
+		hl.paint([{ el: document.createElement("div") }]);
 		hl.clear();
 		hl.clear();
 		expect(store.has(GRAB_HIGHLIGHT_NAME)).toBe(false);
@@ -332,10 +362,166 @@ describe("createGrabHighlighter", () => {
 			},
 		});
 		expect(() => {
-			hl.paint([document.createElement("div")]);
+			hl.paint([{ el: document.createElement("div") }]);
 			hl.clear();
 		}).not.toThrow();
 		// Range조차 만들지 않는다 — 미지원 브라우저에서 낭비 없음.
 		expect(created).toBe(0);
+	});
+});
+
+describe("rowsInRange — chars", () => {
+	test("한 행 부분 선택은 그 행에 오프셋이 실린다", () => {
+		const r = row("new", 3);
+		const got = rowsInRange(
+			[r],
+			{
+				kind: "side",
+				side: "new",
+				startLine: 3,
+				endLine: 3,
+				chars: { start: 2, end: 7 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([{ el: r.el, start: 2, end: 7 }]);
+	});
+
+	test("여러 행이면 첫/끝만 오프셋을 갖고 가운데는 전체다", () => {
+		const rows = [row("new", 1), row("new", 2), row("new", 3)];
+		const got = rowsInRange(
+			rows,
+			{
+				kind: "side",
+				side: "new",
+				startLine: 1,
+				endLine: 3,
+				chars: { start: 4, end: 6 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([
+			{ el: rows[0].el, start: 4 },
+			{ el: rows[1].el },
+			{ el: rows[2].el, end: 6 },
+		]);
+	});
+
+	test("chars가 없으면 전 행이 오프셋 없이 나온다", () => {
+		const rows = [row("new", 1), row("new", 2)];
+		const got = rowsInRange(
+			rows,
+			{ kind: "side", side: "new", startLine: 1, endLine: 2 },
+			"unified",
+		);
+		expect(got).toEqual([{ el: rows[0].el }, { el: rows[1].el }]);
+	});
+});
+
+describe("paint — 부분 범위", () => {
+	// 실제 텍스트를 가진 행이 필요하다 — 오프셋을 노드 좌표로 변환하기 때문
+	const textRow = (text: string): Element => {
+		const div = document.createElement("div");
+		div.setAttribute("data-line", "1");
+		div.append(document.createTextNode(text));
+		document.body.append(div);
+		return div;
+	};
+
+	test("오프셋이 없으면 selectNodeContents", () => {
+		const { registry } = fakeRegistry();
+		const made: ReturnType<typeof fakeRange>[] = [];
+		const hl = createGrabHighlighter({
+			registry,
+			createHighlight: (ranges) => ({ ranges }),
+			createRange: () => {
+				const r = fakeRange();
+				made.push(r);
+				return r;
+			},
+		});
+		const el = textRow("const store = 1;");
+		hl.paint([{ el }]);
+		expect(made[0].selected).toBe(el);
+		expect(made[0].startArgs).toBeNull();
+	});
+
+	test("오프셋이 있으면 setStart/setEnd를 텍스트 노드 좌표로 호출", () => {
+		const { registry } = fakeRegistry();
+		const made: ReturnType<typeof fakeRange>[] = [];
+		const hl = createGrabHighlighter({
+			registry,
+			createHighlight: (ranges) => ({ ranges }),
+			createRange: () => {
+				const r = fakeRange();
+				made.push(r);
+				return r;
+			},
+		});
+		const el = textRow("const store = 1;");
+		hl.paint([{ el, start: 6, end: 11 }]);
+		expect(made[0].selected).toBeNull();
+		expect(made[0].startArgs).toEqual([el.firstChild, 6]);
+		expect(made[0].endArgs).toEqual([el.firstChild, 11]);
+	});
+
+	test("start만 있으면 끝은 행 끝까지", () => {
+		const { registry } = fakeRegistry();
+		const made: ReturnType<typeof fakeRange>[] = [];
+		const hl = createGrabHighlighter({
+			registry,
+			createHighlight: (ranges) => ({ ranges }),
+			createRange: () => {
+				const r = fakeRange();
+				made.push(r);
+				return r;
+			},
+		});
+		const el = textRow("abcdef");
+		hl.paint([{ el, start: 2 }]);
+		expect(made[0].startArgs).toEqual([el.firstChild, 2]);
+		expect(made[0].endArgs).toEqual([el.firstChild, 6]);
+	});
+
+	test("오프셋을 노드로 못 찾으면 selectNodeContents로 폴백", () => {
+		const { registry } = fakeRegistry();
+		const made: ReturnType<typeof fakeRange>[] = [];
+		const hl = createGrabHighlighter({
+			registry,
+			createHighlight: (ranges) => ({ ranges }),
+			createRange: () => {
+				const r = fakeRange();
+				made.push(r);
+				return r;
+			},
+		});
+		const empty = document.createElement("div");
+		document.body.append(empty);
+		hl.paint([{ el: empty, start: 3, end: 5 }]);
+		expect(made[0].selected).toBe(empty);
+	});
+
+	// 실제 행은 토큰별 <span>으로 쪼개져 텍스트 노드가 여러 개다 — locateOffset이
+	// 첫 노드를 건너뛰고 두 번째 노드에서 오프셋을 찾는 경로를 덮는다.
+	test("여러 텍스트 노드에 걸친 오프셋은 두 번째 노드에서 찾는다", () => {
+		const { registry } = fakeRegistry();
+		const made: ReturnType<typeof fakeRange>[] = [];
+		const hl = createGrabHighlighter({
+			registry,
+			createHighlight: (ranges) => ({ ranges }),
+			createRange: () => {
+				const r = fakeRange();
+				made.push(r);
+				return r;
+			},
+		});
+		const el = document.createElement("div");
+		const first = document.createTextNode("const ");
+		const second = document.createTextNode("store");
+		el.append(first, second);
+		document.body.append(el);
+		hl.paint([{ el, start: 8, end: 10 }]);
+		expect(made[0].startArgs).toEqual([second, 2]);
+		expect(made[0].endArgs).toEqual([second, 4]);
 	});
 });

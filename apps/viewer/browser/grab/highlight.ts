@@ -6,7 +6,12 @@
 // (isPooledShadowChild는 data-unsafe-css 등을 단 style 노드만 보존).
 // 파사드가 덕타입인 이유: happy-dom엔 CSS.highlights도 Highlight도 없어,
 // 100% 커버리지 게이트 안에서 전 분기를 덮으려면 실 DOM 타입에 묶이면 안 된다.
-import type { GrabPoint, GrabSide, NormalizedRange } from "./range.ts";
+import type {
+	CharSpan,
+	GrabPoint,
+	GrabSide,
+	NormalizedRange,
+} from "./range.ts";
 
 export const GRAB_HIGHLIGHT_NAME = "diffdeck-grab";
 
@@ -51,6 +56,28 @@ const indexOfPoint = (
 ): number =>
 	rows.findIndex((row) => lineFor(row, point.side, diffStyle) === point.line);
 
+/** 칠할 대상 한 줄. start/end가 없으면 그 행 전체다. */
+export interface PaintTarget {
+	el: Element;
+	start?: number;
+	end?: number;
+}
+
+/** 첫 행에 start, 끝 행에 end를 붙인다. 한 행이면 둘 다. */
+const withChars = (
+	els: readonly Element[],
+	chars?: CharSpan,
+): PaintTarget[] => {
+	if (!chars || els.length === 0) return els.map((el) => ({ el }));
+	if (els.length === 1)
+		return [{ el: els[0], start: chars.start, end: chars.end }];
+	return els.map((el, k) => {
+		if (k === 0) return { el, start: chars.start };
+		if (k === els.length - 1) return { el, end: chars.end };
+		return { el };
+	});
+};
+
 /**
  * 문서순 행 목록에서 범위에 드는 행만 고른다.
  *
@@ -73,25 +100,26 @@ export const rowsInRange = (
 	rows: readonly GrabRow[],
 	range: NormalizedRange,
 	diffStyle: DiffStyle,
-): Element[] => {
+): PaintTarget[] => {
+	const hits: Element[] = [];
 	if (range.kind === "side") {
-		const hits: Element[] = [];
 		for (const row of rows) {
 			const n = lineFor(row, range.side, diffStyle);
 			if (n !== null && n >= range.startLine && n <= range.endLine)
 				hits.push(row.el);
 		}
-		return hits;
+	} else if (diffStyle === "split") {
+		return [];
+	} else {
+		const i = indexOfPoint(rows, range.start, diffStyle);
+		const j = indexOfPoint(rows, range.end, diffStyle);
+		if (i < 0 && j < 0) return [];
+		const from = i < 0 ? 0 : i;
+		const to = j < 0 ? rows.length - 1 : j;
+		for (const row of rows.slice(Math.min(from, to), Math.max(from, to) + 1))
+			hits.push(row.el);
 	}
-	if (diffStyle === "split") return [];
-	const i = indexOfPoint(rows, range.start, diffStyle);
-	const j = indexOfPoint(rows, range.end, diffStyle);
-	if (i < 0 && j < 0) return [];
-	const from = i < 0 ? 0 : i;
-	const to = j < 0 ? rows.length - 1 : j;
-	return rows
-		.slice(Math.min(from, to), Math.max(from, to) + 1)
-		.map((row) => row.el);
+	return withChars(hits, range.chars);
 };
 
 export interface HighlightRegistryLike {
@@ -101,6 +129,8 @@ export interface HighlightRegistryLike {
 
 export interface RangeLike {
 	selectNodeContents(node: Node): void;
+	setStart(node: Node, offset: number): void;
+	setEnd(node: Node, offset: number): void;
 }
 
 export interface GrabHighlighterDeps {
@@ -111,9 +141,34 @@ export interface GrabHighlighterDeps {
 }
 
 export interface GrabHighlighter {
-	paint(rows: readonly Element[]): void;
+	paint(targets: readonly PaintTarget[]): void;
 	clear(): void;
 }
+
+/**
+ * 행 텍스트 기준 오프셋을 (텍스트 노드, 노드 내 오프셋)으로 변환한다.
+ * 워커 재하이라이트로 span 구조가 바뀌어도 행의 텍스트 자체는 동일하므로
+ * 재시딩 때 다시 찾을 수 있다.
+ */
+const locateOffset = (
+	rowEl: Element,
+	charOffset: number,
+): { node: Node; offset: number } | null => {
+	const walker = rowEl.ownerDocument.createTreeWalker(
+		rowEl,
+		NodeFilter.SHOW_TEXT,
+	);
+	let acc = 0;
+	let current = walker.nextNode();
+	while (current !== null) {
+		const len = (current as Text).data.length;
+		if (acc + len >= charOffset)
+			return { node: current, offset: charOffset - acc };
+		acc += len;
+		current = walker.nextNode();
+	}
+	return null;
+};
 
 export const createGrabHighlighter = (
 	deps: GrabHighlighterDeps,
@@ -121,16 +176,30 @@ export const createGrabHighlighter = (
 	const clear = (): void => {
 		deps.registry?.delete(GRAB_HIGHLIGHT_NAME);
 	};
-	const paint = (rows: readonly Element[]): void => {
+	const paint = (targets: readonly PaintTarget[]): void => {
 		const { registry } = deps;
 		if (!registry) return;
-		if (rows.length === 0) {
+		if (targets.length === 0) {
 			clear();
 			return;
 		}
-		const ranges = rows.map((el) => {
+		const ranges = targets.map((target) => {
 			const range = deps.createRange();
-			range.selectNodeContents(el);
+			if (target.start === undefined && target.end === undefined) {
+				range.selectNodeContents(target.el);
+				return range;
+			}
+			const total = target.el.textContent?.length ?? 0;
+			const a = locateOffset(target.el, target.start ?? 0);
+			const b = locateOffset(target.el, target.end ?? total);
+			if (a === null || b === null) {
+				// 오프셋이 현재 DOM과 맞지 않으면 그 행 전체를 칠한다 —
+				// 아무것도 안 칠하는 것보다 낫다.
+				range.selectNodeContents(target.el);
+				return range;
+			}
+			range.setStart(a.node, a.offset);
+			range.setEnd(b.node, b.offset);
 			return range;
 		});
 		registry.set(GRAB_HIGHLIGHT_NAME, deps.createHighlight(ranges));
