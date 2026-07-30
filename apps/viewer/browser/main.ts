@@ -22,7 +22,7 @@ import { movedBeyondThreshold } from "./drag.ts";
 import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
 import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
 import { createGrabPopover, type GrabOpenOptions } from "./grab/popover.ts";
-import { computePlacement } from "./grab/position.ts";
+import { type AnchorRect, computePlacement } from "./grab/position.ts";
 import { normalizeRange, type NormalizedRange } from "./grab/range.ts";
 import {
 	resolveSelectionRange,
@@ -438,7 +438,7 @@ const selectedRowRect = (fileId: string): DOMRect | null => {
 
 const openGrabPopover = (
 	snap: Omit<GrabOpenOptions, "placement">,
-	rect: DOMRect | null,
+	rect: AnchorRect | null,
 ): void => {
 	const anchor = rect ?? diffMount.getBoundingClientRect();
 	grabPopover.open({
@@ -476,10 +476,11 @@ diffMount.addEventListener("pointerup", (event) => {
 		const target = resolved ? resolveTextTarget(resolved, diffStyle) : null;
 		const snap = target ? buildGrabSnapshot(target.fileId, target.range) : null;
 		if (!target || !snap) return;
-		openGrabPopover(
-			snap,
-			(target.anchorRowEl ?? diffMount).getBoundingClientRect(),
-		);
+		openGrabPopover(snap, {
+			left: upPoint.x,
+			top: upPoint.y,
+			bottom: upPoint.y,
+		});
 	}, 0);
 });
 

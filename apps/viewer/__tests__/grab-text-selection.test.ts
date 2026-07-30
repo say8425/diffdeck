@@ -75,7 +75,6 @@ describe("resolveTextTarget — unified", () => {
 		expect(target).toEqual({
 			fileId: "src/a.ts",
 			range: { kind: "side", side: "new", startLine: 2, endLine: 3 },
-			anchorRowEl: rows[2],
 		});
 	});
 	test("삭제행은 data-line이 old 번호 → old side", () => {
@@ -104,18 +103,6 @@ describe("resolveTextTarget — unified", () => {
 			start: { side: "old", line: 5 },
 			end: { side: "new", line: 5 },
 		});
-	});
-	test("backward 드래그 → anchorRowEl은 문서상 첫 행(포커스 쪽)", () => {
-		const { root } = makeFile("src/a.ts");
-		const rows = addColumn(root, "single", "", [
-			{ line: 1, type: "context", index: "0,0" },
-			{ line: 2, type: "context", index: "1,1" },
-		]);
-		const target = resolveTextTarget(
-			{ ...endpointsOf(rows[0], rows[1]), backward: true },
-			"unified",
-		);
-		expect(target?.anchorRowEl).toBe(rows[0]);
 	});
 });
 
@@ -223,7 +210,6 @@ describe("resolveTextTarget — 클램프/무효 끝점", () => {
 			startLine: 9,
 			endLine: 10,
 		});
-		expect(target?.anchorRowEl).toBe(rowsB[0]);
 	});
 	test("한쪽만 유효(END만 유효, START는 light DOM) → 그 파일 첫 행까지 클램프", () => {
 		const { root } = makeFile("src/a.ts");
@@ -242,7 +228,6 @@ describe("resolveTextTarget — 클램프/무효 끝점", () => {
 			startLine: 1,
 			endLine: 3,
 		});
-		expect(target?.anchorRowEl).toBe(rows[2]);
 	});
 	test("한쪽만 유효하지만 그 행 자체가 없음(헤더) → null(안전 저하)", () => {
 		const { root } = makeFile("src/a.ts");
