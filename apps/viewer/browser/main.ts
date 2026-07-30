@@ -21,6 +21,12 @@ import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
 import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
 import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
+import {
+	createGrabHighlighter,
+	type GrabRow,
+	type HighlightRegistryLike,
+	rowsInRange,
+} from "./grab/highlight.ts";
 import { createGrabPopover, type GrabOpenOptions } from "./grab/popover.ts";
 import { type AnchorRect, computePlacement } from "./grab/position.ts";
 import { normalizeRange, type NormalizedRange } from "./grab/range.ts";
@@ -29,7 +35,7 @@ import {
 	type SelectionLike,
 } from "./grab/selectionAdapter.ts";
 import { extractSnippet } from "./grab/snippet.ts";
-import { resolveTextTarget } from "./grab/textSelection.ts";
+import { resolveTextTarget, rowSide } from "./grab/textSelection.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { isLargeFile } from "./largeFile.ts";
@@ -376,6 +382,58 @@ const clearOwnedSelection = (): void => {
 	codeView?.clearSelectedLines();
 };
 
+// grab 하이라이트: 텍스트 드래그 경로 전용 채널. 팝오버가 input.focus()로
+// 네이티브 선택을 죽이므로(실측 — 포커스가 문서 선택을 팝오버 input으로
+// 옮긴다) 잡은 라인을 우리가 다시 그린다. 엔진 selectedLines 슬롯을 쓰지
+// 않는 독립 채널이라 find 매치 하이라이트와 공존하고 grabOwnsLineSelection
+// 불변식도 그대로다.
+const grabHighlighter = createGrabHighlighter({
+	registry:
+		(CSS as unknown as { highlights?: HighlightRegistryLike }).highlights ??
+		null,
+	createHighlight: (ranges) => {
+		const Ctor = (
+			window as unknown as { Highlight: new (...r: Range[]) => unknown }
+		).Highlight;
+		return new Ctor(...(ranges as unknown as Range[]));
+	},
+	createRange: () => document.createRange(),
+});
+
+// 재시딩에 필요한 최소 정보만 — 팝오버가 열려 있는 동안 불변.
+let grabTextTarget: { fileId: string; range: NormalizedRange } | null = null;
+
+// 대상 파일의 현재 렌더 마크업에서 행 모델을 다시 긁어 칠한다. 워커
+// 하이라이트의 DOM 교체·가상화 recycle이 텍스트 노드를 갈아치우면 Range가
+// 죽으므로, onPostRender에서 이 함수를 다시 부른다(CSS 규칙 자체는 엔진의
+// unsafeCSS 통로로 들어가 recycle을 넘어 살아남으니 재주입은 불필요하다).
+const paintGrabHighlight = (): void => {
+	const target = grabTextTarget;
+	if (!target) return;
+	for (const container of diffMount.querySelectorAll<HTMLElement>(
+		DIFFS_TAG_NAME,
+	)) {
+		if (containerFileId(container) !== target.fileId) continue;
+		const root = container.shadowRoot ?? container;
+		const rows: GrabRow[] = [...root.querySelectorAll("[data-line]")].map(
+			(el) => {
+				const alt = el.getAttribute("data-alt-line");
+				return {
+					el,
+					side: rowSide(el, diffStyle),
+					line: Number(el.getAttribute("data-line")),
+					altLine: alt === null ? null : Number(alt),
+				};
+			},
+		);
+		grabHighlighter.paint(rowsInRange(rows, target.range, diffStyle));
+		return;
+	}
+	// 대상 파일이 렌더 윈도우 밖(언마운트)이면 칠할 게 없다. 되돌아오면
+	// onPostRender 재시딩이 다시 칠하므로 여기서 억지로 보존하지 않는다.
+	grabHighlighter.clear();
+};
+
 const grabPopover = createGrabPopover({
 	doc: document,
 	writeText: (text) => {
@@ -390,7 +448,11 @@ const grabPopover = createGrabPopover({
 	// placeUtility()가 스테일 선택을 계속 붙들고 있어서(선택이 존재하면 호버를
 	// 무시하고 "+"를 선택 하단에 고정, 하단 행이 미렌더면 아예 숨김) 이후 다른
 	// 행 호버에서 "+"가 죽는다.
-	onClosed: clearOwnedSelection,
+	onClosed: () => {
+		clearOwnedSelection();
+		grabTextTarget = null;
+		grabHighlighter.clear();
+	},
 });
 document.body.append(grabPopover.element);
 
@@ -476,6 +538,8 @@ diffMount.addEventListener("pointerup", (event) => {
 		const target = resolved ? resolveTextTarget(resolved, diffStyle) : null;
 		const snap = target ? buildGrabSnapshot(target.fileId, target.range) : null;
 		if (!target || !snap) return;
+		grabTextTarget = { fileId: target.fileId, range: target.range };
+		paintGrabHighlight();
 		openGrabPopover(snap, {
 			left: upPoint.x,
 			top: upPoint.y,
@@ -508,6 +572,10 @@ const codeViewOptions = (): ConstructorParameters<
 	onGutterUtilityClick: (range: SelectedLineRange, context) => {
 		const snap = buildGrabSnapshot(context.item.id, normalizeRange(range));
 		if (!snap) return;
+		// 거터 경로는 엔진 선택 하이라이트가 칠하므로 grab 채널은 쓰지 않는다.
+		// 텍스트 하이라이트가 남아 있으면 여기서 지운다(이중 페인트 방지).
+		grabTextTarget = null;
+		grabHighlighter.clear();
 		// 거터 경로만 엔진 선택을 소유한다 — 이 클릭이 있기 전에 엔진이 이미
 		// range를 selectedLines에 반영해 뒀으므로(GitHub식 거터 드래그
 		// 선택), 그 상태를 "이 팝오버가 책임진다"고 표시한다.
@@ -523,6 +591,8 @@ const codeViewOptions = (): ConstructorParameters<
 		ensureCopyButton(container);
 		ensureTitleTooltips(container);
 		syncImageCard(container);
+		// 워커 하이라이트의 DOM 교체·recycle이 Range를 죽이므로 다시 칠한다.
+		if (grabPopover.isOpen()) paintGrabHighlight();
 	},
 	unsafeCSS:
 		// The header is sticky, so its own code scrolls underneath it: the hover
@@ -533,6 +603,7 @@ const codeViewOptions = (): ConstructorParameters<
 		// either theme; in srgb because that matches how the browser would have
 		// composited the equivalent 5% overlay.
 		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
+		"::highlight(diffdeck-grab){background-color:rgba(91,141,239,0.32)}" +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
 		"[data-copy-name]{opacity:0;transition:opacity .15s;background:transparent;border:0;color:#84848a;cursor:pointer;display:inline-flex;align-items:center;padding:0 4px;margin-left:2px;line-height:1}" +

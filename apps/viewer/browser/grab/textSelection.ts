@@ -42,7 +42,10 @@ const classify = (node: Node, offset: number): Endpoint | null => {
 	return { root, fileId, rowEl, node, offset };
 };
 
-const rowSide = (rowEl: Element, diffStyle: "unified" | "split"): GrabSide => {
+export const rowSide = (
+	rowEl: Element,
+	diffStyle: "unified" | "split",
+): GrabSide => {
 	const type = rowEl.getAttribute("data-line-type") ?? "";
 	if (type.includes("deletion")) return "old";
 	if (type.includes("addition")) return "new";
