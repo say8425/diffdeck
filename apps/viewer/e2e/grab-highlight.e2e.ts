@@ -183,11 +183,11 @@ test("④ 멀리 스크롤했다 되돌아오면 하이라이트가 다시 칠�
 		const a = await rows.first().boundingBox();
 		const b = await rows.nth(2).boundingBox();
 		if (!a || !b) throw new Error("text rows not visible");
-		await dragSelect(
-			page,
-			{ x: a.x + 40, y: a.y + a.height / 2 },
-			{ x: b.x + 60, y: b.y + b.height / 2 },
-		);
+		const from = { x: a.x + 40, y: a.y + a.height / 2 };
+		// 끝점을 텍스트 끝을 지나는 x로 → 브라우저가 줄 끝으로 클램프해 문자
+		// 오프셋이 행 길이가 된다(폰트 메트릭 무관).
+		const to = { x: b.x + b.width - 5, y: b.y + b.height / 2 };
+		await dragSelect(page, from, to);
 		await expect(page.locator("#grab-popover")).toBeVisible();
 
 		const before = await highlightLiveness(page);
@@ -268,11 +268,11 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		const first = await del.first().boundingBox();
 		const last = await del.last().boundingBox();
 		if (!first || !last) throw new Error("deletion rows not visible");
-		await dragSelect(
-			page,
-			{ x: first.x + 40, y: first.y + first.height / 2 },
-			{ x: last.x + 60, y: last.y + last.height / 2 },
-		);
+		const from = { x: first.x + 40, y: first.y + first.height / 2 };
+		// 끝점을 텍스트 끝을 지나는 x로 → 브라우저가 줄 끝으로 클램프해 문자
+		// 오프셋이 행 길이가 된다(폰트 메트릭 무관).
+		const to = { x: last.x + last.width - 5, y: last.y + last.height / 2 };
+		await dragSelect(page, from, to);
 		await expect(page.locator("#grab-popover")).toBeVisible();
 
 		await page.locator("#grab-popover input").press("Enter");
@@ -289,9 +289,16 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		const body = fenced.slice(open + 1, close);
 		const blank = body.findIndex((l) => l === "");
 		const codeLines = body.slice(blank + 1);
-		expect(codeLines).toEqual(["drop-1", "keep-b", "keep-c", "drop-2"]);
 
-		// 순진한 side 비교 구현이면 2가 나온다(context 2행이 빠진다).
+		// 끝점을 텍스트 끝 너머로 잡았으므로 마지막 줄은 온전하고, 가운데 줄들도
+		// 온전하다. 첫 줄만 x+40 지점부터 잘리므로 "원본의 접미사"로만 확인한다
+		// — 몇 번째 문자인지는 폰트에 따라 달라져 리터럴로 박으면 깨진다.
+		expect(codeLines).toHaveLength(4);
+		expect("drop-1".endsWith(codeLines[0])).toBe(true);
+		expect(codeLines.slice(1)).toEqual(["keep-b", "keep-c", "drop-2"]);
+
+		// 핵심 단언(개수 동등성)은 문자 단위에서도 그대로 성립한다 —
+		// 이것이 data-alt-line 폴백을 검증하는 부분이다.
 		expect(await highlightRangeCount(page)).toBe(codeLines.length);
 	} finally {
 		await viewer.stop();
