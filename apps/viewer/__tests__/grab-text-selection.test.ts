@@ -52,6 +52,12 @@ const addColumn = (
 	});
 };
 
+// a/b가 [data-line] 행 엘리먼트면 a.firstChild/b.firstChild는 그 행의 텍스트
+// 노드다. 즉 이 헬퍼가 만드는 끝점(offset 0..1)은 행 텍스트 안에 직접 떨어진
+// 실재하는 부분 선택("첫 글자")이지, 줄 전체를 뜻하는 게 아니다 — 진짜 브라우저
+// 드래그로도 같은 끝점이 나올 수 있다. 그래서 이 헬퍼를 쓰는 side/mixed 테스트는
+// (클램프가 없는 한) chars: { start: 0, end: 1 }이 붙는 게 게이팅 규칙상 정상이다.
+// 줄 전체(= chars 없음) 시나리오는 "클램프/무효 끝점" describe의 테스트들이 덮는다.
 const endpointsOf = (a: Node, b: Node) => ({
 	range: {
 		startContainer: a.firstChild ?? a,
@@ -75,8 +81,6 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 3, type: "change-addition", index: "2,2" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[1], rows[2]), "unified");
-		// endpointsOf가 만드는 끝점은 행의 텍스트 노드 안(offset 0/1)이라 실제
-		// 텍스트 드래그와 구분 불가능하다 — direct && 클램프 없음이므로 chars가 붙는다.
 		expect(target).toEqual({
 			fileId: "src/a.ts",
 			range: {
@@ -95,7 +99,6 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 6, type: "change-deletion", index: "5,5" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "unified");
-		// endpointsOf 끝점이 행 텍스트 노드 안이라 chars가 붙는다(위 주석 참고).
 		expect(target?.range).toEqual({
 			kind: "side",
 			side: "old",
@@ -111,7 +114,6 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 5, type: "change-addition", index: "5,5" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "unified");
-		// endpointsOf 끝점이 행 텍스트 노드 안이라 mixed에도 chars가 붙는다.
 		expect(target?.range).toEqual({
 			kind: "mixed",
 			start: { side: "old", line: 5 },
@@ -305,7 +307,9 @@ describe("resolveTextTarget — split", () => {
 			{ line: 5, type: "context", index: "4,4" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "split");
-		// 두 끝점 다 같은 컬럼 안 → 클램프 없음 → chars가 붙는다.
+		// 두 끝점 다 같은 컬럼(data-deletions) 안이라 buildTarget의 same-side
+		// 분기를 탄다 — split 크로스 컬럼 clampToColumn 분기가 아니므로 클램프가
+		// 없고 chars가 붙는 게 정상이다(크로스 컬럼 케이스는 아래 두 테스트가 덮음).
 		expect(target?.range).toEqual({
 			kind: "side",
 			side: "old",
