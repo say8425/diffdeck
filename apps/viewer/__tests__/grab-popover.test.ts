@@ -228,92 +228,92 @@ describe("createGrabPopover", () => {
 
 describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 	test("평상시엔 힌트가 hidden이고 버튼은 ↵ 상태다", () => {
-		const { popover } = makePopover();
-		popover.open({
+		const { popover: pop } = makePopover();
+		pop.open({
 			label: "a.ts:1-2 · new side",
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
 		});
-		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
 		expect(hint.hidden).toBe(true);
-		const btn = popover.element.querySelector("button.grab-submit");
+		const btn = pop.element.querySelector("button.grab-submit");
 		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
 		expect(btn?.getAttribute("title")).toBe("Copy (Enter)");
 	});
 
 	test("제출 버튼 click만으로 복사되고 버튼이 ✓ 상태로 바뀐다", async () => {
-		const { popover, writes } = makePopover();
-		popover.open({
+		const { popover: pop, writes: capturedWrites } = makePopover();
+		pop.open({
 			label: "a.ts:1-2 · new side",
 			labelTitle: "src/a.ts",
 			buildOutput: (p) => `out:${p}`,
 			placement: { left: 0, top: 0 },
 		});
-		const input = popover.element.querySelector("input") as HTMLInputElement;
-		input.value = "hi";
-		const btn = popover.element.querySelector(
+		const inputEl = pop.element.querySelector("input") as HTMLInputElement;
+		inputEl.value = "hi";
+		const btn = pop.element.querySelector(
 			"button.grab-submit",
 		) as HTMLButtonElement;
 		btn.click();
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(writes).toEqual(["out:hi"]);
-		expect(popover.element.textContent).toContain("Copied");
+		expect(capturedWrites).toEqual(["out:hi"]);
+		expect(pop.element.textContent).toContain("Copied");
 		expect(btn.getAttribute("aria-label")).toBe("Copied");
-		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
 		expect(hint.hidden).toBe(false);
 	});
 
 	test("복사 실패는 버튼 상태를 바꾸지 않고 힌트에만 표시한다", async () => {
-		const { popover } = makePopover({ fail: true });
-		popover.open({
+		const { popover: pop } = makePopover({ fail: true });
+		pop.open({
 			label: "a.ts:1-2 · new side",
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
 		});
-		const btn = popover.element.querySelector(
+		const btn = pop.element.querySelector(
 			"button.grab-submit",
 		) as HTMLButtonElement;
 		btn.click();
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(popover.element.textContent).toContain("Copy failed");
+		expect(pop.element.textContent).toContain("Copy failed");
 		expect(btn.getAttribute("aria-label")).toBe("Copy grab");
 	});
 
 	// close()를 거치지 않는 재오픈 경로 — 이전 성공의 ✓가 남으면 실사용에서만 드러난다
 	test("재오픈이 버튼 아이콘과 힌트를 초기화한다", async () => {
-		const { popover } = makePopover();
+		const { popover: pop } = makePopover();
 		const opts = {
 			label: "a.ts:1-2 · new side",
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
 		};
-		popover.open(opts);
+		pop.open(opts);
 		(
-			popover.element.querySelector("button.grab-submit") as HTMLButtonElement
+			pop.element.querySelector("button.grab-submit") as HTMLButtonElement
 		).click();
 		await Promise.resolve();
 		await Promise.resolve();
-		popover.open(opts);
-		const btn = popover.element.querySelector("button.grab-submit");
+		pop.open(opts);
+		const btn = pop.element.querySelector("button.grab-submit");
 		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
-		const hint = popover.element.querySelector(".grab-hint") as HTMLElement;
+		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
 		expect(hint.hidden).toBe(true);
 	});
 
 	test("라벨에 전체 경로 title이 붙는다", () => {
-		const { popover } = makePopover();
-		popover.open({
+		const { popover: pop } = makePopover();
+		pop.open({
 			label: "a.ts:1-2 · new side",
 			labelTitle: "src/deep/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
 		});
-		const label = popover.element.querySelector(".grab-label");
+		const label = pop.element.querySelector(".grab-label");
 		expect(label?.getAttribute("title")).toBe("src/deep/a.ts");
 	});
 
@@ -329,8 +329,8 @@ describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 	});
 
 	test("힌트가 스크린리더에 알려지는 라이브 리전이다", () => {
-		const { popover } = makePopover();
-		const hint = popover.element.querySelector(".grab-hint");
+		const { popover: pop } = makePopover();
+		const hint = pop.element.querySelector(".grab-hint");
 		expect(hint?.getAttribute("role")).toBe("status");
 		expect(hint?.getAttribute("aria-live")).toBe("polite");
 	});
