@@ -73,6 +73,20 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
 
+	// Range 등록(위 poll)만으로는 CSS 규칙 자체가 깨져도(오타·중괄호 누락 등)
+	// 못 잡는다 — 등록된 Range가 실제로 칠해지려면 규칙이 엔진의 unsafeCSS
+	// 통로(File.ts의 style[data-unsafe-css])를 통해 shadow root에 살아
+	// 있어야 한다. 이름과 background-color 선언이 붙어 있는 형태로 확인한다
+	// (엔진의 wrapUnsafeCSS가 @layer 래핑·들여쓰기를 앞뒤로 씌우지만 우리
+	// 규칙 문자열 자체는 그대로 보존되므로, 이 부분 문자열은 공백에 취약하지
+	// 않다 — 전체 textContent 완전 일치만 피한다).
+	const unsafeCSSText = await container.evaluate(
+		(el) => el.shadowRoot?.querySelector("style[data-unsafe-css]")?.textContent,
+	);
+	expect(unsafeCSSText).toContain(
+		"::highlight(diffdeck-grab){background-color",
+	);
+
 	await page.keyboard.press("Escape");
 	await expect(page.locator("#grab-popover")).toBeHidden();
 	await expect.poll(() => highlightRangeCount(page)).toBe(0);

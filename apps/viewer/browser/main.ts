@@ -23,6 +23,7 @@ import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
 import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
 import {
 	createGrabHighlighter,
+	GRAB_HIGHLIGHT_NAME,
 	type GrabRow,
 	type HighlightRegistryLike,
 	rowsInRange,
@@ -603,7 +604,7 @@ const codeViewOptions = (): ConstructorParameters<
 		// either theme; in srgb because that matches how the browser would have
 		// composited the equivalent 5% overlay.
 		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
-		"::highlight(diffdeck-grab){background-color:rgba(91,141,239,0.32)}" +
+		`::highlight(${GRAB_HIGHLIGHT_NAME}){background-color:rgba(91,141,239,0.32)}` +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
 		"[data-copy-name]{opacity:0;transition:opacity .15s;background:transparent;border:0;color:#84848a;cursor:pointer;display:inline-flex;align-items:center;padding:0 4px;margin-left:2px;line-height:1}" +
