@@ -2,7 +2,12 @@
 // 규칙 전문은 스펙 §경로 B. 여기의 DOM 계약: 행 = [data-line][data-line-type]
 // [data-line-index], 파일 host = <diffs-container> + light-DOM [data-fold],
 // split 컬럼 = code[data-deletions|data-additions].
-import type { GrabPoint, GrabSide, NormalizedRange } from "./range.ts";
+import type {
+	CharSpan,
+	GrabPoint,
+	GrabSide,
+	NormalizedRange,
+} from "./range.ts";
 import type { RangeEndpoints, ResolvedSelection } from "./selectionAdapter.ts";
 
 export interface TextGrabTarget {
@@ -14,6 +19,8 @@ interface Endpoint {
 	root: ShadowRoot;
 	fileId: string;
 	rowEl: Element | null;
+	/** 끝점이 [data-line] 안에 직접 떨어졌는가 (거터 복구가 아닌가). */
+	direct: boolean;
 	node: Node;
 	offset: number;
 }
@@ -38,8 +45,44 @@ const classify = (node: Node, offset: number): Endpoint | null => {
 	if (!fileId) return null;
 	const el = toElement(node);
 	if (!el) return null;
-	const rowEl = el.closest("[data-line]") ?? recoverFromGutter(el, root);
-	return { root, fileId, rowEl, node, offset };
+	const own = el.closest("[data-line]");
+	const rowEl = own ?? recoverFromGutter(el, root);
+	return { root, fileId, rowEl, direct: own !== null, node, offset };
+};
+
+/**
+ * 행 요소 안에서 (node, offset) 끝점이 몇 번째 문자인지. 행 밖이면 null.
+ *
+ * 엔진은 코드 행을 토큰별 <span>으로 쪼개 렌더하지만 행의 textContent는 파일
+ * 원본 라인과 정확히 일치한다(탭 포함, 삽입 문자 없음 — 실측). 그래서 텍스트
+ * 노드 길이를 문서순으로 누적하면 원본 라인 기준 오프셋이 나온다.
+ */
+export const charOffsetInRow = (
+	rowEl: Element,
+	node: Node,
+	offset: number,
+): number | null => {
+	// 끝점이 행 요소 자체를 가리키는 경우(offset = 자식 인덱스)
+	if (node === rowEl) {
+		let acc = 0;
+		const upto = Math.min(offset, rowEl.childNodes.length);
+		for (let i = 0; i < upto; i += 1)
+			acc += rowEl.childNodes[i].textContent?.length ?? 0;
+		return acc;
+	}
+	if (!rowEl.contains(node)) return null;
+	const walker = rowEl.ownerDocument.createTreeWalker(
+		rowEl,
+		NodeFilter.SHOW_TEXT,
+	);
+	let acc = 0;
+	let current = walker.nextNode();
+	while (current !== null) {
+		if (current === node) return acc + offset;
+		acc += (current as Text).data.length;
+		current = walker.nextNode();
+	}
+	return null;
 };
 
 export const rowSide = (
@@ -102,6 +145,7 @@ const buildTarget = (
 	rowEnd: Element,
 	backward: boolean,
 	diffStyle: "unified" | "split",
+	chars?: CharSpan,
 ): TextGrabTarget => {
 	const pStart = rowPoint(rowStart, diffStyle);
 	const pEnd = rowPoint(rowEnd, diffStyle);
@@ -113,10 +157,12 @@ const buildTarget = (
 				side: pStart.side,
 				startLine: Math.min(pStart.line, pEnd.line),
 				endLine: Math.max(pStart.line, pEnd.line),
+				...(chars ? { chars } : {}),
 			},
 		};
 	}
 	if (diffStyle === "split") {
+		// 컬럼 클램프 — 문자 오프셋의 의미가 사라진다
 		const anchorRow = backward ? rowEnd : rowStart;
 		const clamped = clampToColumn(anchorRow, rowStart, rowEnd);
 		const points = clamped.map((el) => rowPoint(el, diffStyle));
@@ -133,7 +179,12 @@ const buildTarget = (
 	}
 	return {
 		fileId,
-		range: { kind: "mixed", start: pStart, end: pEnd },
+		range: {
+			kind: "mixed",
+			start: pStart,
+			end: pEnd,
+			...(chars ? { chars } : {}),
+		},
 	};
 };
 
@@ -157,7 +208,27 @@ export const resolveTextTarget = (
 			rowStart ??= rows[0];
 			rowEnd ??= rows[rows.length - 1];
 		}
-		return buildTarget(start.fileId, rowStart, rowEnd, backward, diffStyle);
+		// 두 끝점이 행 안에 직접 떨어졌고 클램프가 없었을 때만 문자 범위를 세운다.
+		// getComposedRanges의 start/end는 문서순이므로 방향 정규화가 따로 필요 없다.
+		let chars: CharSpan | undefined;
+		if (
+			start.direct &&
+			end.direct &&
+			rowStart === start.rowEl &&
+			rowEnd === end.rowEl
+		) {
+			const a = charOffsetInRow(rowStart, start.node, start.offset);
+			const b = charOffsetInRow(rowEnd, end.node, end.offset);
+			if (a !== null && b !== null) chars = { start: a, end: b };
+		}
+		return buildTarget(
+			start.fileId,
+			rowStart,
+			rowEnd,
+			backward,
+			diffStyle,
+			chars,
+		);
 	}
 
 	// 크로스 파일(양쪽 유효) 또는 한쪽만 유효 → 소유 파일 확정 + 방향 클램프

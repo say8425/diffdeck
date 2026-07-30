@@ -10,9 +10,25 @@ export interface GrabPoint {
 	line: number;
 }
 
+/**
+ * 텍스트 드래그의 문자 범위. `start`는 범위 첫 행 텍스트 내 시작 오프셋,
+ * `end`는 마지막 행 텍스트 내 끝 오프셋(exclusive)이다. 한 행이면 같은 행에서
+ * start..end다. **없으면 줄 전체** — 거터 "+" 경로와 클램프된 선택이 그렇다.
+ */
+export interface CharSpan {
+	start: number;
+	end: number;
+}
+
 export type NormalizedRange =
-	| { kind: "side"; side: GrabSide; startLine: number; endLine: number }
-	| { kind: "mixed"; start: GrabPoint; end: GrabPoint };
+	| {
+			kind: "side";
+			side: GrabSide;
+			startLine: number;
+			endLine: number;
+			chars?: CharSpan;
+	  }
+	| { kind: "mixed"; start: GrabPoint; end: GrabPoint; chars?: CharSpan };
 
 const toGrabSide = (side: "deletions" | "additions" | undefined): GrabSide =>
 	side === "deletions" ? "old" : "new";

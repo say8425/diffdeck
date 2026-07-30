@@ -1,6 +1,9 @@
 import "./happydom.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
-import { resolveTextTarget } from "../browser/grab/textSelection.ts";
+import {
+	charOffsetInRow,
+	resolveTextTarget,
+} from "../browser/grab/textSelection.ts";
 
 interface RowSpec {
 	line: number;
@@ -72,9 +75,17 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 3, type: "change-addition", index: "2,2" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[1], rows[2]), "unified");
+		// endpointsOf가 만드는 끝점은 행의 텍스트 노드 안(offset 0/1)이라 실제
+		// 텍스트 드래그와 구분 불가능하다 — direct && 클램프 없음이므로 chars가 붙는다.
 		expect(target).toEqual({
 			fileId: "src/a.ts",
-			range: { kind: "side", side: "new", startLine: 2, endLine: 3 },
+			range: {
+				kind: "side",
+				side: "new",
+				startLine: 2,
+				endLine: 3,
+				chars: { start: 0, end: 1 },
+			},
 		});
 	});
 	test("삭제행은 data-line이 old 번호 → old side", () => {
@@ -84,11 +95,13 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 6, type: "change-deletion", index: "5,5" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "unified");
+		// endpointsOf 끝점이 행 텍스트 노드 안이라 chars가 붙는다(위 주석 참고).
 		expect(target?.range).toEqual({
 			kind: "side",
 			side: "old",
 			startLine: 5,
 			endLine: 6,
+			chars: { start: 0, end: 1 },
 		});
 	});
 	test("삭제→추가 크로스 사이드 → mixed(끝점 보존)", () => {
@@ -98,10 +111,12 @@ describe("resolveTextTarget — unified", () => {
 			{ line: 5, type: "change-addition", index: "5,5" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "unified");
+		// endpointsOf 끝점이 행 텍스트 노드 안이라 mixed에도 chars가 붙는다.
 		expect(target?.range).toEqual({
 			kind: "mixed",
 			start: { side: "old", line: 5 },
 			end: { side: "new", line: 5 },
+			chars: { start: 0, end: 1 },
 		});
 	});
 });
@@ -290,11 +305,13 @@ describe("resolveTextTarget — split", () => {
 			{ line: 5, type: "context", index: "4,4" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "split");
+		// 두 끝점 다 같은 컬럼 안 → 클램프 없음 → chars가 붙는다.
 		expect(target?.range).toEqual({
 			kind: "side",
 			side: "old",
 			startLine: 4,
 			endLine: 5,
+			chars: { start: 0, end: 1 },
 		});
 	});
 	test("split 크로스 컬럼 → anchor 컬럼으로 클램프(단일 side), mixed 금지", () => {
@@ -337,5 +354,233 @@ describe("resolveTextTarget — split", () => {
 			startLine: 5,
 			endLine: 5,
 		});
+	});
+});
+
+describe("charOffsetInRow", () => {
+	const rowWithTokens = (): Element => {
+		const div = document.createElement("div");
+		div.setAttribute("data-line", "1");
+		const a = document.createElement("span");
+		a.append(document.createTextNode("const"));
+		const b = document.createElement("span");
+		b.append(document.createTextNode(" store"));
+		div.append(a, b, document.createTextNode(" = 1;"));
+		document.body.append(div);
+		return div;
+	};
+
+	test("첫 텍스트 노드 안의 오프셋", () => {
+		const row = rowWithTokens();
+		const first = row.firstChild?.firstChild as Text;
+		expect(charOffsetInRow(row, first, 2)).toBe(2);
+	});
+
+	test("두 번째 토큰 안의 오프셋은 앞 토큰 길이를 누적한다", () => {
+		const row = rowWithTokens();
+		const second = row.childNodes[1].firstChild as Text;
+		expect(charOffsetInRow(row, second, 3)).toBe(5 + 3);
+	});
+
+	test("행의 마지막 텍스트 노드 끝", () => {
+		const row = rowWithTokens();
+		const last = row.childNodes[2] as Text;
+		expect(charOffsetInRow(row, last, last.data.length)).toBe(
+			(row.textContent ?? "").length,
+		);
+	});
+
+	test("끝점이 행 요소 자체면 자식 인덱스까지의 길이", () => {
+		const row = rowWithTokens();
+		expect(charOffsetInRow(row, row, 0)).toBe(0);
+		expect(charOffsetInRow(row, row, 2)).toBe(5 + 6);
+	});
+
+	test("행 밖 노드는 null", () => {
+		const row = rowWithTokens();
+		const outside = document.createElement("div");
+		outside.append(document.createTextNode("nope"));
+		document.body.append(outside);
+		expect(charOffsetInRow(row, outside.firstChild as Text, 1)).toBeNull();
+	});
+
+	test("행 안이지만 텍스트 노드 워크에서 못 찾는 끝점(엘리먼트 자체)은 null", () => {
+		// node가 행에 포함돼 있어도(contains) 텍스트 노드가 아니면 TreeWalker가
+		// 절대 만나지 못한다 — 워커가 끝까지 순회한 뒤 정상 종료하는 경로.
+		const row = rowWithTokens();
+		const span = row.firstChild as Element;
+		expect(charOffsetInRow(row, span, 0)).toBeNull();
+	});
+
+	test("빈 행(개행만)", () => {
+		const div = document.createElement("div");
+		div.setAttribute("data-line", "2");
+		div.append(document.createTextNode("\n"));
+		document.body.append(div);
+		expect(charOffsetInRow(div, div.firstChild as Text, 1)).toBe(1);
+	});
+});
+
+describe("resolveTextTarget — chars 게이팅", () => {
+	test("양 끝점이 행 안에 직접 떨어지면 chars를 세운다", () => {
+		const { root } = makeFile("src/a.ts");
+		const rows = addColumn(root, "single", "", [
+			{ line: 1, type: "context", index: "0,0", text: "alpha beta\n" },
+			{ line: 2, type: "context", index: "1,1", text: "gamma delta\n" },
+		]);
+		const target = resolveTextTarget(
+			{
+				range: {
+					startContainer: rows[0].firstChild as Text,
+					startOffset: 2,
+					endContainer: rows[1].firstChild as Text,
+					endOffset: 5,
+				},
+				backward: false,
+			},
+			"unified",
+		);
+		expect(target?.range).toEqual({
+			kind: "side",
+			side: "new",
+			startLine: 1,
+			endLine: 2,
+			chars: { start: 2, end: 5 },
+		});
+	});
+
+	test("한 행 안의 부분 선택", () => {
+		const { root } = makeFile("src/a.ts");
+		const rows = addColumn(root, "single", "", [
+			{ line: 7, type: "context", index: "6,6", text: "const store = 1;\n" },
+		]);
+		const t = resolveTextTarget(
+			{
+				range: {
+					startContainer: rows[0].firstChild as Text,
+					startOffset: 6,
+					endContainer: rows[0].firstChild as Text,
+					endOffset: 11,
+				},
+				backward: false,
+			},
+			"unified",
+		);
+		expect(t?.range).toEqual({
+			kind: "side",
+			side: "new",
+			startLine: 7,
+			endLine: 7,
+			chars: { start: 6, end: 11 },
+		});
+	});
+
+	// 클램프가 일어난 경우 chars는 의미가 없다 → 생략해 줄 전체로 떨어진다
+	test("한쪽 끝점이 행 밖(클램프)이면 chars가 없다", () => {
+		const { root } = makeFile("src/a.ts");
+		const rows = addColumn(root, "single", "", [
+			{ line: 1, type: "context", index: "0,0" },
+			{ line: 2, type: "context", index: "1,1" },
+			{ line: 3, type: "context", index: "2,2" },
+		]);
+		const outside = document.createElement("div");
+		outside.append(document.createTextNode("above"));
+		document.body.append(outside);
+		const t = resolveTextTarget(endpointsOf(outside, rows[2]), "unified");
+		expect(t?.range).toEqual({
+			kind: "side",
+			side: "new",
+			startLine: 1,
+			endLine: 3,
+		});
+		expect("chars" in (t?.range ?? {})).toBe(false);
+	});
+
+	test("split 크로스 컬럼 클램프는 chars가 없다", () => {
+		const { root } = makeFile("src/a.ts");
+		const del = addColumn(root, "split", "data-deletions", [
+			{ line: 5, type: "change-deletion", index: "4,4", text: "old line\n" },
+		]);
+		const add = addColumn(root, "split", "data-additions", [
+			{ line: 5, type: "change-addition", index: "4,4", text: "new line\n" },
+		]);
+		const t = resolveTextTarget(
+			{
+				range: {
+					startContainer: del[0].firstChild as Text,
+					startOffset: 1,
+					endContainer: add[0].firstChild as Text,
+					endOffset: 3,
+				},
+				backward: false,
+			},
+			"split",
+		);
+		expect(t?.range.kind).toBe("side");
+		expect("chars" in t!.range).toBe(false);
+	});
+
+	test("unified 크로스 사이드(mixed)도 chars를 세운다", () => {
+		const { root } = makeFile("src/a.ts");
+		const rows = addColumn(root, "single", "", [
+			{ line: 5, type: "change-deletion", index: "4,4", text: "minus one\n" },
+			{ line: 5, type: "change-addition", index: "5,5", text: "plus one\n" },
+		]);
+		const t = resolveTextTarget(
+			{
+				range: {
+					startContainer: rows[0].firstChild as Text,
+					startOffset: 2,
+					endContainer: rows[1].firstChild as Text,
+					endOffset: 4,
+				},
+				backward: false,
+			},
+			"unified",
+		);
+		expect(t?.range).toEqual({
+			kind: "mixed",
+			start: { side: "old", line: 5 },
+			end: { side: "new", line: 5 },
+			chars: { start: 2, end: 4 },
+		});
+	});
+
+	// direct(own !== null)는 "[data-line] 조상이 있다"만 보장하지, 끝점이 텍스트
+	// 노드 안이라는 것까지는 보장하지 않는다 — 토큰 <span> 경계 자체를 가리키는
+	// 끝점도 direct다. charOffsetInRow가 그런 Element 끝점에서 null을 반환하므로
+	// (텍스트 워커가 절대 못 찾는다) chars는 조용히 생략되고 줄 전체로 떨어진다.
+	// Task 3가 이 안전망에 의존하므로 end-to-end로 고정해 둔다.
+	test("direct하지만 끝점이 텍스트 노드가 아닌 토큰 엘리먼트면 chars가 없다", () => {
+		const { root } = makeFile("src/a.ts");
+		const rows = addColumn(root, "single", "", [
+			{ line: 1, type: "context", index: "0,0", text: "alpha\n" },
+			{ line: 2, type: "context", index: "1,1", text: "beta\n" },
+		]);
+		const span0 = document.createElement("span");
+		span0.append(rows[0].firstChild as Text);
+		rows[0].append(span0);
+		const span1 = document.createElement("span");
+		span1.append(rows[1].firstChild as Text);
+		rows[1].append(span1);
+		const t = resolveTextTarget(
+			{
+				range: {
+					startContainer: span0,
+					startOffset: 0,
+					endContainer: span1,
+					endOffset: 0,
+				},
+				backward: false,
+			},
+			"unified",
+		);
+		expect(t?.range).toEqual({
+			kind: "side",
+			side: "new",
+			startLine: 1,
+			endLine: 2,
+		});
+		expect("chars" in (t?.range ?? {})).toBe(false);
 	});
 });
