@@ -87,11 +87,10 @@ test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨
 	const popover = page.locator("#grab-popover");
 	const input = page.locator("#grab-popover input");
 	await expect(popover).toBeVisible();
-	// 네이티브 선택 생존 확인(실측): popover.open()이 input.focus()로 포커스를
-	// 가져가는 순간 네이티브 드래그 선택은 붕괴한다(document.getSelection()이
-	// 빈 문자열) — CLAUDE.md에 트레이드오프로 기록해 뒀다. 그래서 여기엔
-	// "선택이 살아있다" 단언을 남기지 않는다: 죽는 게 확인된 사실이라 그런
-	// 단언은 항상 실패하거나 무의미해진다.
+	// 네이티브 선택은 popover.open()의 input.focus()가 문서 선택을 팝오버
+	// input으로 옮기는 순간 죽는다(실측 — getComposedRanges가 #grab-popover의
+	// 자식을 가리킨다). 대신 grab 하이라이트(::highlight(diffdeck-grab))가
+	// 잡은 라인을 계속 보여준다 — 그 회귀망은 grab-highlight.e2e.ts다.
 	await expect(input).toBeFocused();
 
 	// 회귀망: close()는 element.hidden 토글이라, CSS 쪽에서 [hidden] 우선순위가
