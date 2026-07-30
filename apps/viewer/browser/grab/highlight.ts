@@ -63,17 +63,33 @@ export interface PaintTarget {
 	end?: number;
 }
 
-/** 첫 행에 start, 끝 행에 end를 붙인다. 한 행이면 둘 다. */
+/**
+ * 첫 hit에 start, 끝 hit에 end를 붙인다 — 단 그 hit이 실제로 선택의 경계
+ * 행일 때만(startExact/endExact). `hits`는 그 순간 렌더된 행만 담으므로,
+ * 선택 경계 행이 렌더 윈도우 밖이면 보이는 첫/끝 행은 선택의 중간일 뿐이다.
+ * 그런 행에 chars를 붙이면 선택하지 않은 지점이 잘려나가 보인다 — 이 작업의
+ * 출발점이 된 버그가 형태만 바꿔 재현되므로, 경계가 안 보이면 그 행 전체를
+ * 오프셋 없이 둔다(호출부가 이미 있는 lineFor/indexOfPoint 결과로 판정한다).
+ */
 const withChars = (
 	els: readonly Element[],
-	chars?: CharSpan,
+	chars: CharSpan | undefined,
+	startExact: boolean,
+	endExact: boolean,
 ): PaintTarget[] => {
 	if (!chars || els.length === 0) return els.map((el) => ({ el }));
-	if (els.length === 1)
-		return [{ el: els[0], start: chars.start, end: chars.end }];
+	if (els.length === 1) {
+		return [
+			{
+				el: els[0],
+				...(startExact ? { start: chars.start } : {}),
+				...(endExact ? { end: chars.end } : {}),
+			},
+		];
+	}
 	return els.map((el, k) => {
-		if (k === 0) return { el, start: chars.start };
-		if (k === els.length - 1) return { el, end: chars.end };
+		if (k === 0 && startExact) return { el, start: chars.start };
+		if (k === els.length - 1 && endExact) return { el, end: chars.end };
 		return { el };
 	});
 };
@@ -101,25 +117,39 @@ export const rowsInRange = (
 	range: NormalizedRange,
 	diffStyle: DiffStyle,
 ): PaintTarget[] => {
-	const hits: Element[] = [];
 	if (range.kind === "side") {
+		const hits: GrabRow[] = [];
 		for (const row of rows) {
 			const n = lineFor(row, range.side, diffStyle);
 			if (n !== null && n >= range.startLine && n <= range.endLine)
-				hits.push(row.el);
+				hits.push(row);
 		}
-	} else if (diffStyle === "split") {
-		return [];
-	} else {
-		const i = indexOfPoint(rows, range.start, diffStyle);
-		const j = indexOfPoint(rows, range.end, diffStyle);
-		if (i < 0 && j < 0) return [];
-		const from = i < 0 ? 0 : i;
-		const to = j < 0 ? rows.length - 1 : j;
-		for (const row of rows.slice(Math.min(from, to), Math.max(from, to) + 1))
-			hits.push(row.el);
+		if (hits.length === 0) return [];
+		// 보이는 첫/끝 hit이 실제로 선택의 startLine/endLine과 일치할 때만
+		// 경계로 인정한다 — 렌더 윈도우가 좁아 경계 행이 안 보이면 다르다.
+		const startExact =
+			lineFor(hits[0], range.side, diffStyle) === range.startLine;
+		const endExact =
+			lineFor(hits[hits.length - 1], range.side, diffStyle) === range.endLine;
+		return withChars(
+			hits.map((row) => row.el),
+			range.chars,
+			startExact,
+			endExact,
+		);
 	}
-	return withChars(hits, range.chars);
+	if (diffStyle === "split") return [];
+	const i = indexOfPoint(rows, range.start, diffStyle);
+	const j = indexOfPoint(rows, range.end, diffStyle);
+	if (i < 0 && j < 0) return [];
+	const from = i < 0 ? 0 : i;
+	const to = j < 0 ? rows.length - 1 : j;
+	const hits = rows
+		.slice(Math.min(from, to), Math.max(from, to) + 1)
+		.map((row) => row.el);
+	// i/j 음수는 "그 끝점이 렌더 윈도우에 없다"는 뜻 — 딱 우리가 원하는 경계
+	// 판정 조건이다(from/to로 클램프된 값이 아니라 원래 인덱스로 판정한다).
+	return withChars(hits, range.chars, i >= 0, j >= 0);
 };
 
 export interface HighlightRegistryLike {
