@@ -194,11 +194,37 @@ test("④ 멀리 스크롤했다 되돌아오면 하이라이트가 다시 칠�
 		await diff.evaluate((el) => {
 			el.scrollTop = el.scrollHeight;
 		});
-		await page.waitForTimeout(300);
+		// 이 테스트가 재시딩을 검증하려면 대상 파일이 실제로 렌더 윈도우를
+		// 벗어나 recycle로 언마운트돼야 한다 — 그게 전제조건이다.
+		// CodeView.releaseRenderedItem()이 <diffs-container>를 통째로
+		// element.remove()하므로(내용만 비우는 게 아니라), 언마운트는
+		// 이 locator의 매치 수가 0이 되는 것으로 관측할 수 있다.
+		await expect(container).toHaveCount(0);
+
 		await diff.evaluate((el, top) => {
 			el.scrollTop = top;
 		}, home);
-		await page.waitForTimeout(300);
+		// scrollTop을 직접 대입해도 엔진이 다음 프레임에 자기 페이지드
+		// 스크롤 모델로 위치를 보정할 수 있다(app.ts의 waitForStableScrollTop과
+		// 같은 근거) — 정착 전에 조회하면 아직 재마운트되지 않은 프레임을 볼
+		// 수 있으므로 값이 멈춘 뒤에 확인한다. app.ts의 waitForStableScrollTop
+		// 자체는 못 쓴다: requirePositive라 이 케이스의 home(=0, bulk-0.ts가
+		// 이미 최상단이라 최초 scrollTop이 0)에서 절대 안정 판정이 안 나
+		// 타임아웃한다 — 그래서 같은 "연속 두 번 같은 값" 관례를 0도
+		// 유효한 정착값으로 허용해 이 파일 안에서 그대로 재구현한다.
+		let lastScrollTop = Number.NaN;
+		await expect
+			.poll(
+				async () => {
+					const value = await diff.evaluate((el) => el.scrollTop);
+					const stable = value === lastScrollTop;
+					lastScrollTop = value;
+					return stable;
+				},
+				{ timeout: 15_000, intervals: [100] },
+			)
+			.toBe(true);
+		await expect(container).toBeVisible();
 		await waitForHighlighted(container);
 
 		// 팝오버는 스크롤로 닫히지 않는다(스냅샷 기반).
