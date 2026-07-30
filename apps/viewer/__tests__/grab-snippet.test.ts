@@ -236,10 +236,9 @@ describe("extractSnippet — chars (문자 단위)", () => {
 		});
 		if (s?.kind !== "mixed") throw new Error("expected mixed");
 		expect(s.rows[0].text).toBe("ravo");
-		// "bravo-x".slice(0, 5) — chars.end=5개 문자를 남긴다(위 "여러 줄" 테스트의
-		// "char" = "charlie".slice(0,4)와 같은 규칙). 브리프 원안은 "brav"였으나
-		// 그 규칙·산술과 맞지 않아(4글자인데 end=5) "bravo"로 정정했다 — team-lead에
-		// 확인 요청 중(응답 대기), report에 근거를 기록했다.
+		// 끝 행은 slice(0, chars.end) — end는 마지막 행 텍스트 내 오프셋(exclusive)이라
+		// chars.end개 문자가 남는다(위 "여러 줄" 테스트의 "char" = "charlie".slice(0,4)와
+		// 같은 규칙): "bravo-x".slice(0, 5) === "bravo"(5글자).
 		expect(s.rows[s.rows.length - 1].text).toBe("bravo");
 	});
 });
