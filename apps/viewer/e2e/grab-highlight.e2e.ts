@@ -72,6 +72,10 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 
 	// author display 선언이 [hidden]을 이기는 회귀 방어 (유닛이 못 잡는다)
 	await expect(page.locator("#grab-popover .grab-hint")).toBeHidden();
+	// happy-dom의 .click()은 레이아웃·크기·페인트와 무관하게 노드에 디스패치되므로
+	// 유닛으로는 버튼이 실제로 0-height·언페인트여도 통과한다 — toBeVisible()은
+	// non-empty bounding box를 요구해 그 회귀를 잡는다.
+	await expect(page.locator("#grab-popover .grab-submit")).toBeVisible();
 
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
