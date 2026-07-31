@@ -117,6 +117,16 @@ describe("createGrabPopover", () => {
 		expect(writes).toEqual(["OUT[제출]"]);
 	});
 
+	// textarea에서 Enter의 기본 동작은 개행이다 — 제출 경로는 그것을 막아야
+	// 한다. 안 막으면 제출과 동시에 빈 줄이 남는다(실사용에서 보고된 버그).
+	// happy-dom은 기본 동작을 수행하지 않으므로 "취소했는가"로 단언한다.
+	test("Shift 없는 Enter는 기본 개행을 막는다", () => {
+		openDefault();
+		input().value = "제출";
+		const notCancelled = pressEnter();
+		expect(notCancelled).toBe(false);
+	});
+
 	// IME 조합 가드가 Shift 여부보다 먼저다 — 한국어 조합 확정 Enter가
 	// Shift와 함께 눌려도 제출도 개행 처리도 우리 코드가 관여하지 않는다.
 	test("IME 조합 중에는 Shift+Enter도 제출하지 않는다", async () => {
@@ -260,8 +270,8 @@ describe("createGrabPopover", () => {
 	});
 });
 
-describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
-	test("평상시엔 힌트가 hidden이고 버튼은 ↵ 상태다", () => {
+describe("상태 전용 슬롯 + 접근성", () => {
+	test("평상시엔 힌트가 hidden이다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
 			label: "a.ts:1-2 · new side",
@@ -271,37 +281,22 @@ describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 		});
 		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
 		expect(hint.hidden).toBe(true);
-		const btn = pop.element.querySelector("button.grab-submit");
-		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
-		expect(btn?.getAttribute("title")).toBe("Copy (Enter)");
 	});
 
-	test("제출 버튼 click만으로 복사되고 버튼이 ✓ 상태로 바뀐다", async () => {
-		const { popover: pop, writes: capturedWrites } = makePopover();
-		pop.open({
-			label: "a.ts:1-2 · new side",
-			labelTitle: "src/a.ts",
-			buildOutput: (p) => `out:${p}`,
-			placement: { left: 0, top: 0 },
-		});
-		const inputEl = pop.element.querySelector(
-			"textarea",
-		) as HTMLTextAreaElement;
-		inputEl.value = "hi";
-		const btn = pop.element.querySelector(
-			"button.grab-submit",
-		) as HTMLButtonElement;
-		btn.click();
-		await Promise.resolve();
-		await Promise.resolve();
-		expect(capturedWrites).toEqual(["out:hi"]);
-		expect(pop.element.textContent).toContain("Copied");
-		expect(btn.getAttribute("aria-label")).toBe("Copied");
-		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
-		expect(hint.hidden).toBe(false);
+	// 제출 버튼이 없으므로 단축키 고지는 입력창의 placeholder와 aria가 전담한다.
+	test("입력창이 단축키를 placeholder와 aria로 고지한다", () => {
+		const { popover: pop } = makePopover();
+		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
+		// 표기(글자/글리프)가 아니라 **두 동작이 다 고지되는가**를 본다 —
+		// 문구를 다듬어도 안내가 통째로 빠지는 회귀만 잡히면 된다.
+		expect(box.placeholder).toContain("copy");
+		expect(box.placeholder).toContain("new line");
+		expect(box.getAttribute("aria-keyshortcuts")).toBe(
+			"Enter Shift+Enter Escape",
+		);
 	});
 
-	test("복사 실패는 버튼 상태를 바꾸지 않고 힌트에만 표시한다", async () => {
+	test("복사 실패는 힌트에 표시되고 팝오버는 열린 채 남는다", async () => {
 		const { popover: pop } = makePopover({ fail: true });
 		pop.open({
 			label: "a.ts:1-2 · new side",
@@ -309,18 +304,18 @@ describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
 		});
-		const btn = pop.element.querySelector(
-			"button.grab-submit",
-		) as HTMLButtonElement;
-		btn.click();
+		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
+		box.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", cancelable: true }),
+		);
 		await Promise.resolve();
 		await Promise.resolve();
 		expect(pop.element.textContent).toContain("Copy failed");
-		expect(btn.getAttribute("aria-label")).toBe("Copy grab");
+		expect(pop.isOpen()).toBe(true);
 	});
 
-	// close()를 거치지 않는 재오픈 경로 — 이전 성공의 ✓가 남으면 실사용에서만 드러난다
-	test("재오픈이 버튼 아이콘과 힌트를 초기화한다", async () => {
+	// close()를 거치지 않는 재오픈 경로 — 이전 상태가 남으면 실사용에서만 드러난다
+	test("재오픈이 힌트를 초기화한다", async () => {
 		const { popover: pop } = makePopover();
 		const opts = {
 			label: "a.ts:1-2 · new side",
@@ -329,14 +324,14 @@ describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 			placement: { left: 0, top: 0 },
 		};
 		pop.open(opts);
-		(
-			pop.element.querySelector("button.grab-submit") as HTMLButtonElement
-		).click();
+		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
+		box.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", cancelable: true }),
+		);
 		await Promise.resolve();
 		await Promise.resolve();
+		expect(pop.element.textContent).toContain("Copied");
 		pop.open(opts);
-		const btn = pop.element.querySelector("button.grab-submit");
-		expect(btn?.getAttribute("aria-label")).toBe("Copy grab");
 		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
 		expect(hint.hidden).toBe(true);
 	});

@@ -75,7 +75,6 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 	// happy-dom의 .click()은 레이아웃·크기·페인트와 무관하게 노드에 디스패치되므로
 	// 유닛으로는 버튼이 실제로 0-height·언페인트여도 통과한다 — toBeVisible()은
 	// non-empty bounding box를 요구해 그 회귀를 잡는다.
-	await expect(page.locator("#grab-popover .grab-submit")).toBeVisible();
 
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
@@ -368,7 +367,7 @@ test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 �
 	expect(body.slice(blank + 1)).toEqual([probe.text]);
 });
 
-test("⑨ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된다", async ({
+test("⑧ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된다", async ({
 	page,
 	viewerUrl,
 	context,
@@ -404,6 +403,11 @@ test("⑨ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된�
 	expect(await box.inputValue()).toBe("첫 줄\n둘째 줄");
 
 	await box.press("Enter");
+	// 맨 Enter는 제출이므로 기본 동작(개행 삽입)이 막혀야 한다 — textarea로
+	// 바꾸면서 생긴 요구사항이고, happy-dom은 기본 동작을 수행하지 않아
+	// 유닛이 원리적으로 못 잡는다(실사용에서 보고된 버그의 회귀망).
+	expect(await box.inputValue()).toBe("첫 줄\n둘째 줄");
+
 	await expect
 		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 		.toContain("diffdeck selection");
@@ -413,43 +417,7 @@ test("⑨ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된�
 	expect(out.trim().endsWith("둘째 줄")).toBe(true);
 });
 
-test("⑦ 제출 버튼 클릭만으로 복사가 완주한다", async ({
-	page,
-	viewerUrl,
-	context,
-}) => {
-	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-	await page.goto(viewerUrl);
-	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
-	const container = page
-		.locator("diffs-container")
-		.filter({ has: page.locator('[data-fold="README.md"]') });
-	await expect(container).toBeVisible();
-	await waitForHighlighted(container);
-
-	const rows = container.locator("[data-line]");
-	const a = await rows.first().boundingBox();
-	const b = await rows.nth(2).boundingBox();
-	if (!a || !b) throw new Error("rows not visible");
-	await dragSelect(
-		page,
-		{ x: a.x + 40, y: a.y + a.height / 2 },
-		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
-	);
-	const popover = page.locator("#grab-popover");
-	await expect(popover).toBeVisible();
-
-	// Enter를 쓰지 않는다 — 버튼만으로 완주해야 한다
-	await popover.locator("textarea").fill("버튼으로 복사");
-	await popover.locator("button.grab-submit").click();
-	await expect
-		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
-		.toContain("버튼으로 복사");
-	await expect(popover.locator(".grab-hint")).toBeVisible();
-	await expect(popover.locator(".grab-hint")).toContainText("Copied");
-});
-
-test('⑧ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)', async ({
+test('⑦ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)', async ({
 	page,
 	viewerUrl,
 	context,

@@ -28,12 +28,6 @@ export interface GrabPopover {
 	destroy(): void;
 }
 
-// ↵ (corner-down-left) — 제출. 글리프가 아니라 SVG인 이유: 10px 평문 글리프는
-// 옆 텍스트와 베이스라인이 어긋난다(copyButton.ts와 같은 판단).
-const SUBMIT_SVG =
-	'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>';
-const CHECK_SVG =
-	'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 const HINT_COPIED = "Copied";
 const HINT_COPIED_MARK = "✓";
 const HINT_FAILED = "Copy failed";
@@ -62,20 +56,13 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	const input = doc.createElement("textarea");
 	input.rows = 1;
 	input.className = "grab-input";
-	// Enter 고지는 제출 버튼의 title/aria가 맡는다 — placeholder와 이중으로
-	// 말하지 않는다(그게 힌트 줄이 어색했던 기계적 원인이다).
-	input.placeholder = "Prompt…";
+	// 상시 힌트 줄도 제출 버튼도 없으므로 단축키 고지는 placeholder가 전담한다.
+	// 힌트 줄이 어색했던 원인은 "안내가 있다"가 아니라 placeholder와 **같은 말을
+	// 두 번** 한 것이었다 — 채널이 하나면 중복이 없다. 입력을 시작하면 사라지므로
+	// 상주 노이즈도 아니다(발견용 안내).
+	input.placeholder = "Prompt… (⏎ copy · shift + ⏎ new line)";
 	input.setAttribute("aria-label", "Grab prompt");
-	input.setAttribute("aria-keyshortcuts", "Shift+Enter Escape");
-
-	const submitBtn = doc.createElement("button");
-	submitBtn.type = "button";
-	submitBtn.className = "grab-submit";
-	submitBtn.setAttribute("aria-keyshortcuts", "Enter");
-
-	const row = doc.createElement("div");
-	row.className = "grab-row";
-	row.append(input, submitBtn);
+	input.setAttribute("aria-keyshortcuts", "Enter Shift+Enter Escape");
 
 	// 상태 전용 라이브 리전. 상시 어포던스(버튼)와 임시 상태를 다른 채널에 둔다 —
 	// 한 노드가 겸용하면 실패로 전이할 때 조작 안내가 사라진다.
@@ -88,12 +75,6 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	hintMark.className = "grab-check";
 	const hintText = doc.createTextNode("");
 	hint.append(hintMark, hintText);
-
-	const setSubmitState = (copied: boolean): void => {
-		submitBtn.innerHTML = copied ? CHECK_SVG : SUBMIT_SVG;
-		submitBtn.setAttribute("aria-label", copied ? "Copied" : "Copy grab");
-		submitBtn.setAttribute("title", copied ? "Copied" : "Copy (Enter)");
-	};
 
 	// textContent가 "✓ Copied"/"Copy failed"로 이어붙어야 한다 — 유닛 단언이
 	// element.textContent 부분 일치로 상태를 본다.
@@ -108,8 +89,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		hint.hidden = true;
 	};
 
-	setSubmitState(false);
-	element.append(label, row, hint);
+	element.append(label, input, hint);
 
 	let opened = false;
 	let buildOutput: ((prompt: string) => string) | null = null;
@@ -140,7 +120,6 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		element.style.top = `${options.placement.top}px`;
 		input.value = "";
 		clearStatus();
-		setSubmitState(false);
 		clearAutoCloseTimer();
 		opened = true;
 		element.hidden = false;
@@ -149,7 +128,6 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 
 	const onCopySuccess = (): void => {
 		showStatus(HINT_COPIED, HINT_COPIED_MARK);
-		setSubmitState(true);
 		deps.onCopied?.();
 		clearAutoCloseTimer();
 		autoCloseTimer = setTimeout(() => {
@@ -168,14 +146,17 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		deps.writeText(output).then(onCopySuccess, onCopyFailure);
 	};
 
-	submitBtn.addEventListener("click", () => submit());
-
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") {
 			if (event.isComposing || event.keyCode === 229) return;
 			// Shift+Enter는 개행 — preventDefault를 부르지 않고 그냥 빠져나가
 			// textarea의 기본 동작에 맡긴다. 새 키 분기를 만들지 않는다.
 			if (event.shiftKey) return;
+			// 맨 Enter는 제출이므로 기본 동작(개행 삽입)을 막아야 한다.
+			// <input>일 땐 Enter에 기본 동작이 없어 필요 없던 호출이다 —
+			// textarea로 바꾸면서 생긴 요구사항이고, happy-dom은 기본 동작을
+			// 수행하지 않아 유닛만으로는 드러나지 않는다(취소 여부로 단언한다).
+			event.preventDefault();
 			submit();
 		} else if (event.key === "Escape") {
 			if (event.isComposing || event.keyCode === 229) return;
