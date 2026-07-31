@@ -4,6 +4,7 @@
 		"apps/viewer": {
 			"release-type": "node",
 			"package-name": "@say8425/diffdeck",
+			"changelog-path": "/CHANGELOG.md",
 			"extra-files": [
 				{
 					"type": "json",
