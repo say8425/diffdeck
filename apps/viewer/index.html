@@ -482,12 +482,28 @@
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
-			#grab-popover textarea {
+			/* 입력 영역 — 테두리·배경·radius를 textarea에서 이 래퍼로 올렸다.
+			   보내기 버튼이 같은 상자를 공유해야 하기 때문이다. radius는
+			   --vd-radius(6px) — select·세그컨트롤·find바와 같은 표준 컨트롤 값. */
+			#grab-popover .grab-field {
+				display: flex;
+				align-items: flex-end;
+				gap: 6px;
 				background: #1a1a1f;
 				border: 1px solid #3a3a40;
 				border-radius: var(--vd-radius);
+				padding: 4px 4px 4px 8px;
+			}
+			#grab-popover .grab-field:focus-within {
+				border-color: #5b8def;
+			}
+			#grab-popover textarea {
+				flex: 1 1 auto;
+				min-width: 0;
+				background: none;
+				border: none;
 				color: #e6e6ea;
-				padding: 5px 8px;
+				padding: 2px 0;
 				font: inherit;
 				font-size: 12px;
 				line-height: 1.4;
@@ -501,23 +517,63 @@
 				resize: none;
 				overflow-y: auto;
 			}
-			#grab-popover textarea:focus {
-				border-color: #5b8def;
-			}
-			#grab-popover .grab-hint {
-				font-size: 10px;
-				color: var(--vd-fg-muted);
+			/* 배경색 없음이 계약이다 — 상태는 색으로만 말한다. 그래서 어느
+			   상태에서도 버튼 크기가, 따라서 창 크기가 변하지 않는다.
+			   radius 4px는 툴바 세그먼트 버튼과 같은 "컨테이너 안쪽 버튼" 값. */
+			#grab-popover .grab-send {
+				flex: none;
 				display: inline-flex;
 				align-items: center;
-				gap: 3px;
+				justify-content: center;
+				width: 20px;
+				height: 20px;
+				padding: 0;
+				border: none;
+				border-radius: 4px;
+				background: none;
+				color: #6f6f7a;
+				cursor: pointer;
+				transition: color 0.12s;
 			}
-			/* author display 선언은 UA [hidden]{display:none}을 이긴다 — 짝지어야
-			   hint.hidden이 실제로 숨긴다. happy-dom은 못 잡고 실브라우저에서만 터진다. */
-			#grab-popover .grab-hint[hidden] {
+			#grab-popover .grab-send:hover {
+				color: var(--vd-fg);
+			}
+			#grab-popover .grab-send:focus-visible {
+				outline: 2px solid var(--vd-accent);
+				outline-offset: 1px;
+			}
+			#grab-popover .grab-send[data-state="ready"] {
+				color: var(--vd-accent);
+			}
+			#grab-popover .grab-send[data-state="ok"] {
+				color: var(--vd-success);
+			}
+			#grab-popover .grab-send[data-state="fail"] {
+				color: #f85149;
+			}
+			#grab-popover .grab-send svg {
 				display: none;
 			}
-			#grab-popover .grab-check {
-				color: var(--vd-success);
+			#grab-popover .grab-send[data-state="idle"] .i-send,
+			#grab-popover .grab-send[data-state="ready"] .i-send,
+			#grab-popover .grab-send[data-state="ok"] .i-ok,
+			#grab-popover .grab-send[data-state="fail"] .i-fail {
+				display: block;
+			}
+			/* 상태는 버튼이 눈으로 말하므로 이 노드는 스크린리더 전용이다.
+			   예전처럼 보이는 줄로 두면 복사할 때마다 창이 23px(실측) 자라
+			   커서 아래 코드가 밀렸다. hidden을 토글하지 않는 이유이기도 하다 —
+			   hidden 요소는 라이브 리전으로 알려지지 않는다. */
+			#grab-popover .grab-hint {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				padding: 0;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
 			}
 		</style>
 	</head>

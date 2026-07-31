@@ -271,7 +271,9 @@ describe("createGrabPopover", () => {
 });
 
 describe("상태 전용 슬롯 + 접근성", () => {
-	test("평상시엔 힌트가 hidden이다", () => {
+	// 라이브 리전은 이제 sr-only라 항상 DOM에 붙어 있다(hidden 요소는 스크린리더에
+	// 알려지지 않는다). "상태 없음"은 hidden이 아니라 **빈 텍스트**로 표현된다.
+	test("평상시엔 라이브 리전이 비어 있고 버튼은 idle이다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
 			label: "a.ts:1-2 · new side",
@@ -280,7 +282,9 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			placement: { left: 0, top: 0 },
 		});
 		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
-		expect(hint.hidden).toBe(true);
+		expect(hint.textContent).toBe("");
+		const send = pop.element.querySelector(".grab-send") as HTMLElement;
+		expect(send.dataset.state).toBe("idle");
 	});
 
 	// 제출 버튼이 없으므로 단축키 고지는 입력창의 placeholder와 aria가 전담한다.
@@ -331,9 +335,12 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		await Promise.resolve();
 		await Promise.resolve();
 		expect(pop.element.textContent).toContain("Copied");
+		const send = pop.element.querySelector(".grab-send") as HTMLElement;
+		expect(send.dataset.state).toBe("ok");
 		pop.open(opts);
 		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
-		expect(hint.hidden).toBe(true);
+		expect(hint.textContent).toBe("");
+		expect(send.dataset.state).toBe("idle");
 	});
 
 	test("라벨에 전체 경로 title이 붙는다", () => {
@@ -364,5 +371,86 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		const hint = pop.element.querySelector(".grab-hint");
 		expect(hint?.getAttribute("role")).toBe("status");
 		expect(hint?.getAttribute("aria-live")).toBe("polite");
+	});
+});
+
+describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
+	const opts = {
+		label: "a.ts:1-2 · new side",
+		labelTitle: "src/a.ts",
+		buildOutput: (p: string) => `out:${p}`,
+		placement: { left: 0, top: 0 },
+	};
+
+	test("입력 영역 안에 산다 — 팝오버 직속이 아니라 .grab-field의 자식", () => {
+		const { popover: pop } = makePopover();
+		const field = pop.element.querySelector(".grab-field");
+		const send = pop.element.querySelector(".grab-send");
+		expect(field).toBeTruthy();
+		// textarea와 버튼이 같은 상자를 공유하는 게 이 디자인의 전부다.
+		expect(send?.parentElement).toBe(field);
+		expect(field?.querySelector("textarea")).toBeTruthy();
+	});
+
+	test("클릭이 Enter와 같은 출력을 복사한다", async () => {
+		const { popover: pop, writes } = makePopover();
+		pop.open(opts);
+		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
+		box.value = "왜 바꿨어";
+		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
+		send.click();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(writes).toEqual(["out:왜 바꿨어"]);
+		expect(send.dataset.state).toBe("ok");
+	});
+
+	test("mousedown 기본동작을 막아 입력 포커스를 지킨다 — IME 조합 유실 방지", () => {
+		const { popover: pop } = makePopover();
+		pop.open(opts);
+		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
+		const event = new MouseEvent("mousedown", { cancelable: true });
+		send.dispatchEvent(event);
+		expect(event.defaultPrevented).toBe(true);
+	});
+
+	test("입력 유무로 강조만 바뀐다 — 비활성화하지 않는다", () => {
+		const { popover: pop } = makePopover();
+		pop.open(opts);
+		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
+		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
+		expect(send.dataset.state).toBe("idle");
+		box.value = "x";
+		box.dispatchEvent(new Event("input"));
+		expect(send.dataset.state).toBe("ready");
+		box.value = "";
+		box.dispatchEvent(new Event("input"));
+		expect(send.dataset.state).toBe("idle");
+		// 빈 프롬프트로도 참조+스니펫은 복사되므로 막으면 기능이 줄어든다.
+		expect(send.disabled).toBe(false);
+	});
+
+	test("복사 실패는 버튼을 fail로 — 창은 열린 채", async () => {
+		const { popover: pop } = makePopover({ fail: true });
+		pop.open(opts);
+		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
+		send.click();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(send.dataset.state).toBe("fail");
+		expect(pop.isOpen()).toBe(true);
+	});
+
+	test("아이콘 셋이 전부 DOM에 있고 이름은 상태와 무관하게 고정이다", () => {
+		const { popover: pop } = makePopover();
+		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
+		// 셋을 다 두고 CSS가 하나만 보여준다 — 상태마다 innerHTML을 갈면
+		// 매번 파서를 태우고 재측정을 유발한다.
+		expect(send.querySelector(".i-send")).toBeTruthy();
+		expect(send.querySelector(".i-ok")).toBeTruthy();
+		expect(send.querySelector(".i-fail")).toBeTruthy();
+		// 상태는 라이브 리전이 알린다. 이름까지 바뀌면 두 번 말한다.
+		expect(send.getAttribute("aria-label")).toBe("Copy to clipboard");
+		expect(send.type).toBe("button");
 	});
 });

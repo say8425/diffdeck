@@ -70,8 +70,15 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 	);
 	await expect(page.locator("#grab-popover")).toBeVisible();
 
-	// author display 선언이 [hidden]을 이기는 회귀 방어 (유닛이 못 잡는다)
-	await expect(page.locator("#grab-popover .grab-hint")).toBeHidden();
+	// 보내기 버튼이 실제로 페인트되는지 — 유닛의 .click()은 레이아웃·크기와
+	// 무관하게 노드에 디스패치되므로 0-height·언페인트여도 통과한다.
+	// toBeVisible()은 non-empty bounding box를 요구해 그 회귀를 잡는다.
+	await expect(page.locator("#grab-popover .grab-send")).toBeVisible();
+	// 배경색 없음이 이 디자인의 계약이다 — 상태는 색으로만 말한다.
+	await expect(page.locator("#grab-popover .grab-send")).toHaveCSS(
+		"background-color",
+		"rgba(0, 0, 0, 0)",
+	);
 	// happy-dom의 .click()은 레이아웃·크기·페인트와 무관하게 노드에 디스패치되므로
 	// 유닛으로는 버튼이 실제로 0-height·언페인트여도 통과한다 — toBeVisible()은
 	// non-empty bounding box를 요구해 그 회귀를 잡는다.
@@ -445,4 +452,46 @@ test('⑦ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)
 	const out = await page.evaluate(() => navigator.clipboard.readText());
 	// 거터 경로는 chars를 세우지 않으므로 줄이 온전하다
 	expect(out).toContain('export const hello = (): string => "hello";');
+});
+
+// 예전엔 힌트가 눈에 보이는 줄이라 복사할 때마다 창이 23px 자라 커서 아래
+// 코드가 밀렸다. 이제 버튼이 상태를 지고 힌트는 sr-only라 높이가 고정이다.
+// happy-dom은 레이아웃이 없어 이 회귀를 원리적으로 못 잡는다.
+test("⑨ 복사해도 창 높이가 변하지 않는다 — 상태는 버튼 색으로만", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("text rows not visible");
+
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + 60, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	const before = (await popover.boundingBox())?.height ?? 0;
+	expect(before).toBeGreaterThan(0);
+
+	await page.locator("#grab-popover textarea").press("Enter");
+	// 버튼이 성공 상태로 넘어갔는지 먼저 확인 — 그래야 "아직 아무 일도 안
+	// 일어나서 높이가 같다"는 공허한 통과를 배제한다.
+	await expect(page.locator("#grab-popover .grab-send")).toHaveAttribute(
+		"data-state",
+		"ok",
+	);
+	const after = (await popover.boundingBox())?.height ?? 0;
+	expect(after).toBe(before);
 });
