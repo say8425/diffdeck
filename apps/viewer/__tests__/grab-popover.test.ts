@@ -287,17 +287,21 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(send.dataset.state).toBe("idle");
 	});
 
-	// 제출 버튼이 없으므로 단축키 고지는 입력창의 placeholder와 aria가 전담한다.
-	test("입력창이 단축키를 placeholder와 aria로 고지한다", () => {
+	// 단축키 고지는 **화면을 차지하지 않는** 두 채널이 맡는다: 버튼 hover(title)와
+	// aria-keyshortcuts. placeholder는 한 마디만 해야 한다 — 여기에 안내를 실으면
+	// 입력창을 꽉 채워 창에서 가장 눈에 띄는 요소가 되어버린다.
+	test("placeholder는 한 마디만 하고, 단축키는 title·aria가 고지한다", () => {
 		const { popover: pop } = makePopover();
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
-		// 표기(글자/글리프)가 아니라 **두 동작이 다 고지되는가**를 본다 —
-		// 문구를 다듬어도 안내가 통째로 빠지는 회귀만 잡히면 된다.
-		expect(box.placeholder).toContain("copy");
-		expect(box.placeholder).toContain("new line");
+		expect(box.placeholder).toBe("Prompt…");
 		expect(box.getAttribute("aria-keyshortcuts")).toBe(
 			"Enter Shift+Enter Escape",
 		);
+		// 표기(글자/글리프)가 아니라 **두 동작이 다 고지되는가**를 본다 —
+		// 문구를 다듬어도 안내가 통째로 빠지는 회귀만 잡히면 된다.
+		const send = pop.element.querySelector(".grab-send") as HTMLElement;
+		expect(send.title).toContain("⏎");
+		expect(send.title).toContain("new line");
 	});
 
 	test("복사 실패는 힌트에 표시되고 팝오버는 열린 채 남는다", async () => {
@@ -393,7 +397,8 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 	});
 
 	test("클릭이 Enter와 같은 출력을 복사한다", async () => {
-		const { popover: pop, writes } = makePopover();
+		// 모듈 레벨 writes를 가리지 않게 이름을 달리한다(oxlint no-shadow).
+		const { popover: pop, writes: local } = makePopover();
 		pop.open(opts);
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
 		box.value = "왜 바꿨어";
@@ -401,7 +406,7 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 		send.click();
 		await Promise.resolve();
 		await Promise.resolve();
-		expect(writes).toEqual(["out:왜 바꿨어"]);
+		expect(local).toEqual(["out:왜 바꿨어"]);
 		expect(send.dataset.state).toBe("ok");
 	});
 
