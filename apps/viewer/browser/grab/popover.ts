@@ -44,6 +44,7 @@ export interface GrabPopover {
 const HINT_COPIED = "Copied";
 const HINT_FAILED = "Copy failed";
 const SEND_LABEL = "Copy to clipboard";
+const SEND_TITLE = "Copy (⏎) · Shift+⏎ for new line";
 const AUTO_CLOSE_MS = 1200;
 
 // 버튼 아이콘 셋. 세 개를 전부 DOM에 두고 data-state로 CSS가 하나만 보여준다 —
@@ -84,10 +85,11 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	const input = doc.createElement("textarea");
 	input.rows = 1;
 	input.className = "grab-input";
-	// 단축키 고지는 placeholder가 전담한다. 힌트 줄이 어색했던 원인은 "안내가
-	// 있다"가 아니라 placeholder와 **같은 말을 두 번** 한 것이었다 — 채널이
-	// 하나면 중복이 없다. 입력을 시작하면 사라지므로 상주 노이즈도 아니다.
-	input.placeholder = "Prompt… (⏎ copy · shift + ⏎ new line)";
+	// placeholder는 한 마디만 한다. 예전엔 여기에 "(⏎ copy · shift + ⏎ new
+	// line)"까지 실어 입력창을 꽉 채웠는데, 그게 창에서 가장 눈에 띄는 요소라
+	// 다른 걸 아무리 고쳐도 "안 바뀐 것처럼" 보였다. 단축키 고지는 이제 화면을
+	// 차지하지 않는 두 채널이 맡는다 — 버튼 hover(title)와 aria-keyshortcuts.
+	input.placeholder = "Prompt…";
 	input.setAttribute("aria-label", "Grab prompt");
 	input.setAttribute("aria-keyshortcuts", "Enter Shift+Enter Escape");
 
@@ -100,6 +102,9 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	// 아이콘이 상태마다 바뀌어도 접근 가능한 이름은 고정한다 — 상태 자체는
 	// 아래 라이브 리전이 알린다. 둘 다 바뀌면 스크린리더가 두 번 말한다.
 	send.setAttribute("aria-label", SEND_LABEL);
+	// hover에서만 보이므로 시각적 비용이 0이다 — placeholder에서 뺀 단축키
+	// 안내가 갈 곳.
+	send.title = SEND_TITLE;
 	send.innerHTML = ICONS;
 
 	field.append(input, send);
