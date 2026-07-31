@@ -20,7 +20,11 @@ import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
 import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
-import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
+import {
+	encodeGrab,
+	type GrabFileStatus,
+	grabLabelParts,
+} from "./grab/encode.ts";
 import {
 	createGrabHighlighter,
 	GRAB_HIGHLIGHT_NAME,
@@ -489,7 +493,7 @@ const buildGrabSnapshot = (
 		snippet,
 	};
 	return {
-		label: grabLabel(fileId, snippet),
+		label: grabLabelParts(fileId, snippet),
 		labelTitle: fileId,
 		buildOutput: (prompt) => encodeGrab({ ...input, prompt }),
 	};

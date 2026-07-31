@@ -1,5 +1,6 @@
 import "./happydom.ts";
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
+import type { GrabLabelPart } from "../browser/grab/encode.ts";
 import {
 	createGrabPopover,
 	type GrabPopover,
@@ -14,9 +15,18 @@ let copied = 0;
 let closed = 0;
 let popover: GrabPopover;
 
+// 라벨은 조각 배열이다(파일명/라인범위/구분자/side) — encode.ts의
+// grabLabelParts가 만드는 것과 같은 모양.
+const labelParts = (name = "a.ts", range = ":1-2"): GrabLabelPart[] => [
+	{ text: name, kind: "file" },
+	{ text: range, kind: "range" },
+	{ text: " · ", kind: "sep" },
+	{ text: "new side", kind: "side" },
+];
+
 const openDefault = () =>
 	popover.open({
-		label: "main.ts:84-98 · new side",
+		label: labelParts("main.ts", ":84-98"),
 		labelTitle: "apps/viewer/browser/main.ts",
 		buildOutput: (prompt) => `OUT[${prompt}]`,
 		placement: { left: 10, top: 20 },
@@ -260,7 +270,7 @@ describe("createGrabPopover", () => {
 		});
 		document.body.append(p.element);
 		p.open({
-			label: "x",
+			label: labelParts("x", ""),
 			labelTitle: "src/x.ts",
 			buildOutput: () => "y",
 			placement: { left: 0, top: 0 },
@@ -276,7 +286,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 	test("평상시엔 라이브 리전이 비어 있고 버튼은 idle이다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
-			label: "a.ts:1-2 · new side",
+			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
@@ -307,7 +317,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 	test("복사 실패는 힌트에 표시되고 팝오버는 열린 채 남는다", async () => {
 		const { popover: pop } = makePopover({ fail: true });
 		pop.open({
-			label: "a.ts:1-2 · new side",
+			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
@@ -326,7 +336,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 	test("재오픈이 힌트를 초기화한다", async () => {
 		const { popover: pop } = makePopover();
 		const opts = {
-			label: "a.ts:1-2 · new side",
+			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
@@ -347,10 +357,51 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(send.dataset.state).toBe("idle");
 	});
 
+	// 라벨이 한 덩어리 텍스트로 렌더되면 색을 못 준다 — 조각마다 span이어야 한다.
+	test("라벨이 조각별 span으로 렌더된다 — 색을 줄 수 있는 유일한 형태", () => {
+		const { popover: pop } = makePopover();
+		pop.open({
+			label: [
+				{ text: "a.ts", kind: "file" },
+				{ text: ":1-2", kind: "range" },
+				{ text: " · ", kind: "sep" },
+				{ text: "old side", kind: "side-old" },
+			],
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		});
+		const label = pop.element.querySelector(".grab-label") as HTMLElement;
+		expect([...label.children].map((c) => c.className)).toEqual([
+			"grab-l-file",
+			"grab-l-range",
+			"grab-l-sep",
+			"grab-l-side-old",
+		]);
+		// 이어 붙이면 grabLabel()의 문자열과 같아야 한다 — 색과 텍스트가
+		// 갈라지지 않는다는 계약.
+		expect(label.textContent).toBe("a.ts:1-2 · old side");
+	});
+
+	// 재오픈이 이전 조각을 남기면 라벨이 두 번 쌓인다(replaceChildren 계약).
+	test("재오픈이 이전 라벨 조각을 지운다", () => {
+		const { popover: pop } = makePopover();
+		const base = {
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			placement: { left: 0, top: 0 },
+		};
+		pop.open({ ...base, label: labelParts("a.ts", ":1-2") });
+		pop.open({ ...base, label: labelParts("b.ts", ":9") });
+		const label = pop.element.querySelector(".grab-label") as HTMLElement;
+		expect(label.children.length).toBe(4);
+		expect(label.textContent).toBe("b.ts:9 · new side");
+	});
+
 	test("라벨에 전체 경로 title이 붙는다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
-			label: "a.ts:1-2 · new side",
+			label: labelParts(),
 			labelTitle: "src/deep/a.ts",
 			buildOutput: () => "out",
 			placement: { left: 0, top: 0 },
@@ -380,7 +431,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 
 describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 	const opts = {
-		label: "a.ts:1-2 · new side",
+		label: labelParts(),
 		labelTitle: "src/a.ts",
 		buildOutput: (p: string) => `out:${p}`,
 		placement: { left: 0, top: 0 },
