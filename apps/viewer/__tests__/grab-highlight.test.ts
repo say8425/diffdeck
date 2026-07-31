@@ -477,6 +477,41 @@ describe("rowsInRange — chars", () => {
 		expect(got).toEqual([{ el: rows[0].el }]);
 	});
 
+	// 단일 행이 곧 시작이자 끝인 경우 — 두 플래그를 각각 판정하는지 본다.
+	// 다중 행 케이스만으로는 이 분기(withChars의 els.length === 1)에서
+	// 두 불리언을 뒤바꾼 구현을 잡지 못한다.
+	test("side: 보이는 행이 하나뿐이고 그 행이 시작 경계일 때만 시작 오프셋이 붙는다", () => {
+		const only = row("new", 15);
+		const got = rowsInRange(
+			[only],
+			{
+				kind: "side",
+				side: "new",
+				startLine: 15,
+				endLine: 20,
+				chars: { start: 3, end: 9 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([{ el: only.el, start: 3 }]);
+	});
+
+	test("side: 보이는 행이 하나뿐이고 그 행이 끝 경계일 때만 끝 오프셋이 붙는다", () => {
+		const only = row("new", 20);
+		const got = rowsInRange(
+			[only],
+			{
+				kind: "side",
+				side: "new",
+				startLine: 15,
+				endLine: 20,
+				chars: { start: 3, end: 9 },
+			},
+			"unified",
+		);
+		expect(got).toEqual([{ el: only.el, end: 9 }]);
+	});
+
 	test("mixed: 시작 끝점이 안 보이면(i<0) 보이는 첫 행엔 시작 오프셋을 안 붙인다", () => {
 		const rows = [row("new", 6), row("new", 7), row("new", 8)];
 		const got = rowsInRange(
