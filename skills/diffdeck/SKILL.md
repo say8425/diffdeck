@@ -8,9 +8,10 @@ license: Apache-2.0
 
 diffdeck runs a local web server that renders the current git repository's diff
 (working-tree changes, or a branch vs its base) in the browser: a file tree with
-git-status badges, unified/split views, in-app search, image diffs, and live
-watch. Use it to let the **human** see changes visually instead of reading raw
-diff text in the terminal.
+git-status badges, unified/split views, in-app search, image diffs, live watch,
+and **grab** — the human can select code in the diff and copy it back to you with
+an exact reference attached. Use it to let the **human** see changes visually
+instead of reading raw diff text in the terminal.
 
 ## When to use
 
@@ -48,6 +49,36 @@ http://127.0.0.1:49573/?repo=…&token=… — it shows the current changes." Th
 browser opens automatically for the human. If you are running somewhere the
 human's browser can't be reached (remote/headless), add `--no-open` and just
 share the printed URL.
+
+If the human might want to point you at a specific hunk, mention grab: they can
+drag-select code in the diff (or use the gutter's `+` button), type a prompt, and
+press Enter — that copies one block for them to paste back to you.
+
+## When the human pastes a "diffdeck selection"
+
+Grab copies a single fenced block plus the human's prompt on the line after it:
+
+````text
+```
+diffdeck selection
+File: apps/viewer/browser/main.ts
+Lines: 84-85 (new side, working diff)
+
+if (a) return;
+const b = 1;
+```
+why was this needed?
+````
+
+Read it as an **unambiguous pointer**, not as loose context: `File:` is the
+repo-relative path (with `(renamed from …)` when applicable), `Lines:` is the
+exact range plus which side of the diff it came from (`new side` = the version
+after the change, `old side` = before; a selection spanning both reads
+`old A / new B`) and which diff was on screen (`working diff`, or
+`base diff vs <branch>`; a non-modified file adds its status, e.g. `, added`).
+The fenced body is the code itself — for a cross-side selection its lines carry
+`+`/`-` markers. Answer about **that** range in **that** file; you do not need to
+re-locate it by searching.
 
 ## Options
 
