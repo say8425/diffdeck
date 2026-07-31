@@ -477,10 +477,31 @@
 			}
 			#grab-popover .grab-label {
 				font-size: 11px;
+				/* 라인박스를 정수로 못박는다 — 아래 textarea와 함께, 팝오버
+				   높이가 소수가 되지 않게 하는 두 축 중 하나. */
+				line-height: 15px;
 				color: var(--vd-fg-muted);
 				white-space: nowrap;
 				overflow: hidden;
 				text-overflow: ellipsis;
+			}
+			/* 라벨은 세 종류의 정보를 담는다 — 파일명 / 잡은 줄 범위 / 어느 side.
+			   색으로 그 구분을 말한다. side 색은 diff의 add·del(#3fb950·#f85149)을
+			   글자용으로 낮춘 톤이라 같은 어휘로 읽힌다. */
+			#grab-popover .grab-l-file {
+				color: #c2c2ca;
+			}
+			#grab-popover .grab-l-range {
+				color: #8fb4f5;
+			}
+			#grab-popover .grab-l-sep {
+				color: #55555c;
+			}
+			#grab-popover .grab-l-side {
+				color: #6fae7c;
+			}
+			#grab-popover .grab-l-side-old {
+				color: #c07f7b;
 			}
 			/* 입력 영역 — 테두리·배경·radius를 textarea에서 이 래퍼로 올렸다.
 			   보내기 버튼이 같은 상자를 공유해야 하기 때문이다. radius는
@@ -506,14 +527,20 @@
 				padding: 2px 0;
 				font: inherit;
 				font-size: 12px;
-				line-height: 1.4;
+				/* 1.4 × 12px = 16.8 — 소수 라인박스라 팝오버 전체 높이가
+				   67.7969px가 되고, 그러면 같은 높이라도 뜨는 y 오프셋에 따라
+				   device 픽셀 135행/136행을 오간다(레티나에서 1px 흔들림으로
+				   보인다). 18px로 못박으면 팝오버가 항상 정수 높이(69px)다. */
+				line-height: 18px;
 				outline: none;
 				/* 내용에 맞춰 자라고 5줄쯤에서 멈춘 뒤 스크롤한다. JS 측정 대신
 				   CSS에 맡겨 커버리지 게이트 안 모듈에 분기를 만들지 않는다.
 				   미지원 브라우저에선 rows=1 고정 + 스크롤로 강등된다(여러 줄
 				   입력 자체는 그대로 된다). */
 				field-sizing: content;
-				max-height: 96px;
+				/* 정확히 5줄(18 × 5) — 예전 96px은 16.8로 나누면 5.71줄이라
+				   여섯 번째 줄이 반쯤 걸쳐 보였다. */
+				max-height: 90px;
 				resize: none;
 				overflow-y: auto;
 			}

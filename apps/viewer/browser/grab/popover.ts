@@ -15,6 +15,7 @@
 // radius 8/6/4는 임의값이 아니라 앱에 이미 있는 세 값이다(툴바 세그먼트
 // 컨트롤이 컨테이너 6 / 안쪽 버튼 4로 같은 규칙을 쓴다). 앱에서 999px은
 // 토글 스위치 하나에만 배정돼 있어 여기서 쓰면 그 어휘를 훔치게 된다.
+import type { GrabLabelPart } from "./encode.ts";
 import type { Placement } from "./position.ts";
 
 export interface GrabPopoverDeps {
@@ -27,7 +28,9 @@ export interface GrabPopoverDeps {
 }
 
 export interface GrabOpenOptions {
-	label: string;
+	// 문자열이 아니라 조각인 이유는 encode.ts의 grabLabelParts 주석 참고 —
+	// 파일명/라인범위/side를 각각 다른 색으로 칠한다.
+	label: GrabLabelPart[];
 	labelTitle: string; // 전체 경로 — 라벨은 basename만 보여주고 ellipsis로 잘린다
 	buildOutput(prompt: string): string;
 	placement: Placement;
@@ -81,7 +84,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 
 	// <input>이 아니라 <textarea>인 이유: 에이전트 프롬프트는 여러 줄이 자연스럽다.
 	// Shift+Enter로 개행하고 Enter로 제출한다. 높이는 CSS field-sizing이 내용에
-	// 맞춰 늘리므로(최대 높이 후 스크롤) 여기에 JS 측정 로직을 두지 않는다.
+	// 맞춰 늘리므로(5줄 = 90px에서 멈추고 스크롤) 여기에 JS 측정 로직을 두지 않는다.
 	const input = doc.createElement("textarea");
 	input.rows = 1;
 	input.className = "grab-input";
@@ -152,7 +155,14 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	};
 
 	const open = (options: GrabOpenOptions): void => {
-		label.textContent = options.label;
+		label.replaceChildren(
+			...options.label.map((part) => {
+				const span = doc.createElement("span");
+				span.className = `grab-l-${part.kind}`;
+				span.textContent = part.text;
+				return span;
+			}),
+		);
 		label.title = options.labelTitle;
 		// options.buildOutput을 그대로 tear-off하지 않고 래핑 호출한다
 		// (oxlint unbound-method — 인터페이스 메서드 시그니처의 this 바인딩 경고).

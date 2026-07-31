@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { encodeGrab, grabLabel } from "../browser/grab/encode.ts";
+import {
+	encodeGrab,
+	grabLabel,
+	grabLabelParts,
+} from "../browser/grab/encode.ts";
 import type { Snippet } from "../browser/grab/snippet.ts";
 
 const sideSnip: Snippet = {
@@ -105,6 +109,41 @@ describe("encodeGrab", () => {
 	});
 	test("공백뿐인 프롬프트는 생략", () => {
 		expect(encodeGrab({ ...base, prompt: "   " }).endsWith("```")).toBe(true);
+	});
+});
+
+describe("grabLabelParts", () => {
+	// 조각의 kind가 곧 색이다 — 여기가 틀리면 팝오버가 엉뚱한 색을 칠한다.
+	test("side: 파일 / 범위 / 구분자 / side 네 조각", () => {
+		expect(grabLabelParts(base.path, sideSnip).map((p) => p.kind)).toEqual([
+			"file",
+			"range",
+			"sep",
+			"side",
+		]);
+	});
+
+	test("old side는 side-old kind로 — new와 다른 색을 받는다", () => {
+		const parts = grabLabelParts("a/b.ts", { ...sideSnip, side: "old" });
+		expect(parts.at(-1)).toEqual({ text: "old side", kind: "side-old" });
+	});
+
+	test("mixed: old·new가 각각 제 색을 받는다", () => {
+		const parts = grabLabelParts("a/b.ts", {
+			kind: "mixed",
+			oldStart: 2,
+			oldEnd: 2,
+			newStart: 2,
+			newEnd: 3,
+			rows: [],
+		});
+		expect(parts.map((p) => p.kind)).toEqual([
+			"file",
+			"sep",
+			"side-old",
+			"sep",
+			"side",
+		]);
 	});
 });
 
