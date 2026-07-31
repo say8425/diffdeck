@@ -106,7 +106,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 
 	// 상태 전용 라이브 리전. **시각적으로는 버튼이 상태를 지므로** 이 노드는
 	// 스크린리더 전용(sr-only)이다. 예전처럼 눈에 보이는 줄로 두면 복사할
-	// 때마다 창이 한 줄(실측 23px) 자라 커서 아래 코드가 밀렸다.
+	// 때마다 창이 한 줄 자라 커서 아래 코드가 밀렸다(실측: 66 → 84px).
 	const hint = doc.createElement("span");
 	hint.className = "grab-hint";
 	hint.setAttribute("role", "status");
