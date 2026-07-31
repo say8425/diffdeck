@@ -79,7 +79,10 @@ test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨
 	const b = await rows.nth(2).boundingBox();
 	if (!a || !b) throw new Error("text rows not visible");
 	const from = { x: a.x + 40, y: a.y + a.height / 2 };
-	const to = { x: b.x + 40, y: b.y + b.height / 2 };
+	// 텍스트 드래그는 이제 문자 단위다 — 끝점을 행 텍스트 끝 너머로 잡아
+	// 브라우저가 줄 끝으로 클램프하게 해야 마지막 줄이 온전히 복사된다
+	// (몇 번째 문자에 떨어지는지는 폰트에 따라 달라진다).
+	const to = { x: b.x + b.width - 5, y: b.y + b.height / 2 };
 
 	// 트리거 버튼 없이 드래그 릴리스 직후 팝오버가 곧장 열린다(거터 "+" 경로와
 	// 동일한 즉시성).
@@ -171,7 +174,8 @@ test("④ unified 크로스 사이드(삭제→추가) 텍스트 드래그 → o
 	await dragSelect(
 		page,
 		{ x: a.x + 40, y: a.y + a.height / 2 },
-		{ x: b.x + 40, y: b.y + b.height / 2 },
+		// 끝점은 텍스트 끝 너머로 → 추가 행은 온전하다(위 ② 주석 참고).
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
 	);
 
 	await expect(page.locator("#grab-popover")).toBeVisible();
@@ -181,7 +185,13 @@ test("④ unified 크로스 사이드(삭제→추가) 텍스트 드래그 → o
 	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
 	const out = await readClipboard(page);
 	expect(out).toContain("Lines: old");
-	expect(out).toMatch(/^-export const hello/m);
+	// 삭제 행은 드래그 시작점(x+40)부터 잘리므로 줄 시작을 기대할 수 없다 —
+	// 마커 뒤 본문이 원본의 접미사인지로 검증한다(폰트 메트릭 무관).
+	const OLD_LINE = 'export const hello = (): string => "hello";';
+	const minus = out.split("\n").find((l) => l.startsWith("-"));
+	expect(minus).toBeDefined();
+	expect(OLD_LINE.endsWith((minus ?? "").slice(1))).toBe(true);
+	// 추가 행은 끝점을 텍스트 끝 너머로 잡았으므로 온전하다.
 	expect(out).toMatch(/^\+export const hello/m);
 });
 
