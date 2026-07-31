@@ -304,3 +304,124 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		await viewer.stop();
 	}
 });
+
+test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 같은 프래그먼트", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	// 내용이 충분히 긴 행 하나를 고른다
+	const row = container.locator("[data-line]").first();
+	const box = await row.boundingBox();
+	if (!box) throw new Error("row not visible");
+
+	// 한 행 안에서만 드래그: x+40 → x+140 (둘 다 텍스트 위)
+	await dragSelect(
+		page,
+		{ x: box.x + 40, y: box.y + box.height / 2 },
+		{ x: box.x + 140, y: box.y + box.height / 2 },
+	);
+	await expect(page.locator("#grab-popover")).toBeVisible();
+
+	// 부분 선택이므로 Range는 1개이고, 그 텍스트가 행 전체보다 짧아야 한다
+	const probe = await page.evaluate(() => {
+		const hl = (
+			CSS as unknown as { highlights: Map<string, Set<Range>> }
+		).highlights.get("diffdeck-grab");
+		const ranges = hl ? [...hl] : [];
+		return {
+			count: ranges.length,
+			text: ranges[0]?.toString() ?? "",
+			rowText:
+				ranges[0]?.startContainer.parentElement?.closest("[data-line]")
+					?.textContent ?? "",
+		};
+	});
+	expect(probe.count).toBe(1);
+	expect(probe.text.length).toBeGreaterThan(0);
+	// 핵심: 줄 전체가 아니다
+	expect(probe.text.length).toBeLessThan(probe.rowText.length);
+
+	// 클립보드가 하이라이트와 정확히 같은 프래그먼트를 담는다
+	await page.locator("#grab-popover input").press("Enter");
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	expect(out).toContain(probe.text);
+});
+
+test("⑦ 제출 버튼 클릭만으로 복사가 완주한다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("rows not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	// Enter를 쓰지 않는다 — 버튼만으로 완주해야 한다
+	await popover.locator("input").fill("버튼으로 복사");
+	await popover.locator("button.grab-submit").click();
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("버튼으로 복사");
+	await expect(popover.locator(".grab-hint")).toBeVisible();
+	await expect(popover.locator(".grab-hint")).toContainText("Copied");
+});
+
+test('⑧ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)', async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+
+	const cell = container.locator("[data-column-number]").first();
+	const c = await cell.boundingBox();
+	if (!c) throw new Error("gutter cell not visible");
+	const mid = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+	await dragSelect(page, mid, mid);
+	await container.locator("[data-utility-button]").click();
+	await expect(page.locator("#grab-popover")).toBeVisible();
+
+	await page.locator("#grab-popover input").press("Enter");
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	// 거터 경로는 chars를 세우지 않으므로 줄이 온전하다
+	expect(out).toContain('export const hello = (): string => "hello";');
+});
