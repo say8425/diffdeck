@@ -33,6 +33,28 @@ The interactive viewer chrome that wraps this engine — click-to-fold, copy-pat
 
 ![The diffdeck viewer — file tree with git-status badges, an inline image diff, and syntax-highlighted diffs](docs/screenshot.png)
 
+### Grab — hand a diff selection to your coding agent
+
+Select code in the diff and a prompt box opens right where you released the drag. Press <kbd>Enter</kbd> and diffdeck copies **one block** to your clipboard — the file reference, the exact lines you picked, and your prompt — ready to paste into Claude Code, Codex, or any chat.
+
+![Grab — lines highlighted in the diff with the prompt box open beside them](docs/grab.png)
+
+Two ways in: **drag the code text**, or use the gutter's line selection and its `+` button. A text drag copies exactly the characters you highlighted; the gutter path takes whole lines. Either way the highlight shows precisely what will be copied.
+
+What lands on your clipboard:
+
+````text
+```
+diffdeck selection
+File: apps/viewer/browser/main.ts
+Lines: 84-98 (new side, working diff)
+
+if (a) return;
+const b = 1;
+```
+why was this needed?
+````
+
 ## Installation
 
 Run it on demand — no install needed:

@@ -33,6 +33,28 @@ diff 渲染引擎提供的功能：
 
 ![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
 
+### Grab — 把 diff 选区交给编码智能体
+
+在 diff 中拖选代码并松开，提示输入框会就地打开。按 <kbd>Enter</kbd>，diffdeck 会把文件引用、你选中的确切行以及你的提示**合成一段**复制到剪贴板，可直接粘贴到 Claude Code、Codex 或任意对话中。
+
+![Grab — diff 中高亮的行，以及旁边打开的提示输入框](grab.png)
+
+两种入口：**拖选代码文本**，或使用行号槽的行选择与 `+` 按钮。文本拖选只复制你高亮的字符；行号槽路径则取整行。无论哪种，高亮都精确显示将被复制的范围。
+
+复制到剪贴板的内容：
+
+````text
+```
+diffdeck selection
+File: apps/viewer/browser/main.ts
+Lines: 84-98 (new side, working diff)
+
+if (a) return;
+const b = 1;
+```
+why was this needed?
+````
+
 ## 安装
 
 按需运行 —— 无需安装：
