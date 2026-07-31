@@ -8,7 +8,6 @@ import type { RangeEndpoints, ResolvedSelection } from "./selectionAdapter.ts";
 export interface TextGrabTarget {
 	fileId: string;
 	range: NormalizedRange;
-	anchorRowEl: Element | null;
 }
 
 interface Endpoint {
@@ -43,7 +42,10 @@ const classify = (node: Node, offset: number): Endpoint | null => {
 	return { root, fileId, rowEl, node, offset };
 };
 
-const rowSide = (rowEl: Element, diffStyle: "unified" | "split"): GrabSide => {
+export const rowSide = (
+	rowEl: Element,
+	diffStyle: "unified" | "split",
+): GrabSide => {
 	const type = rowEl.getAttribute("data-line-type") ?? "";
 	if (type.includes("deletion")) return "old";
 	if (type.includes("addition")) return "new";
@@ -103,7 +105,6 @@ const buildTarget = (
 ): TextGrabTarget => {
 	const pStart = rowPoint(rowStart, diffStyle);
 	const pEnd = rowPoint(rowEnd, diffStyle);
-	const anchorRowEl = backward ? rowStart : rowEnd;
 	if (pStart.side === pEnd.side) {
 		return {
 			fileId,
@@ -113,7 +114,6 @@ const buildTarget = (
 				startLine: Math.min(pStart.line, pEnd.line),
 				endLine: Math.max(pStart.line, pEnd.line),
 			},
-			anchorRowEl,
 		};
 	}
 	if (diffStyle === "split") {
@@ -129,13 +129,11 @@ const buildTarget = (
 				startLine: Math.min(...lines),
 				endLine: Math.max(...lines),
 			},
-			anchorRowEl,
 		};
 	}
 	return {
 		fileId,
 		range: { kind: "mixed", start: pStart, end: pEnd },
-		anchorRowEl,
 	};
 };
 

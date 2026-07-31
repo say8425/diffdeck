@@ -86,6 +86,15 @@ export interface FixtureRepoOptions {
 	 * empty-state.e2e.ts 전용.
 	 */
 	featureBranchCommit?: boolean;
+	/**
+	 * Opt-in: commit `src/ctx.ts` with two lines that get deleted in the working
+	 * tree, separated by unchanged lines — so the unified diff renders
+	 * `-drop-1` / ` keep-b` / ` keep-c` / `-drop-2`. An old-side range across
+	 * both deletions therefore spans context rows, which is the shape that
+	 * distinguishes a correct `lineFor` (reads `data-alt-line`) from a naive
+	 * `row.side === side` filter. grab-highlight.e2e.ts 전용.
+	 */
+	contextBetweenDeletions?: boolean;
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -168,6 +177,12 @@ export const makeFixtureRepo = (
 			"export const korean = 1; // base\n",
 		);
 	}
+	if (options.contextBetweenDeletions) {
+		writeFileSync(
+			join(dir, "src", "ctx.ts"),
+			"keep-a\ndrop-1\nkeep-b\nkeep-c\ndrop-2\nkeep-d\n",
+		);
+	}
 
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
@@ -225,6 +240,12 @@ export const makeFixtureRepo = (
 			writeFileSync(
 				join(dir, "src", "한글파일.ts"),
 				"export const korean = 2; // edited\n",
+			);
+		}
+		if (options.contextBetweenDeletions) {
+			writeFileSync(
+				join(dir, "src", "ctx.ts"),
+				"keep-a\nkeep-b\nkeep-c\nkeep-d\n",
 			);
 		}
 	}
