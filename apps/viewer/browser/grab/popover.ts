@@ -56,14 +56,17 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	label.id = `grab-popover-label-${(popoverSeq += 1)}`;
 	element.setAttribute("aria-labelledby", label.id);
 
-	const input = doc.createElement("input");
-	input.type = "text";
+	// <input>이 아니라 <textarea>인 이유: 에이전트 프롬프트는 여러 줄이 자연스럽다.
+	// Shift+Enter로 개행하고 Enter로 제출한다. 높이는 CSS field-sizing이 내용에
+	// 맞춰 늘리므로(최대 높이 후 스크롤) 여기에 JS 측정 로직을 두지 않는다.
+	const input = doc.createElement("textarea");
+	input.rows = 1;
 	input.className = "grab-input";
 	// Enter 고지는 제출 버튼의 title/aria가 맡는다 — placeholder와 이중으로
 	// 말하지 않는다(그게 힌트 줄이 어색했던 기계적 원인이다).
 	input.placeholder = "Prompt…";
 	input.setAttribute("aria-label", "Grab prompt");
-	input.setAttribute("aria-keyshortcuts", "Escape");
+	input.setAttribute("aria-keyshortcuts", "Shift+Enter Escape");
 
 	const submitBtn = doc.createElement("button");
 	submitBtn.type = "button";
@@ -170,6 +173,9 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") {
 			if (event.isComposing || event.keyCode === 229) return;
+			// Shift+Enter는 개행 — preventDefault를 부르지 않고 그냥 빠져나가
+			// textarea의 기본 동작에 맡긴다. 새 키 분기를 만들지 않는다.
+			if (event.shiftKey) return;
 			submit();
 		} else if (event.key === "Escape") {
 			if (event.isComposing || event.keyCode === 229) return;

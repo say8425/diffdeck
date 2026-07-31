@@ -275,7 +275,7 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		await dragSelect(page, from, to);
 		await expect(page.locator("#grab-popover")).toBeVisible();
 
-		await page.locator("#grab-popover input").press("Enter");
+		await page.locator("#grab-popover textarea").press("Enter");
 		await expect
 			.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 			.toContain("diffdeck selection");
@@ -352,7 +352,7 @@ test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 �
 	expect(probe.text.length).toBeLessThan(probe.rowText.length);
 
 	// 클립보드가 하이라이트와 정확히 같은 프래그먼트를 담는다
-	await page.locator("#grab-popover input").press("Enter");
+	await page.locator("#grab-popover textarea").press("Enter");
 	await expect
 		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 		.toContain("diffdeck selection");
@@ -366,6 +366,51 @@ test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 �
 	const body = lines.slice(open + 1, close);
 	const blank = body.findIndex((l) => l === "");
 	expect(body.slice(blank + 1)).toEqual([probe.text]);
+});
+
+test("⑨ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("rows not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	// Shift+Enter는 제출하지 않고 개행만 넣는다 — 두 번째 줄까지 친 뒤에야
+	// 맨 Enter로 제출된다.
+	const box = popover.locator("textarea");
+	await box.type("첫 줄");
+	await box.press("Shift+Enter");
+	await box.type("둘째 줄");
+	await expect(popover).toBeVisible(); // Shift+Enter가 제출·닫힘을 유발하지 않았다
+	expect(await box.inputValue()).toBe("첫 줄\n둘째 줄");
+
+	await box.press("Enter");
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	// 프롬프트는 펜스 뒤에 그대로 붙는다 — 개행이 살아 있어야 한다.
+	expect(out).toContain("첫 줄\n둘째 줄");
+	expect(out.trim().endsWith("둘째 줄")).toBe(true);
 });
 
 test("⑦ 제출 버튼 클릭만으로 복사가 완주한다", async ({
@@ -395,7 +440,7 @@ test("⑦ 제출 버튼 클릭만으로 복사가 완주한다", async ({
 	await expect(popover).toBeVisible();
 
 	// Enter를 쓰지 않는다 — 버튼만으로 완주해야 한다
-	await popover.locator("input").fill("버튼으로 복사");
+	await popover.locator("textarea").fill("버튼으로 복사");
 	await popover.locator("button.grab-submit").click();
 	await expect
 		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
@@ -425,7 +470,7 @@ test('⑧ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)
 	await container.locator("[data-utility-button]").click();
 	await expect(page.locator("#grab-popover")).toBeVisible();
 
-	await page.locator("#grab-popover input").press("Enter");
+	await page.locator("#grab-popover textarea").press("Enter");
 	await expect
 		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 		.toContain("diffdeck selection");

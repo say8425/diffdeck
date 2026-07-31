@@ -487,7 +487,7 @@
 				align-items: center;
 				gap: 6px;
 			}
-			#grab-popover input {
+			#grab-popover textarea {
 				flex: 1;
 				min-width: 0;
 				background: #1a1a1f;
@@ -495,10 +495,20 @@
 				border-radius: var(--vd-radius);
 				color: #e6e6ea;
 				padding: 5px 8px;
+				font: inherit;
 				font-size: 12px;
+				line-height: 1.4;
 				outline: none;
+				/* 내용에 맞춰 자라고 5줄쯤에서 멈춘 뒤 스크롤한다. JS 측정 대신
+				   CSS에 맡겨 커버리지 게이트 안 모듈에 분기를 만들지 않는다.
+				   미지원 브라우저에선 rows=1 고정 + 스크롤로 강등된다(여러 줄
+				   입력 자체는 그대로 된다). */
+				field-sizing: content;
+				max-height: 96px;
+				resize: none;
+				overflow-y: auto;
 			}
-			#grab-popover input:focus {
+			#grab-popover textarea:focus {
 				border-color: #5b8def;
 			}
 			#grab-popover .grab-submit {
