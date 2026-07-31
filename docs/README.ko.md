@@ -47,7 +47,7 @@ diff에서 코드를 드래그해 놓으면 그 자리에 프롬프트 창이 �
 ```
 diffdeck selection
 File: apps/viewer/browser/main.ts
-Lines: 84-98 (new side, working diff)
+Lines: 84-85 (new side, working diff)
 
 if (a) return;
 const b = 1;

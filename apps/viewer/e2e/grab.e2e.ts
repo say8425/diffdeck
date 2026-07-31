@@ -503,3 +503,52 @@ test("⑪ find 매치 하이라이트는 텍스트 경로 팝오버를 Esc로 �
 
 	expect(await page.locator("[data-selected-line]").count()).toBe(before);
 });
+
+// 버튼 클릭 경로는 유닛이 "이벤트를 취소했는가"까지만 볼 수 있다 — 포커스가
+// 실제로 남는지는 실브라우저에서만 관측된다. 이게 무너지면(예: dismiss 리스너를
+// capture 단계로 옮기거나 SVG에 pointer-events가 걸리면) 클릭이 복사 대신
+// 팝오버를 닫아버리는데, 유닛은 전부 통과한 채로 지나간다.
+test("⑫ 보내기 버튼 클릭도 Enter와 같이 복사하고, 입력 포커스를 잃지 않는다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+
+	const cells = container.locator("[data-column-number]");
+	const a = await cells.first().boundingBox();
+	if (!a) throw new Error("gutter cell not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+	);
+	await container.locator("[data-utility-button]").click();
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	const input = page.locator("#grab-popover textarea");
+	await input.fill("버튼으로 복사");
+	await page.locator("#grab-popover .grab-send").click();
+
+	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
+	const out = await readClipboard(page);
+	expect(out).toContain("File: src/hello.ts");
+	expect(out.trim().endsWith("버튼으로 복사")).toBe(true);
+
+	// mousedown preventDefault의 진짜 계약 — 클릭해도 포커스가 input에 남는다.
+	// 빠지면 IME 조합이 강제 확정돼 조합 중이던 글자가 누락된다.
+	await expect(input).toBeFocused();
+	// 팝오버는 살아 있다(바깥 클릭으로 오인되지 않았다) + 버튼은 성공 상태.
+	await expect(popover).toBeVisible();
+	await expect(page.locator("#grab-popover .grab-send")).toHaveAttribute(
+		"data-state",
+		"ok",
+	);
+});

@@ -47,7 +47,7 @@ What lands on your clipboard:
 ```
 diffdeck selection
 File: apps/viewer/browser/main.ts
-Lines: 84-98 (new side, working diff)
+Lines: 84-85 (new side, working diff)
 
 if (a) return;
 const b = 1;

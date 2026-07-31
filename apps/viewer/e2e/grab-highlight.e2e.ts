@@ -79,10 +79,6 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 		"background-color",
 		"rgba(0, 0, 0, 0)",
 	);
-	// happy-dom의 .click()은 레이아웃·크기·페인트와 무관하게 노드에 디스패치되므로
-	// 유닛으로는 버튼이 실제로 0-height·언페인트여도 통과한다 — toBeVisible()은
-	// non-empty bounding box를 요구해 그 회귀를 잡는다.
-
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
 
@@ -482,7 +478,16 @@ test("⑨ 복사해도 창 높이가 변하지 않는다 — 상태는 버튼 �
 	const popover = page.locator("#grab-popover");
 	await expect(popover).toBeVisible();
 
-	const before = (await popover.boundingBox())?.height ?? 0;
+	// ?? 0으로 뭉개지 않는다 — 복사 성공은 1.2초 뒤 자동 닫힘을 예약하므로,
+	// 느린 러너에서 그 사이에 닫히면 boundingBox()가 null이 된다. 0으로
+	// 떨어뜨리면 "높이가 69 → 0으로 변했다"는 엉뚱한 실패 메시지가 나와
+	// 다음 사람이 레이아웃 유령을 쫓게 된다. 닫혔으면 닫혔다고 말한다.
+	const heightOf = async (): Promise<number> => {
+		const box = await popover.boundingBox();
+		if (!box) throw new Error("팝오버가 사라졌다 — 자동 닫힘이 먼저 발화했다");
+		return box.height;
+	};
+	const before = await heightOf();
 	expect(before).toBeGreaterThan(0);
 
 	await page.locator("#grab-popover textarea").press("Enter");
@@ -492,6 +497,5 @@ test("⑨ 복사해도 창 높이가 변하지 않는다 — 상태는 버튼 �
 		"data-state",
 		"ok",
 	);
-	const after = (await popover.boundingBox())?.height ?? 0;
-	expect(after).toBe(before);
+	expect(await heightOf()).toBe(before);
 });

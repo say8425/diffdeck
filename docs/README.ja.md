@@ -47,7 +47,7 @@ diff 内でコードをドラッグして離すと、その位置にプロンプ
 ```
 diffdeck selection
 File: apps/viewer/browser/main.ts
-Lines: 84-98 (new side, working diff)
+Lines: 84-85 (new side, working diff)
 
 if (a) return;
 const b = 1;
