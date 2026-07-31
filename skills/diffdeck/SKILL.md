@@ -70,15 +70,24 @@ const b = 1;
 why was this needed?
 ````
 
-Read it as an **unambiguous pointer**, not as loose context: `File:` is the
-repo-relative path (with `(renamed from …)` when applicable), `Lines:` is the
-exact range plus which side of the diff it came from (`new side` = the version
-after the change, `old side` = before; a selection spanning both reads
-`old A / new B`) and which diff was on screen (`working diff`, or
-`base diff vs <branch>`; a non-modified file adds its status, e.g. `, added`).
-The fenced body is the code itself — for a cross-side selection its lines carry
-`+`/`-` markers. Answer about **that** range in **that** file; you do not need to
-re-locate it by searching.
+Read it as an **exact pointer**, not as loose context.
+
+- `File:` — repo-relative path, with `(renamed from …)` when the file was renamed.
+- `Lines:` — the exact range, which side it came from, and which diff was on
+  screen. `new side` = the version **after** the change, `old side` = **before**;
+  a selection spanning both reads `old A / new B`. The mode is `working diff` or
+  `base diff vs <branch>`, and an added, deleted, or untracked file appends its
+  status (e.g. `, added`).
+- The fenced body is the code. In a cross-side block **every** line is prefixed
+  with `-`, `+`, or a space (unchanged context) — strip that first character to
+  get the file text.
+
+Answer about **that** range in **that** file: for a `new side` range you can go
+straight to those line numbers instead of searching for the code. Two things not
+to assume, though — **`old side` numbers index the pre-change file**, so they
+need not match the working tree (and with `, deleted` the path may be gone); and
+the prompt is **optional**, so a block with nothing after the fence means the
+human hasn't said what they want yet. Ask rather than inventing a task.
 
 ## Options
 
