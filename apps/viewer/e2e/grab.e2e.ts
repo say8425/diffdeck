@@ -46,7 +46,7 @@ test("① 거터 드래그 → + 클릭 → 프롬프트 → Enter → 인코딩
 	const popover = page.locator("#grab-popover");
 	await expect(popover).toBeVisible();
 	await expect(popover).toBeInViewport();
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(input).toBeFocused();
 	await input.fill("여기 정리해줘");
 	await input.press("Enter");
@@ -88,7 +88,7 @@ test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨
 	// 동일한 즉시성).
 	await dragSelect(page, from, to);
 	const popover = page.locator("#grab-popover");
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(popover).toBeVisible();
 	// 네이티브 선택은 popover.open()의 input.focus()가 문서 선택을 팝오버
 	// input으로 옮기는 순간 죽는다(실측 — getComposedRanges가 #grab-popover의
@@ -140,7 +140,7 @@ test("③ split old side 텍스트 드래그 → 인코딩에 (old side, 포함"
 		);
 
 		await expect(page.locator("#grab-popover")).toBeVisible();
-		const input = page.locator("#grab-popover input");
+		const input = page.locator("#grab-popover textarea");
 		await expect(input).toBeFocused();
 		await input.press("Enter");
 		await expect
@@ -179,7 +179,7 @@ test("④ unified 크로스 사이드(삭제→추가) 텍스트 드래그 → o
 	);
 
 	await expect(page.locator("#grab-popover")).toBeVisible();
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(input).toBeFocused();
 	await input.press("Enter");
 	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
@@ -221,7 +221,7 @@ test("⑤ 대량 스크롤(recycle) 이후에도 팝오버 생존 → Enter로 �
 		);
 		await container.locator("[data-utility-button]").click();
 		const popover = page.locator("#grab-popover");
-		const input = page.locator("#grab-popover input");
+		const input = page.locator("#grab-popover textarea");
 		await expect(input).toBeFocused();
 
 		// #diff를 실제 마우스 휠로 끝까지 밀어 CodeView 가상화가 bulk-0.ts를
@@ -319,7 +319,7 @@ test("⑦ watch 폴이 열려 있던 grab 팝오버를 닫는다", async ({
 			{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
 		);
 		await container.locator("[data-utility-button]").click();
-		await expect(page.locator("#grab-popover input")).toBeFocused();
+		await expect(page.locator("#grab-popover textarea")).toBeFocused();
 
 		// renderPatch(watch 폴이 실 변경을 감지했을 때만 호출됨 — 무변경
 		// 폴은 304로 조기 반환돼 렌더를 건드리지 않는다)는 무조건 팝오버를

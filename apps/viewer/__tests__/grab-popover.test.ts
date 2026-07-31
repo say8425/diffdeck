@@ -21,7 +21,8 @@ const openDefault = () =>
 		buildOutput: (prompt) => `OUT[${prompt}]`,
 		placement: { left: 10, top: 20 },
 	});
-const input = () => popover.element.querySelector("input") as HTMLInputElement;
+const input = () =>
+	popover.element.querySelector("textarea") as HTMLTextAreaElement;
 const pressEnter = (init: KeyboardEventInit = {}) =>
 	input().dispatchEvent(
 		new KeyboardEvent("keydown", { key: "Enter", cancelable: true, ...init }),
@@ -94,6 +95,39 @@ describe("createGrabPopover", () => {
 		expect(popover.element.getAttribute("role")).toBe("dialog");
 		expect(input().getAttribute("aria-label")).toBe("Grab prompt");
 	});
+	// 여러 줄 프롬프트: Shift+Enter는 개행이라 제출되면 안 된다. preventDefault를
+	// 부르지 않고 빠져나가 textarea 기본 동작에 맡기므로, 여기선 "제출이 일어나지
+	// 않았다"와 "이벤트를 취소하지 않았다"를 함께 본다(취소하면 개행이 죽는다).
+	test("Shift+Enter는 제출하지 않고 기본 개행을 막지도 않는다", async () => {
+		openDefault();
+		input().value = "첫 줄";
+		const notCancelled = pressEnter({ shiftKey: true });
+		await flush();
+		expect(writes).toEqual([]);
+		expect(copied).toBe(0);
+		expect(popover.isOpen()).toBe(true);
+		expect(notCancelled).toBe(true);
+	});
+
+	test("Shift 없는 Enter는 여전히 제출한다", async () => {
+		openDefault();
+		input().value = "제출";
+		pressEnter();
+		await flush();
+		expect(writes).toEqual(["OUT[제출]"]);
+	});
+
+	// IME 조합 가드가 Shift 여부보다 먼저다 — 한국어 조합 확정 Enter가
+	// Shift와 함께 눌려도 제출도 개행 처리도 우리 코드가 관여하지 않는다.
+	test("IME 조합 중에는 Shift+Enter도 제출하지 않는다", async () => {
+		openDefault();
+		input().value = "조합중";
+		pressEnter({ shiftKey: true, isComposing: true });
+		await flush();
+		expect(writes).toEqual([]);
+		expect(popover.isOpen()).toBe(true);
+	});
+
 	test("Enter → buildOutput(프롬프트) 복사 + Copied 상태 + onCopied + 자동 닫힘", async () => {
 		jest.useFakeTimers();
 		openDefault();
@@ -250,7 +284,9 @@ describe("옵션 B — 제출 버튼 + 상태 전용 슬롯", () => {
 			buildOutput: (p) => `out:${p}`,
 			placement: { left: 0, top: 0 },
 		});
-		const inputEl = pop.element.querySelector("input") as HTMLInputElement;
+		const inputEl = pop.element.querySelector(
+			"textarea",
+		) as HTMLTextAreaElement;
 		inputEl.value = "hi";
 		const btn = pop.element.querySelector(
 			"button.grab-submit",
