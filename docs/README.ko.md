@@ -33,6 +33,28 @@ diff 렌더링 엔진이 제공하는 기능:
 
 ![diffdeck 뷰어 — git 상태 배지가 있는 파일 트리, 인라인 이미지 diff, 구문 강조된 diff](screenshot.png)
 
+### Grab — diff 선택을 코딩 에이전트에게 넘기기
+
+diff에서 코드를 드래그해 놓으면 그 자리에 프롬프트 창이 뜹니다. <kbd>Enter</kbd>를 누르면 파일 참조·잡은 줄·프롬프트가 **한 덩어리**로 클립보드에 복사되어 Claude Code나 Codex에 바로 붙여넣을 수 있습니다.
+
+![Grab — diff에서 하이라이트된 줄과 그 옆에 열린 프롬프트 창](grab.png)
+
+진입 경로는 둘입니다 — **코드 텍스트 드래그**, 또는 거터의 라인 선택 + `+` 버튼. 텍스트 드래그는 하이라이트한 문자만 정확히 복사하고, 거터 경로는 줄 전체를 가져옵니다. 어느 쪽이든 하이라이트가 복사될 범위를 그대로 보여줍니다.
+
+클립보드에 담기는 내용:
+
+````text
+```
+diffdeck selection
+File: apps/viewer/browser/main.ts
+Lines: 84-85 (new side, working diff)
+
+if (a) return;
+const b = 1;
+```
+why was this needed?
+````
+
 ## 설치
 
 설치 없이 바로 실행할 수 있습니다:

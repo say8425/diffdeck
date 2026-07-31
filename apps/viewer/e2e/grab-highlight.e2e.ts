@@ -70,6 +70,15 @@ test("② 텍스트 드래그 → 잡은 행이 하이라이트되고, Esc로 �
 	);
 	await expect(page.locator("#grab-popover")).toBeVisible();
 
+	// 보내기 버튼이 실제로 페인트되는지 — 유닛의 .click()은 레이아웃·크기와
+	// 무관하게 노드에 디스패치되므로 0-height·언페인트여도 통과한다.
+	// toBeVisible()은 non-empty bounding box를 요구해 그 회귀를 잡는다.
+	await expect(page.locator("#grab-popover .grab-send")).toBeVisible();
+	// 배경색 없음이 이 디자인의 계약이다 — 상태는 색으로만 말한다.
+	await expect(page.locator("#grab-popover .grab-send")).toHaveCSS(
+		"background-color",
+		"rgba(0, 0, 0, 0)",
+	);
 	// README.md의 첫 3행(context 1·2 + context 3)을 가로질렀다 → new side 1..3.
 	await expect.poll(() => highlightRangeCount(page)).toBe(3);
 
@@ -176,11 +185,11 @@ test("④ 멀리 스크롤했다 되돌아오면 하이라이트가 다시 칠�
 		const a = await rows.first().boundingBox();
 		const b = await rows.nth(2).boundingBox();
 		if (!a || !b) throw new Error("text rows not visible");
-		await dragSelect(
-			page,
-			{ x: a.x + 40, y: a.y + a.height / 2 },
-			{ x: b.x + 60, y: b.y + b.height / 2 },
-		);
+		const from = { x: a.x + 40, y: a.y + a.height / 2 };
+		// 끝점을 텍스트 끝을 지나는 x로 → 브라우저가 줄 끝으로 클램프해 문자
+		// 오프셋이 행 길이가 된다(폰트 메트릭 무관).
+		const to = { x: b.x + b.width - 5, y: b.y + b.height / 2 };
+		await dragSelect(page, from, to);
 		await expect(page.locator("#grab-popover")).toBeVisible();
 
 		const before = await highlightLiveness(page);
@@ -261,14 +270,14 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		const first = await del.first().boundingBox();
 		const last = await del.last().boundingBox();
 		if (!first || !last) throw new Error("deletion rows not visible");
-		await dragSelect(
-			page,
-			{ x: first.x + 40, y: first.y + first.height / 2 },
-			{ x: last.x + 60, y: last.y + last.height / 2 },
-		);
+		const from = { x: first.x + 40, y: first.y + first.height / 2 };
+		// 끝점을 텍스트 끝을 지나는 x로 → 브라우저가 줄 끝으로 클램프해 문자
+		// 오프셋이 행 길이가 된다(폰트 메트릭 무관).
+		const to = { x: last.x + last.width - 5, y: last.y + last.height / 2 };
+		await dragSelect(page, from, to);
 		await expect(page.locator("#grab-popover")).toBeVisible();
 
-		await page.locator("#grab-popover input").press("Enter");
+		await page.locator("#grab-popover textarea").press("Enter");
 		await expect
 			.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 			.toContain("diffdeck selection");
@@ -282,11 +291,211 @@ test("⑤ unified old-side가 context를 가로지르면 하이라이트 행 수
 		const body = fenced.slice(open + 1, close);
 		const blank = body.findIndex((l) => l === "");
 		const codeLines = body.slice(blank + 1);
-		expect(codeLines).toEqual(["drop-1", "keep-b", "keep-c", "drop-2"]);
 
-		// 순진한 side 비교 구현이면 2가 나온다(context 2행이 빠진다).
+		// 끝점을 텍스트 끝 너머로 잡았으므로 마지막 줄은 온전하고, 가운데 줄들도
+		// 온전하다. 첫 줄만 x+40 지점부터 잘리므로 "원본의 접미사"로만 확인한다
+		// — 몇 번째 문자인지는 폰트에 따라 달라져 리터럴로 박으면 깨진다.
+		expect(codeLines).toHaveLength(4);
+		expect("drop-1".endsWith(codeLines[0])).toBe(true);
+		expect(codeLines.slice(1)).toEqual(["keep-b", "keep-c", "drop-2"]);
+
+		// 핵심 단언(개수 동등성)은 문자 단위에서도 그대로 성립한다 —
+		// 이것이 data-alt-line 폴백을 검증하는 부분이다.
 		expect(await highlightRangeCount(page)).toBe(codeLines.length);
 	} finally {
 		await viewer.stop();
 	}
+});
+
+test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 같은 프래그먼트", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	// 내용이 충분히 긴 행 하나를 고른다
+	const row = container.locator("[data-line]").first();
+	const box = await row.boundingBox();
+	if (!box) throw new Error("row not visible");
+
+	// 한 행 안에서만 드래그: x+40 → x+140 (둘 다 텍스트 위)
+	await dragSelect(
+		page,
+		{ x: box.x + 40, y: box.y + box.height / 2 },
+		{ x: box.x + 140, y: box.y + box.height / 2 },
+	);
+	await expect(page.locator("#grab-popover")).toBeVisible();
+
+	// 부분 선택이므로 Range는 1개이고, 그 텍스트가 행 전체보다 짧아야 한다
+	const probe = await page.evaluate(() => {
+		const hl = (
+			CSS as unknown as { highlights: Map<string, Set<Range>> }
+		).highlights.get("diffdeck-grab");
+		const ranges = hl ? [...hl] : [];
+		return {
+			count: ranges.length,
+			text: ranges[0]?.toString() ?? "",
+			rowText:
+				ranges[0]?.startContainer.parentElement?.closest("[data-line]")
+					?.textContent ?? "",
+		};
+	});
+	expect(probe.count).toBe(1);
+	expect(probe.text.length).toBeGreaterThan(0);
+	// 핵심: 줄 전체가 아니다
+	expect(probe.text.length).toBeLessThan(probe.rowText.length);
+
+	// 클립보드가 하이라이트와 정확히 같은 프래그먼트를 담는다
+	await page.locator("#grab-popover textarea").press("Enter");
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	// toContain으로는 판별이 안 된다 — applyChars가 꺼져 줄 전체가 복사돼도
+	// 줄 전체는 프래그먼트를 포함하므로 통과한다(실측으로 확인한 vacuous 케이스).
+	// 펜스 본문의 코드 줄이 하이라이트 텍스트와 **정확히 같아야** 한다.
+	const lines = out.split("\n");
+	const open = lines.findIndex((l) => /^`{3,}$/.test(l));
+	const close = lines.findIndex((l, i) => i > open && /^`{3,}$/.test(l));
+	const body = lines.slice(open + 1, close);
+	const blank = body.findIndex((l) => l === "");
+	expect(body.slice(blank + 1)).toEqual([probe.text]);
+});
+
+test("⑧ Shift+Enter로 여러 줄을 입력해도 개행 그대로 복사된다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("rows not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	// Shift+Enter는 제출하지 않고 개행만 넣는다 — 두 번째 줄까지 친 뒤에야
+	// 맨 Enter로 제출된다.
+	const box = popover.locator("textarea");
+	await box.type("첫 줄");
+	await box.press("Shift+Enter");
+	await box.type("둘째 줄");
+	await expect(popover).toBeVisible(); // Shift+Enter가 제출·닫힘을 유발하지 않았다
+	expect(await box.inputValue()).toBe("첫 줄\n둘째 줄");
+
+	await box.press("Enter");
+	// 맨 Enter는 제출이므로 기본 동작(개행 삽입)이 막혀야 한다 — textarea로
+	// 바꾸면서 생긴 요구사항이고, happy-dom은 기본 동작을 수행하지 않아
+	// 유닛이 원리적으로 못 잡는다(실사용에서 보고된 버그의 회귀망).
+	expect(await box.inputValue()).toBe("첫 줄\n둘째 줄");
+
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	// 프롬프트는 펜스 뒤에 그대로 붙는다 — 개행이 살아 있어야 한다.
+	expect(out).toContain("첫 줄\n둘째 줄");
+	expect(out.trim().endsWith("둘째 줄")).toBe(true);
+});
+
+test('⑦ 거터 "+" 경로는 줄 전체를 잡는다 (문자 단위와 공존)', async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+
+	const cell = container.locator("[data-column-number]").first();
+	const c = await cell.boundingBox();
+	if (!c) throw new Error("gutter cell not visible");
+	const mid = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+	await dragSelect(page, mid, mid);
+	await container.locator("[data-utility-button]").click();
+	await expect(page.locator("#grab-popover")).toBeVisible();
+
+	await page.locator("#grab-popover textarea").press("Enter");
+	await expect
+		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+		.toContain("diffdeck selection");
+	const out = await page.evaluate(() => navigator.clipboard.readText());
+	// 거터 경로는 chars를 세우지 않으므로 줄이 온전하다
+	expect(out).toContain('export const hello = (): string => "hello";');
+});
+
+// 예전엔 힌트가 눈에 보이는 줄이라 복사할 때마다 창이 18px 자라(실측: 66 → 84) 커서 아래
+// 코드가 밀렸다. 이제 버튼이 상태를 지고 힌트는 sr-only라 높이가 고정이다.
+// happy-dom은 레이아웃이 없어 이 회귀를 원리적으로 못 잡는다.
+test("⑨ 복사해도 창 높이가 변하지 않는다 — 상태는 버튼 색으로만", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("text rows not visible");
+
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + 60, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	// ?? 0으로 뭉개지 않는다 — 복사 성공은 1.2초 뒤 자동 닫힘을 예약하므로,
+	// 느린 러너에서 그 사이에 닫히면 boundingBox()가 null이 된다. 0으로
+	// 떨어뜨리면 "높이가 69 → 0으로 변했다"는 엉뚱한 실패 메시지가 나와
+	// 다음 사람이 레이아웃 유령을 쫓게 된다. 닫혔으면 닫혔다고 말한다.
+	const heightOf = async (): Promise<number> => {
+		const box = await popover.boundingBox();
+		if (!box) throw new Error("팝오버가 사라졌다 — 자동 닫힘이 먼저 발화했다");
+		return box.height;
+	};
+	const before = await heightOf();
+	expect(before).toBeGreaterThan(0);
+
+	await page.locator("#grab-popover textarea").press("Enter");
+	// 버튼이 성공 상태로 넘어갔는지 먼저 확인 — 그래야 "아직 아무 일도 안
+	// 일어나서 높이가 같다"는 공허한 통과를 배제한다.
+	await expect(page.locator("#grab-popover .grab-send")).toHaveAttribute(
+		"data-state",
+		"ok",
+	);
+	expect(await heightOf()).toBe(before);
 });

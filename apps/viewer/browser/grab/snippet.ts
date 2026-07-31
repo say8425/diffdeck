@@ -3,7 +3,12 @@
 // buildGrabRows는 search/searchIndex.ts buildRows의 양측-커서 확장판 — hunk 사이
 // gap 커서는 각 hunk의 deletionStart/additionStart로 재설정(per-gap 델타).
 import type { FileDiffMetadata } from "@diffdeck/diffs";
-import type { GrabPoint, GrabSide, NormalizedRange } from "./range.ts";
+import type {
+	CharSpan,
+	GrabPoint,
+	GrabSide,
+	NormalizedRange,
+} from "./range.ts";
 
 export interface SnippetRow {
 	marker: "-" | "+" | " ";
@@ -30,6 +35,19 @@ export type Snippet =
 	  };
 
 const stripEol = (line: string): string => line.replace(/\r?\n$/, "");
+
+/**
+ * 문자 범위를 줄 배열에 적용한다. 첫 줄은 앞을, 끝 줄은 뒤를 자른다.
+ * 한 줄이면 양쪽 모두. chars가 없으면 그대로 — 줄 전체 동작이 기본이다.
+ */
+const applyChars = (lines: readonly string[], chars?: CharSpan): string[] => {
+	if (!chars || lines.length === 0) return [...lines];
+	if (lines.length === 1) return [lines[0].slice(chars.start, chars.end)];
+	const out = [...lines];
+	out[0] = out[0].slice(chars.start);
+	out[out.length - 1] = out[out.length - 1].slice(0, chars.end);
+	return out;
+};
 
 export const buildGrabRows = (fileDiff: FileDiffMetadata): SnippetRow[] => {
 	const { additionLines, deletionLines, hunks } = fileDiff;
@@ -121,7 +139,10 @@ export const extractSnippet = (
 			side: range.side,
 			startLine,
 			endLine,
-			lines: arr.slice(startLine - 1, endLine).map(stripEol),
+			lines: applyChars(
+				arr.slice(startLine - 1, endLine).map(stripEol),
+				range.chars,
+			),
 		};
 	}
 	const all = buildGrabRows(fileDiff);
@@ -143,5 +164,16 @@ export const extractSnippet = (
 			newEnd = Math.max(newEnd, r.newNo);
 		}
 	}
-	return { kind: "mixed", oldStart, oldEnd, newStart, newEnd, rows };
+	// 라인 번호는 원본 rows로 계산했다(자르기와 무관) — 반환의 rows만 잘린 텍스트로 바꾼다.
+	const sliced = applyChars(
+		rows.map((r) => r.text),
+		range.chars,
+	);
+	const outRows: SnippetRow[] = rows.map((r, k) => ({
+		marker: r.marker,
+		text: sliced[k],
+		oldNo: r.oldNo,
+		newNo: r.newNo,
+	}));
+	return { kind: "mixed", oldStart, oldEnd, newStart, newEnd, rows: outRows };
 };

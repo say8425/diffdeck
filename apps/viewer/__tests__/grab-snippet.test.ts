@@ -162,3 +162,85 @@ describe("extractSnippet — mixed", () => {
 		expect(snip).toBeNull();
 	});
 });
+
+describe("extractSnippet — chars (문자 단위)", () => {
+	const CHARS_OLD = ["alpha", "bravo", "charlie"].join("\n");
+	const CHARS_NEW = ["alpha", "bravo-x", "charlie"].join("\n");
+
+	test("한 줄 부분 선택", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+			chars: { start: 1, end: 5 },
+		});
+		expect(s?.kind).toBe("side");
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["ravo"]);
+	});
+
+	test("여러 줄이면 첫 줄 앞·끝 줄 뒤만 잘린다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 1,
+			endLine: 3,
+			chars: { start: 2, end: 4 },
+		});
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["pha", "bravo-x", "char"]);
+	});
+
+	test("경계값: start 0 / end 길이는 줄 전체와 같다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const whole = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+		});
+		const spanned = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+			chars: { start: 0, end: 7 },
+		});
+		if (whole?.kind !== "side" || spanned?.kind !== "side")
+			throw new Error("expected side");
+		expect(spanned.lines).toEqual(whole.lines);
+	});
+
+	test("chars가 없으면 현행 줄 전체 동작", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "side",
+			side: "new",
+			startLine: 2,
+			endLine: 2,
+		});
+		if (s?.kind !== "side") throw new Error("expected side");
+		expect(s.lines).toEqual(["bravo-x"]);
+	});
+
+	test("mixed도 첫/끝 행이 잘린다", () => {
+		const d = fd(CHARS_OLD, CHARS_NEW);
+		const s = extractSnippet(d, {
+			kind: "mixed",
+			start: { side: "old", line: 2 },
+			end: { side: "new", line: 2 },
+			chars: { start: 1, end: 4 },
+		});
+		if (s?.kind !== "mixed") throw new Error("expected mixed");
+		expect(s.rows[0].text).toBe("ravo");
+		// "bravo-x".slice(0, 4) === "brav" — 이 값은 픽스처의 어느 행 전체 텍스트와도
+		// 같지 않다(첫 행 "bravo"도, 끝 행 "bravo-x"도 아니다). 그래서 이 단언은
+		// "끝 행(addition)이 잘렸다"만이 아니라 "끝 행이 맞게 골라졌다"까지 함께
+		// 검증한다 — end를 5로 두면 "bravo"가 나오는데, 이는 첫 행 텍스트와 같아서
+		// mixed 분기가 실수로 끝 대신 첫 행을 반환해도 단언이 통과해버린다.
+		expect(s.rows[s.rows.length - 1].text).toBe("brav");
+	});
+});

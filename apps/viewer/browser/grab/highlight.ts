@@ -6,7 +6,12 @@
 // (isPooledShadowChild는 data-unsafe-css 등을 단 style 노드만 보존).
 // 파사드가 덕타입인 이유: happy-dom엔 CSS.highlights도 Highlight도 없어,
 // 100% 커버리지 게이트 안에서 전 분기를 덮으려면 실 DOM 타입에 묶이면 안 된다.
-import type { GrabPoint, GrabSide, NormalizedRange } from "./range.ts";
+import type {
+	CharSpan,
+	GrabPoint,
+	GrabSide,
+	NormalizedRange,
+} from "./range.ts";
 
 export const GRAB_HIGHLIGHT_NAME = "diffdeck-grab";
 
@@ -51,6 +56,44 @@ const indexOfPoint = (
 ): number =>
 	rows.findIndex((row) => lineFor(row, point.side, diffStyle) === point.line);
 
+/** 칠할 대상 한 줄. start/end가 없으면 그 행 전체다. */
+export interface PaintTarget {
+	el: Element;
+	start?: number;
+	end?: number;
+}
+
+/**
+ * 첫 hit에 start, 끝 hit에 end를 붙인다 — 단 그 hit이 실제로 선택의 경계
+ * 행일 때만(startExact/endExact). `hits`는 그 순간 렌더된 행만 담으므로,
+ * 선택 경계 행이 렌더 윈도우 밖이면 보이는 첫/끝 행은 선택의 중간일 뿐이다.
+ * 그런 행에 chars를 붙이면 선택하지 않은 지점이 잘려나가 보인다 — 이 작업의
+ * 출발점이 된 버그가 형태만 바꿔 재현되므로, 경계가 안 보이면 그 행 전체를
+ * 오프셋 없이 둔다(호출부가 이미 있는 lineFor/indexOfPoint 결과로 판정한다).
+ */
+const withChars = (
+	els: readonly Element[],
+	chars: CharSpan | undefined,
+	startExact: boolean,
+	endExact: boolean,
+): PaintTarget[] => {
+	if (!chars || els.length === 0) return els.map((el) => ({ el }));
+	if (els.length === 1) {
+		return [
+			{
+				el: els[0],
+				...(startExact ? { start: chars.start } : {}),
+				...(endExact ? { end: chars.end } : {}),
+			},
+		];
+	}
+	return els.map((el, k) => {
+		if (k === 0 && startExact) return { el, start: chars.start };
+		if (k === els.length - 1 && endExact) return { el, end: chars.end };
+		return { el };
+	});
+};
+
 /**
  * 문서순 행 목록에서 범위에 드는 행만 고른다.
  *
@@ -73,15 +116,27 @@ export const rowsInRange = (
 	rows: readonly GrabRow[],
 	range: NormalizedRange,
 	diffStyle: DiffStyle,
-): Element[] => {
+): PaintTarget[] => {
 	if (range.kind === "side") {
-		const hits: Element[] = [];
+		const hits: GrabRow[] = [];
 		for (const row of rows) {
 			const n = lineFor(row, range.side, diffStyle);
 			if (n !== null && n >= range.startLine && n <= range.endLine)
-				hits.push(row.el);
+				hits.push(row);
 		}
-		return hits;
+		if (hits.length === 0) return [];
+		// 보이는 첫/끝 hit이 실제로 선택의 startLine/endLine과 일치할 때만
+		// 경계로 인정한다 — 렌더 윈도우가 좁아 경계 행이 안 보이면 다르다.
+		const startExact =
+			lineFor(hits[0], range.side, diffStyle) === range.startLine;
+		const endExact =
+			lineFor(hits[hits.length - 1], range.side, diffStyle) === range.endLine;
+		return withChars(
+			hits.map((row) => row.el),
+			range.chars,
+			startExact,
+			endExact,
+		);
 	}
 	if (diffStyle === "split") return [];
 	const i = indexOfPoint(rows, range.start, diffStyle);
@@ -89,9 +144,12 @@ export const rowsInRange = (
 	if (i < 0 && j < 0) return [];
 	const from = i < 0 ? 0 : i;
 	const to = j < 0 ? rows.length - 1 : j;
-	return rows
+	const hits = rows
 		.slice(Math.min(from, to), Math.max(from, to) + 1)
 		.map((row) => row.el);
+	// i/j 음수는 "그 끝점이 렌더 윈도우에 없다"는 뜻 — 딱 우리가 원하는 경계
+	// 판정 조건이다(from/to로 클램프된 값이 아니라 원래 인덱스로 판정한다).
+	return withChars(hits, range.chars, i >= 0, j >= 0);
 };
 
 export interface HighlightRegistryLike {
@@ -101,6 +159,8 @@ export interface HighlightRegistryLike {
 
 export interface RangeLike {
 	selectNodeContents(node: Node): void;
+	setStart(node: Node, offset: number): void;
+	setEnd(node: Node, offset: number): void;
 }
 
 export interface GrabHighlighterDeps {
@@ -111,9 +171,34 @@ export interface GrabHighlighterDeps {
 }
 
 export interface GrabHighlighter {
-	paint(rows: readonly Element[]): void;
+	paint(targets: readonly PaintTarget[]): void;
 	clear(): void;
 }
+
+/**
+ * 행 텍스트 기준 오프셋을 (텍스트 노드, 노드 내 오프셋)으로 변환한다.
+ * 워커 재하이라이트로 span 구조가 바뀌어도 행의 텍스트 자체는 동일하므로
+ * 재시딩 때 다시 찾을 수 있다.
+ */
+const locateOffset = (
+	rowEl: Element,
+	charOffset: number,
+): { node: Node; offset: number } | null => {
+	const walker = rowEl.ownerDocument.createTreeWalker(
+		rowEl,
+		NodeFilter.SHOW_TEXT,
+	);
+	let acc = 0;
+	let current = walker.nextNode();
+	while (current !== null) {
+		const len = (current as Text).data.length;
+		if (acc + len >= charOffset)
+			return { node: current, offset: charOffset - acc };
+		acc += len;
+		current = walker.nextNode();
+	}
+	return null;
+};
 
 export const createGrabHighlighter = (
 	deps: GrabHighlighterDeps,
@@ -121,16 +206,30 @@ export const createGrabHighlighter = (
 	const clear = (): void => {
 		deps.registry?.delete(GRAB_HIGHLIGHT_NAME);
 	};
-	const paint = (rows: readonly Element[]): void => {
+	const paint = (targets: readonly PaintTarget[]): void => {
 		const { registry } = deps;
 		if (!registry) return;
-		if (rows.length === 0) {
+		if (targets.length === 0) {
 			clear();
 			return;
 		}
-		const ranges = rows.map((el) => {
+		const ranges = targets.map((target) => {
 			const range = deps.createRange();
-			range.selectNodeContents(el);
+			if (target.start === undefined && target.end === undefined) {
+				range.selectNodeContents(target.el);
+				return range;
+			}
+			const total = target.el.textContent?.length ?? 0;
+			const a = locateOffset(target.el, target.start ?? 0);
+			const b = locateOffset(target.el, target.end ?? total);
+			if (a === null || b === null) {
+				// 오프셋이 현재 DOM과 맞지 않으면 그 행 전체를 칠한다 —
+				// 아무것도 안 칠하는 것보다 낫다.
+				range.selectNodeContents(target.el);
+				return range;
+			}
+			range.setStart(a.node, a.offset);
+			range.setEnd(b.node, b.offset);
 			return range;
 		});
 		registry.set(GRAB_HIGHLIGHT_NAME, deps.createHighlight(ranges));

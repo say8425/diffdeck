@@ -12,6 +12,7 @@
 				--vd-fg-muted: #84848a;
 				--vd-border: #070707;
 				--vd-accent: #009fff;
+				--vd-success: #3fb950;
 				--vd-hover: color-mix(in srgb, #009fff 12%, #141415);
 				--vd-radius: 6px;
 			}
@@ -476,26 +477,130 @@
 			}
 			#grab-popover .grab-label {
 				font-size: 11px;
+				/* 라인박스를 정수로 못박는다 — 아래 textarea와 함께, 팝오버
+				   높이가 소수가 되지 않게 하는 두 축 중 하나. */
+				line-height: 15px;
 				color: var(--vd-fg-muted);
 				white-space: nowrap;
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
-			#grab-popover input {
+			/* 라벨은 세 종류의 정보를 담는다 — 파일명 / 잡은 줄 범위 / 어느 side.
+			   색으로 그 구분을 말한다. side 색은 diff의 add·del(#3fb950·#f85149)을
+			   글자용으로 낮춘 톤이라 같은 어휘로 읽힌다. */
+			#grab-popover .grab-l-file {
+				color: #c2c2ca;
+			}
+			#grab-popover .grab-l-range {
+				color: #8fb4f5;
+			}
+			#grab-popover .grab-l-sep {
+				color: #55555c;
+			}
+			#grab-popover .grab-l-side {
+				color: #6fae7c;
+			}
+			#grab-popover .grab-l-side-old {
+				color: #c07f7b;
+			}
+			/* 입력 영역 — 테두리·배경·radius를 textarea에서 이 래퍼로 올렸다.
+			   보내기 버튼이 같은 상자를 공유해야 하기 때문이다. radius는
+			   --vd-radius(6px) — select·세그컨트롤·find바와 같은 표준 컨트롤 값. */
+			#grab-popover .grab-field {
+				display: flex;
+				align-items: flex-end;
+				gap: 6px;
 				background: #1a1a1f;
 				border: 1px solid #3a3a40;
 				border-radius: var(--vd-radius);
-				color: #e6e6ea;
-				padding: 5px 8px;
-				font-size: 12px;
-				outline: none;
+				padding: 4px 4px 4px 8px;
 			}
-			#grab-popover input:focus {
+			#grab-popover .grab-field:focus-within {
 				border-color: #5b8def;
 			}
+			#grab-popover textarea {
+				flex: 1 1 auto;
+				min-width: 0;
+				background: none;
+				border: none;
+				color: #e6e6ea;
+				padding: 2px 0;
+				font: inherit;
+				font-size: 12px;
+				/* 1.4 × 12px = 16.8 — 소수 라인박스라 팝오버 전체 높이가
+				   67.7969px가 되고, 그러면 같은 높이라도 뜨는 y 오프셋에 따라
+				   device 픽셀 135행/136행을 오간다(레티나에서 1px 흔들림으로
+				   보인다). 18px로 못박으면 팝오버가 항상 정수 높이(69px)다. */
+				line-height: 18px;
+				outline: none;
+				/* 내용에 맞춰 자라고 5줄쯤에서 멈춘 뒤 스크롤한다. JS 측정 대신
+				   CSS에 맡겨 커버리지 게이트 안 모듈에 분기를 만들지 않는다.
+				   미지원 브라우저에선 rows=1 고정 + 스크롤로 강등된다(여러 줄
+				   입력 자체는 그대로 된다). */
+				field-sizing: content;
+				/* 정확히 5줄(18 × 5) — 예전 96px은 16.8로 나누면 5.71줄이라
+				   여섯 번째 줄이 반쯤 걸쳐 보였다. */
+				max-height: 90px;
+				resize: none;
+				overflow-y: auto;
+			}
+			/* 배경색 없음이 계약이다 — 상태는 색으로만 말한다. 그래서 어느
+			   상태에서도 버튼 크기가, 따라서 창 크기가 변하지 않는다.
+			   radius 4px는 툴바 세그먼트 버튼과 같은 "컨테이너 안쪽 버튼" 값. */
+			#grab-popover .grab-send {
+				flex: none;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 20px;
+				height: 20px;
+				padding: 0;
+				border: none;
+				border-radius: 4px;
+				background: none;
+				color: #6f6f7a;
+				cursor: pointer;
+				transition: color 0.12s;
+			}
+			#grab-popover .grab-send:hover {
+				color: var(--vd-fg);
+			}
+			#grab-popover .grab-send:focus-visible {
+				outline: 2px solid var(--vd-accent);
+				outline-offset: 1px;
+			}
+			#grab-popover .grab-send[data-state="ready"] {
+				color: var(--vd-accent);
+			}
+			#grab-popover .grab-send[data-state="ok"] {
+				color: var(--vd-success);
+			}
+			#grab-popover .grab-send[data-state="fail"] {
+				color: #f85149;
+			}
+			#grab-popover .grab-send svg {
+				display: none;
+			}
+			#grab-popover .grab-send[data-state="idle"] .i-send,
+			#grab-popover .grab-send[data-state="ready"] .i-send,
+			#grab-popover .grab-send[data-state="ok"] .i-ok,
+			#grab-popover .grab-send[data-state="fail"] .i-fail {
+				display: block;
+			}
+			/* 상태는 버튼이 눈으로 말하므로 이 노드는 스크린리더 전용이다.
+			   예전처럼 보이는 줄로 두면 복사할 때마다 창이 18px 자라(실측: 66 → 84)
+			   커서 아래 코드가 밀렸다. hidden을 토글하지 않는 이유이기도 하다 —
+			   hidden 요소는 라이브 리전으로 알려지지 않는다. */
 			#grab-popover .grab-hint {
-				font-size: 10px;
-				color: var(--vd-fg-muted);
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				padding: 0;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
 			}
 		</style>
 	</head>

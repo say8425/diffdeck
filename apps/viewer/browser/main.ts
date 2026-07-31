@@ -20,7 +20,11 @@ import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
 import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
-import { encodeGrab, type GrabFileStatus, grabLabel } from "./grab/encode.ts";
+import {
+	encodeGrab,
+	type GrabFileStatus,
+	grabLabelParts,
+} from "./grab/encode.ts";
 import {
 	createGrabHighlighter,
 	GRAB_HIGHLIGHT_NAME,
@@ -352,7 +356,18 @@ const syncImageCard = (container: HTMLElement): void => {
 let expandAll = false; // find bar 활성 중 전역 미변경 context 펼침
 const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용량 파일
 
-const POPOVER_SIZE = { width: 340, height: 76 };
+// computePlacement(게이트 안)가 먹는 손관리 상수. 상태 줄이 뜬 최대 높이를
+// 선언한다 — 과대 선언은 안전한 방향(뒤집기가 이르게 발동하고 하단 클램프가
+// 보수적일 뿐)이고, 과소 선언만 뷰포트 밖 잘림을 만든다.
+//
+// width는 **CSS의 340px이 아니라 358px**이다: #grab-popover에 box-sizing이
+// 없어 content-box라 실제 렌더 폭은 340 + 패딩 16 + 테두리 2다. 340으로 두면
+// 우측 클램프(viewport.width - size.width - MARGIN)가 18px 관대해져 화면
+// 오른쪽 끝에서 드래그할 때 팝오버가 그만큼 잘린다(실측 358×69).
+// height는 입력창이 max-height(96px)까지 자라고 상태 줄까지 뜬 최대 상태를
+// 기준으로 잡는다 — 배치는 open() 때 한 번만 계산되므로, 자란 뒤 재배치가
+// 없어서 과소 선언하면 화면 아래쪽에서 카드가 뷰포트를 벗어난다.
+const POPOVER_SIZE = { width: 358, height: 190 };
 const viewport = (): { width: number; height: number } => ({
 	width: window.innerWidth,
 	height: window.innerHeight,
@@ -478,7 +493,8 @@ const buildGrabSnapshot = (
 		snippet,
 	};
 	return {
-		label: grabLabel(fileId, snippet),
+		label: grabLabelParts(fileId, snippet),
+		labelTitle: fileId,
 		buildOutput: (prompt) => encodeGrab({ ...input, prompt }),
 	};
 };

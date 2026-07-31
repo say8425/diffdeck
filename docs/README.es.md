@@ -33,6 +33,28 @@ El chrome interactivo del visor que envuelve este motor — plegado con clic, co
 
 ![El visor de diffdeck — árbol de archivos con insignias de estado de git, diff de imagen en línea y diffs con resaltado de sintaxis](screenshot.png)
 
+### Grab — envía una selección del diff a tu agente de código
+
+Selecciona código en el diff y se abre un cuadro de prompt justo donde soltaste el arrastre. Pulsa <kbd>Enter</kbd> y diffdeck copia **un solo bloque** al portapapeles — la referencia del archivo, las líneas exactas que elegiste y tu prompt — listo para pegar en Claude Code, Codex o cualquier chat.
+
+![Grab — líneas resaltadas en el diff con el cuadro de prompt abierto al lado](grab.png)
+
+Dos formas de entrar: **arrastrar el texto del código**, o usar la selección de líneas del margen y su botón `+`. Un arrastre de texto copia exactamente los caracteres resaltados; la vía del margen toma líneas completas. En ambos casos el resaltado muestra con precisión qué se copiará.
+
+Lo que llega al portapapeles:
+
+````text
+```
+diffdeck selection
+File: apps/viewer/browser/main.ts
+Lines: 84-85 (new side, working diff)
+
+if (a) return;
+const b = 1;
+```
+why was this needed?
+````
+
 ## Instalación
 
 Ejecútalo bajo demanda — sin necesidad de instalación:

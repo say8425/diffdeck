@@ -33,13 +33,52 @@ const modeText = (mode: "working" | "base", baseName: string): string => {
 const statusSuffix = (status: GrabFileStatus): string =>
 	status === "modified" || status === "renamed" ? "" : `, ${status}`;
 
-export const grabLabel = (path: string, snippet: Snippet): string => {
+// 라벨은 팝오버에서 세 톤으로 칠해진다(파일명 밝게 / 라인 범위 파랑 / side
+// 초록·빨강) — 셋이 서로 다른 종류의 정보라는 걸 색이 말한다. 그래서 문자열이
+// 아니라 조각으로 돌려주고, 문자열이 필요한 곳은 grabLabel()이 이어 붙인다.
+// 두 함수가 같은 출처를 쓰므로 색과 텍스트가 갈라질 수 없다.
+export type GrabLabelKind = "file" | "range" | "sep" | "side" | "side-old";
+
+export interface GrabLabelPart {
+	text: string;
+	kind: GrabLabelKind;
+}
+
+export const grabLabelParts = (
+	path: string,
+	snippet: Snippet,
+): GrabLabelPart[] => {
 	const name = path.split("/").pop() ?? path;
 	if (snippet.kind === "side") {
-		return `${name}:${fmtRange(snippet.startLine, snippet.endLine)} · ${sideText(snippet.side)}`;
+		return [
+			{ text: name, kind: "file" },
+			{
+				text: `:${fmtRange(snippet.startLine, snippet.endLine)}`,
+				kind: "range",
+			},
+			{ text: " · ", kind: "sep" },
+			{
+				text: sideText(snippet.side),
+				kind: snippet.side === "new" ? "side" : "side-old",
+			},
+		];
 	}
-	return `${name}: old ${fmtRange(snippet.oldStart, snippet.oldEnd)} / new ${fmtRange(snippet.newStart, snippet.newEnd)}`;
+	return [
+		{ text: name, kind: "file" },
+		{ text: ": ", kind: "sep" },
+		{
+			text: `old ${fmtRange(snippet.oldStart, snippet.oldEnd)}`,
+			kind: "side-old",
+		},
+		{ text: " / ", kind: "sep" },
+		{ text: `new ${fmtRange(snippet.newStart, snippet.newEnd)}`, kind: "side" },
+	];
 };
+
+export const grabLabel = (path: string, snippet: Snippet): string =>
+	grabLabelParts(path, snippet)
+		.map((part) => part.text)
+		.join("");
 
 export const encodeGrab = (input: EncodeInput): string => {
 	const { snippet } = input;

@@ -46,7 +46,7 @@ test("① 거터 드래그 → + 클릭 → 프롬프트 → Enter → 인코딩
 	const popover = page.locator("#grab-popover");
 	await expect(popover).toBeVisible();
 	await expect(popover).toBeInViewport();
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(input).toBeFocused();
 	await input.fill("여기 정리해줘");
 	await input.press("Enter");
@@ -79,13 +79,16 @@ test("② unified 텍스트 드래그 → 팝오버 즉시 오픈 → Escape 숨
 	const b = await rows.nth(2).boundingBox();
 	if (!a || !b) throw new Error("text rows not visible");
 	const from = { x: a.x + 40, y: a.y + a.height / 2 };
-	const to = { x: b.x + 40, y: b.y + b.height / 2 };
+	// 텍스트 드래그는 이제 문자 단위다 — 끝점을 행 텍스트 끝 너머로 잡아
+	// 브라우저가 줄 끝으로 클램프하게 해야 마지막 줄이 온전히 복사된다
+	// (몇 번째 문자에 떨어지는지는 폰트에 따라 달라진다).
+	const to = { x: b.x + b.width - 5, y: b.y + b.height / 2 };
 
 	// 트리거 버튼 없이 드래그 릴리스 직후 팝오버가 곧장 열린다(거터 "+" 경로와
 	// 동일한 즉시성).
 	await dragSelect(page, from, to);
 	const popover = page.locator("#grab-popover");
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(popover).toBeVisible();
 	// 네이티브 선택은 popover.open()의 input.focus()가 문서 선택을 팝오버
 	// input으로 옮기는 순간 죽는다(실측 — getComposedRanges가 #grab-popover의
@@ -137,7 +140,7 @@ test("③ split old side 텍스트 드래그 → 인코딩에 (old side, 포함"
 		);
 
 		await expect(page.locator("#grab-popover")).toBeVisible();
-		const input = page.locator("#grab-popover input");
+		const input = page.locator("#grab-popover textarea");
 		await expect(input).toBeFocused();
 		await input.press("Enter");
 		await expect
@@ -171,17 +174,24 @@ test("④ unified 크로스 사이드(삭제→추가) 텍스트 드래그 → o
 	await dragSelect(
 		page,
 		{ x: a.x + 40, y: a.y + a.height / 2 },
-		{ x: b.x + 40, y: b.y + b.height / 2 },
+		// 끝점은 텍스트 끝 너머로 → 추가 행은 온전하다(위 ② 주석 참고).
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
 	);
 
 	await expect(page.locator("#grab-popover")).toBeVisible();
-	const input = page.locator("#grab-popover input");
+	const input = page.locator("#grab-popover textarea");
 	await expect(input).toBeFocused();
 	await input.press("Enter");
 	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
 	const out = await readClipboard(page);
 	expect(out).toContain("Lines: old");
-	expect(out).toMatch(/^-export const hello/m);
+	// 삭제 행은 드래그 시작점(x+40)부터 잘리므로 줄 시작을 기대할 수 없다 —
+	// 마커 뒤 본문이 원본의 접미사인지로 검증한다(폰트 메트릭 무관).
+	const OLD_LINE = 'export const hello = (): string => "hello";';
+	const minus = out.split("\n").find((l) => l.startsWith("-"));
+	expect(minus).toBeDefined();
+	expect(OLD_LINE.endsWith((minus ?? "").slice(1))).toBe(true);
+	// 추가 행은 끝점을 텍스트 끝 너머로 잡았으므로 온전하다.
 	expect(out).toMatch(/^\+export const hello/m);
 });
 
@@ -211,7 +221,7 @@ test("⑤ 대량 스크롤(recycle) 이후에도 팝오버 생존 → Enter로 �
 		);
 		await container.locator("[data-utility-button]").click();
 		const popover = page.locator("#grab-popover");
-		const input = page.locator("#grab-popover input");
+		const input = page.locator("#grab-popover textarea");
 		await expect(input).toBeFocused();
 
 		// #diff를 실제 마우스 휠로 끝까지 밀어 CodeView 가상화가 bulk-0.ts를
@@ -309,7 +319,7 @@ test("⑦ watch 폴이 열려 있던 grab 팝오버를 닫는다", async ({
 			{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
 		);
 		await container.locator("[data-utility-button]").click();
-		await expect(page.locator("#grab-popover input")).toBeFocused();
+		await expect(page.locator("#grab-popover textarea")).toBeFocused();
 
 		// renderPatch(watch 폴이 실 변경을 감지했을 때만 호출됨 — 무변경
 		// 폴은 304로 조기 반환돼 렌더를 건드리지 않는다)는 무조건 팝오버를
@@ -492,4 +502,53 @@ test("⑪ find 매치 하이라이트는 텍스트 경로 팝오버를 Esc로 �
 	await expect(page.locator("#grab-popover")).toBeHidden();
 
 	expect(await page.locator("[data-selected-line]").count()).toBe(before);
+});
+
+// 버튼 클릭 경로는 유닛이 "이벤트를 취소했는가"까지만 볼 수 있다 — 포커스가
+// 실제로 남는지는 실브라우저에서만 관측된다. 이게 무너지면(예: dismiss 리스너를
+// capture 단계로 옮기거나 SVG에 pointer-events가 걸리면) 클릭이 복사 대신
+// 팝오버를 닫아버리는데, 유닛은 전부 통과한 채로 지나간다.
+test("⑫ 보내기 버튼 클릭도 Enter와 같이 복사하고, 입력 포커스를 잃지 않는다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+
+	const cells = container.locator("[data-column-number]");
+	const a = await cells.first().boundingBox();
+	if (!a) throw new Error("gutter cell not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+	);
+	await container.locator("[data-utility-button]").click();
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+
+	const input = page.locator("#grab-popover textarea");
+	await input.fill("버튼으로 복사");
+	await page.locator("#grab-popover .grab-send").click();
+
+	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
+	const out = await readClipboard(page);
+	expect(out).toContain("File: src/hello.ts");
+	expect(out.trim().endsWith("버튼으로 복사")).toBe(true);
+
+	// mousedown preventDefault의 진짜 계약 — 클릭해도 포커스가 input에 남는다.
+	// 빠지면 IME 조합이 강제 확정돼 조합 중이던 글자가 누락된다.
+	await expect(input).toBeFocused();
+	// 팝오버는 살아 있다(바깥 클릭으로 오인되지 않았다) + 버튼은 성공 상태.
+	await expect(popover).toBeVisible();
+	await expect(page.locator("#grab-popover .grab-send")).toHaveAttribute(
+		"data-state",
+		"ok",
+	);
 });
