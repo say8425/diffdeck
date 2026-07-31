@@ -357,7 +357,15 @@ test("⑥ 한 줄 안 부분 드래그 → 하이라이트와 클립보드가 �
 		.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 		.toContain("diffdeck selection");
 	const out = await page.evaluate(() => navigator.clipboard.readText());
-	expect(out).toContain(probe.text);
+	// toContain으로는 판별이 안 된다 — applyChars가 꺼져 줄 전체가 복사돼도
+	// 줄 전체는 프래그먼트를 포함하므로 통과한다(실측으로 확인한 vacuous 케이스).
+	// 펜스 본문의 코드 줄이 하이라이트 텍스트와 **정확히 같아야** 한다.
+	const lines = out.split("\n");
+	const open = lines.findIndex((l) => /^`{3,}$/.test(l));
+	const close = lines.findIndex((l, i) => i > open && /^`{3,}$/.test(l));
+	const body = lines.slice(open + 1, close);
+	const blank = body.findIndex((l) => l === "");
+	expect(body.slice(blank + 1)).toEqual([probe.text]);
 });
 
 test("⑦ 제출 버튼 클릭만으로 복사가 완주한다", async ({
