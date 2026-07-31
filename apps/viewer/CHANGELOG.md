@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.2.0...diffdeck-v1.3.0) (2026-07-31)
+
+
+### Features
+
+* **viewer:** grab 팝오버 UX 재설계 + 문자 단위 드래그 ([#46](https://github.com/say8425/diffdeck/issues/46)) ([7ab9cf0](https://github.com/say8425/diffdeck/commit/7ab9cf0164930b13d1aa83054f4c899d7810b071))
+
+
+### Bug Fixes
+
+* **viewer:** grab 텍스트 드래그 선택을 하이라이트로 유지 + 팝오버를 릴리스 지점에 앵커 ([#43](https://github.com/say8425/diffdeck/issues/43)) ([a1a0a93](https://github.com/say8425/diffdeck/commit/a1a0a93adb3a00925db6af896ef8a5a6ecce9d73))
+
 ## [1.2.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.1.0...diffdeck-v1.2.0) (2026-07-29)
 
 
