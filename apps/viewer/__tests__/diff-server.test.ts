@@ -419,12 +419,18 @@ describe("diff server flight timeout", () => {
 	// 그 결과가 손으로 만든 Response가 아니라 실제 HTTP 응답으로 도착하는지
 	// 검증한다.
 	//
-	// 이 테스트는 baseCache **미스**에 기댄다 — repo가 이 describe에서 처음
-	// 등장하므로 resolveBaseCached의 fn()이 실제로 resolveBaseRef를
-	// await해야 하고, 그래서 baseFlight가(항상 먼저 await되므로, server.ts의
-	// /api/diff 분기) 1ms보다 먼저 타임아웃한다. 아래 두 번째 테스트는
-	// 정반대로 baseCache **히트**가 있어야만 성립한다 — 둘을 하나의 공유
-	// beforeEach/픽스처로 "정리"하면 둘 다 조용히 깨진다.
+	// 이 테스트는 baseCache **미스**에 기댄다 — 보장의 근거는 "이 describe에서
+	// 처음 등장"이 아니라 **테스트마다 유일한 repo 경로**다: 파일 최상단
+	// beforeEach가 매번 mkdtempSync로 새 디렉터리를 만들고, baseCache는 그
+	// 경로로 키가 갈리므로(server.ts) 이전 어떤 테스트도 이 repo에 대한
+	// 항목을 남길 수 없다. 이 표현이 중요한 이유: repo를 beforeAll로 끌어올려
+	// 여러 테스트가 공유하게 "최적화"하면(그래야 describe-position 논리는
+	// 안 깨진다는 착각이 들 수 있다) 이 파일의 앞선 /api/diff 테스트 ~20개가
+	// 그 공유 repo의 baseCache를 먼저 데워 버려, 이 테스트가 조용히
+	// diffFlight 가드로 미끄러져도 여전히 통과한다 — "유일한 repo 경로"라고
+	// 못박아야 그 리팩터가 이 불변식을 깬다는 게 보인다. 아래 두 번째
+	// 테스트는 정반대로 baseCache **히트**가 있어야만 성립한다 — 둘을
+	// 하나의 공유 beforeEach/픽스처로 "정리"하면 둘 다 조용히 깨진다.
 	test("api/diff answers a real flight timeout with a real 503 + Retry-After over HTTP", async () => {
 		const timeoutCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-timeout-"));
 		const timeoutHandle = startDiffServer({
@@ -460,7 +466,7 @@ describe("diff server flight timeout", () => {
 	// 아래에서 새로 띄우는 flightTimeoutMs:1 서버도 그 항목을 그대로 본다.
 	// 먼저 기본 타임아웃 서버로 같은 repo를 정상 요청해 baseCache를 데우면:
 	// resolveBaseCached의 fn()은 캐시 히트일 때 `await` 없이 동기적으로
-	// `return hit.value`하므로(이 파일의 resolveBaseCached 정의 참고) 그
+	// `return hit.value`하므로(server.ts:96-103, resolveBaseCached 정의) 그
 	// 반환 프라미스는 마이크로태스크에서 즉시 settle하고, 마이크로태스크
 	// 큐는 어떤 매크로태스크(1ms 타이머 포함)보다도 항상 먼저 비므로 —
 	// baseFlight는 결정적으로(레이스가 아니라) 이긴다. 그러면 handler는

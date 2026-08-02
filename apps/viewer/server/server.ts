@@ -30,6 +30,16 @@ export interface DiffServerHandle {
 }
 
 // Base resolution runs `gh pr view`, which is slow — cache it per repo.
+//
+// 반드시 모듈 스코프에 남아야 한다(diffCache와 달리 createHandler 안으로
+// 옮기지 말 것) — diff-server.test.ts의 "answers a real diffFlight timeout
+// (not baseFlight)" 테스트가 여기 의존한다: 그 테스트는 기본 타임아웃
+// 서버로 이 repo를 먼저 데운 뒤, *별도로 새로 띄운* flightTimeoutMs:1
+// 서버가 그 warm 항목을 그대로 봐야만 baseFlight가 1ms 레이스를 이기고
+// diffFlight까지 진입한다. baseCache를 createHandler 스코프로 옮기면(구조적
+// 격리를 위한 향후 정리로 그럴듯해 보일 수 있다) 두 번째 서버는 빈 캐시로
+// 시작해 baseFlight가 miss로 되돌아가고 그 테스트는 조용히 baseFlight
+// 가드만 다시 증명하게 된다 — 첫 번째 테스트와 똑같은 것을, 티 나지 않게.
 const BASE_TTL_MS = 10_000;
 const baseCache = new Map<
 	string,
