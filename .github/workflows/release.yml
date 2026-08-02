@@ -20,7 +20,7 @@ jobs:
       # it by hand also sidesteps the GITHUB_TOKEN recursion guard — a push made
       # by GITHUB_TOKEN would not re-trigger this workflow, so an auto-merged
       # release PR would silently never publish.
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
