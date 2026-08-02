@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.0...diffdeck-v1.3.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* 뷰어 "Loading…" 영구 고착 자가 치유 ([#54](https://github.com/say8425/diffdeck/issues/54)) ([7b8b192](https://github.com/say8425/diffdeck/commit/7b8b192ba683cc14e26ca05a216660c02a1ec733))
+
 ## [1.3.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.2.0...diffdeck-v1.3.0) (2026-07-31)
 
 
