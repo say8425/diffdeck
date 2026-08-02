@@ -50,7 +50,7 @@ jobs:
   # e2e는 "실제로 보이는 것"을 검증하는 유일한 레인이다 — happy-dom에는
   # 레이아웃이 없어서 창 크기가 변하지 않는지·버튼이 실제로 페인트되는지·
   # 클릭해도 포커스가 남는지는 유닛이 원리적으로 못 잡는다. 게이트에 없으면
-  # 그 계약들은 아무도 지키지 않는다. 전체 70개 / 로컬 1.4분.
+  # 그 계약들은 아무도 지키지 않는다. 비용은 typecheck 잡과 같은 급이다.
   e2e:
     runs-on: ubuntu-latest
     # globalSetup(build.ts 실행)과 fixtures의 readUrlFromStdout에는 자체 타이머가
