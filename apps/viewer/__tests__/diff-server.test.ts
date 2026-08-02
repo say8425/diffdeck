@@ -418,8 +418,63 @@ describe("diff server flight timeout", () => {
 	// git 서브프로세스 왕복조차 그보다 오래 걸려 진짜 타임아웃이 걸리고,
 	// 그 결과가 손으로 만든 Response가 아니라 실제 HTTP 응답으로 도착하는지
 	// 검증한다.
+	//
+	// 이 테스트는 baseCache **미스**에 기댄다 — repo가 이 describe에서 처음
+	// 등장하므로 resolveBaseCached의 fn()이 실제로 resolveBaseRef를
+	// await해야 하고, 그래서 baseFlight가(항상 먼저 await되므로, server.ts의
+	// /api/diff 분기) 1ms보다 먼저 타임아웃한다. 아래 두 번째 테스트는
+	// 정반대로 baseCache **히트**가 있어야만 성립한다 — 둘을 하나의 공유
+	// beforeEach/픽스처로 "정리"하면 둘 다 조용히 깨진다.
 	test("api/diff answers a real flight timeout with a real 503 + Retry-After over HTTP", async () => {
 		const timeoutCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-timeout-"));
+		const timeoutHandle = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: timeoutCacheHome },
+			flightTimeoutMs: 1,
+		});
+		try {
+			const timeoutBase = `http://127.0.0.1:${timeoutHandle.server.port}`;
+			const res = await fetch(
+				`${timeoutBase}/api/diff?repo=${encodeURIComponent(repo)}&token=${timeoutHandle.token}`,
+			);
+			expect(res.status).toBe(503);
+			expect(res.headers.get("retry-after")).toBe("1");
+			expect(await res.text()).toBe("diff pipeline busy, retry shortly");
+		} finally {
+			timeoutHandle.stop();
+			rmSync(timeoutCacheHome, { recursive: true, force: true });
+		}
+	});
+
+	// 위 테스트가 증명하는 건 baseFlight 가드뿐이다: flightTimeoutMs:1에서는
+	// /api/diff가 먼저 await하는 baseFlight가 항상 이 타이밍에 지므로,
+	// diffFlight의 가드(server.ts 두 번째 awaitFlight)는 한 번도 실행되지
+	// 않는다. singleFlight.ts의 자체 docstring이 기록한 실측 never-settle은
+	// baseFlight(gh pr view)가 아니라 diffFlight(diff.ts의
+	// BUILD_CONCURRENCY=8 git 버스트)다 — 실제로 걸렸던 적 없는 쪽만 증명하고
+	// 실제로 걸렸던 쪽은 미검증으로 남기는 건 순서가 거꾸로다.
+	//
+	// baseCache는 server.ts에서 여전히 모듈 전역 싱글턴이므로(diffCache와
+	// 달리 createHandler 안으로 옮기지 않았다 — 플라이트와는 별개 관심사),
+	// 아래에서 새로 띄우는 flightTimeoutMs:1 서버도 그 항목을 그대로 본다.
+	// 먼저 기본 타임아웃 서버로 같은 repo를 정상 요청해 baseCache를 데우면:
+	// resolveBaseCached의 fn()은 캐시 히트일 때 `await` 없이 동기적으로
+	// `return hit.value`하므로(이 파일의 resolveBaseCached 정의 참고) 그
+	// 반환 프라미스는 마이크로태스크에서 즉시 settle하고, 마이크로태스크
+	// 큐는 어떤 매크로태스크(1ms 타이머 포함)보다도 항상 먼저 비므로 —
+	// baseFlight는 결정적으로(레이스가 아니라) 이긴다. 그러면 handler는
+	// diffFlight로 진입하고, 그 fn()은 첫 줄에서 repoFingerprint(진짜 git
+	// 서브프로세스 왕복)를 await하므로 1ms를 반드시 넘겨 **두 번째** 가드가
+	// 진짜로 타임아웃한다.
+	test("api/diff answers a real diffFlight timeout (not baseFlight) with a real 503", async () => {
+		const warm = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
+		);
+		expect(warm.status).toBe(200);
+		await warm.text();
+
+		const timeoutCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-timeout2-"));
 		const timeoutHandle = startDiffServer({
 			port: 0,
 			viewerDir,
