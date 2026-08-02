@@ -14,7 +14,10 @@ import {
 	type PayloadCacheEntry,
 	payloadEtag,
 } from "./payloadCache.ts";
-import { createSingleFlight } from "./singleFlight.ts";
+import {
+	createSingleFlight,
+	SingleFlightTimeoutError,
+} from "./singleFlight.ts";
 import { getRepoSummary } from "./summary.ts";
 import { generateToken, persistToken, readTokenSync } from "./token.ts";
 
@@ -27,37 +30,90 @@ export interface DiffServerHandle {
 }
 
 // Base resolution runs `gh pr view`, which is slow — cache it per repo.
+//
+// 반드시 모듈 스코프에 남아야 한다(diffCache와 달리 createHandler 안으로
+// 옮기지 말 것) — diff-server.test.ts의 "answers a real diffFlight timeout
+// (not baseFlight)" 테스트가 여기 의존한다: 그 테스트는 기본 타임아웃
+// 서버로 이 repo를 먼저 데운 뒤, *별도로 새로 띄운* flightTimeoutMs:1
+// 서버가 그 warm 항목을 그대로 봐야만 baseFlight가 1ms 레이스를 이기고
+// diffFlight까지 진입한다. baseCache를 createHandler 스코프로 옮기면(구조적
+// 격리를 위한 향후 정리로 그럴듯해 보일 수 있다) 두 번째 서버는 빈 캐시로
+// 시작해 baseFlight가 miss로 되돌아가고 그 테스트는 조용히 baseFlight
+// 가드만 다시 증명하게 된다 — 첫 번째 테스트와 똑같은 것을, 티 나지 않게.
 const BASE_TTL_MS = 10_000;
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
 >();
 
-// 동시 콜드 요청(프리워밍 + 첫 화면 + 폴)이 gh pr view를 중복 실행하지 않게
-// single-flight로 합류시킨다.
-const baseFlight = createSingleFlight<{
-	base: string | null;
-	ref: string | null;
-}>();
+// 플라이트가 타임아웃되면(= fn()이 settle하지 않았다는 신호, singleFlight.ts
+// 참고) 요청을 무기한 매달아 두는 대신 503을 돌려준다. 짧은 Retry-After를
+// 실어, 재시도가 "아직 매달려 있는 그 요청"이 아니라 새 요청임을 클라이언트가
+// 신뢰하고 곧바로 다시 시도하게 한다 — 타임아웃이 곧 그 키를 이미 비웠으므로
+// (createSingleFlight의 `.finally()`) 다음 호출은 새 플라이트로 시작한다.
+// 브라우저 fetch()는 Retry-After를 자동으로 지키지 않으므로 browser/main.ts의
+// fetchDiff가 직접 지연을 걸어야 한다 — 이 값(1초)과 그쪽의 재시도 지연
+// (RETRY_DELAYS_MS, 1000ms)을 의도적으로 같은 수로 맞춰 둔다.
+const FLIGHT_TIMEOUT_RETRY_AFTER_SECONDS = 1;
 
-const resolveBaseCached = (
-	repo: string,
-): Promise<{ base: string | null; ref: string | null }> =>
-	baseFlight(repo, async () => {
-		const now = Date.now();
-		const hit = baseCache.get(repo);
-		if (hit && now - hit.at < BASE_TTL_MS) return hit.value;
-		const value = await resolveBaseRef(repo);
-		baseCache.set(repo, { value, at: now });
-		return value;
+const flightTimeoutResponse = (): Response =>
+	new Response("diff pipeline busy, retry shortly", {
+		status: 503,
+		headers: { "retry-after": String(FLIGHT_TIMEOUT_RETRY_AFTER_SECONDS) },
 	});
 
-const createHandler = (cfg: { viewerDir: string; token: string }) => {
+/**
+ * single-flight 호출을 감싸 타임아웃만 503 Response로 흡수하고, 그 외
+ * 에러는(현재 resolveBaseRef/getDiffFiles 경로는 전부 nothrow라 미도달이지만)
+ * 그대로 다시 던져 기존 동작을 보존한다. 반환 타입이 `T | Response`라
+ * 호출부는 `instanceof Response`로 좁혀 즉시 return하면 된다.
+ */
+export const awaitFlight = async <T>(
+	promise: Promise<T>,
+): Promise<T | Response> => {
+	try {
+		return await promise;
+	} catch (err) {
+		if (err instanceof SingleFlightTimeoutError) return flightTimeoutResponse();
+		throw err;
+	}
+};
+
+const createHandler = (cfg: {
+	viewerDir: string;
+	token: string;
+	// 테스트 전용 훅 — 프로덕션(startDiffServer의 공개 CLI 표면)에서는 항상
+	// undefined라 두 createSingleFlight 호출 모두 singleFlight.ts의
+	// DEFAULT_TIMEOUT_MS를 쓴다. diff-server.test.ts가 이 값을 몇 ms로 줄여
+	// 실제 git 서브프로세스 왕복보다 짧게 만들면, 손으로 만든 에러가 아니라
+	// awaitFlight까지 이어지는 진짜 타임아웃이 실제 HTTP 503으로 나오는지
+	// 검증할 수 있다.
+	flightTimeoutMs?: number;
+}) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
+	// 동시 콜드 요청(프리워밍 + 첫 화면 + 폴)이 gh pr view를 중복 실행하지
+	// 않게 single-flight로 합류시킨다. diffFlight와 마찬가지로 핸들러
+	// 인스턴스마다 새로 만든다 — flightTimeoutMs를 인스턴스별로 다르게 줄
+	// 수 있어야 하기 때문(테스트에서만 쓰임, 위 주석 참고).
+	const baseFlight = createSingleFlight<{
+		base: string | null;
+		ref: string | null;
+	}>(cfg.flightTimeoutMs);
+	const resolveBaseCached = (
+		repo: string,
+	): Promise<{ base: string | null; ref: string | null }> =>
+		baseFlight(repo, async () => {
+			const now = Date.now();
+			const hit = baseCache.get(repo);
+			if (hit && now - hit.at < BASE_TTL_MS) return hit.value;
+			const value = await resolveBaseRef(repo);
+			baseCache.set(repo, { value, at: now });
+			return value;
+		});
 	// 같은 (repo, untracked, mode)의 지문 계산+파이프라인을 동시에 한 번만 —
 	// 콜드 상태에서 프리워밍과 첫 화면 요청이 겹쳐도 중복 실행되지 않는다.
-	const diffFlight = createSingleFlight<PayloadCacheEntry>();
+	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
@@ -97,36 +153,42 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 			}
 			const untracked = url.searchParams.get("untracked") === "1";
 			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
-			const { base, ref } = await resolveBaseCached(repo);
+			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			if (baseResult instanceof Response) return baseResult;
+			const { base, ref } = baseResult;
 			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
 			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
 			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
 			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
 			const cacheKey = `${repo}\0${untracked}\0${mode}`;
-			const entry = await diffFlight(cacheKey, async () => {
-				const fingerprint = await repoFingerprint(repo, {
-					untracked,
-					mode,
-					ref: mode === "base" ? (ref ?? undefined) : undefined,
-				});
-				const cached = diffCache.get(cacheKey, fingerprint);
-				if (cached) return cached;
-				const files =
-					mode === "base"
-						? await getDiffFiles(repo, {
-								untracked,
-								mode: "base",
-								ref: ref ?? undefined,
-							})
-						: await getDiffFiles(repo, { untracked });
-				const fresh = {
-					fingerprint,
-					etag: payloadEtag(files),
-					body: JSON.stringify(files),
-				};
-				diffCache.set(cacheKey, fresh);
-				return fresh;
-			});
+			const entryResult = await awaitFlight(
+				diffFlight(cacheKey, async () => {
+					const fingerprint = await repoFingerprint(repo, {
+						untracked,
+						mode,
+						ref: mode === "base" ? (ref ?? undefined) : undefined,
+					});
+					const cached = diffCache.get(cacheKey, fingerprint);
+					if (cached) return cached;
+					const files =
+						mode === "base"
+							? await getDiffFiles(repo, {
+									untracked,
+									mode: "base",
+									ref: ref ?? undefined,
+								})
+							: await getDiffFiles(repo, { untracked });
+					const fresh = {
+						fingerprint,
+						etag: payloadEtag(files),
+						body: JSON.stringify(files),
+					};
+					diffCache.set(cacheKey, fresh);
+					return fresh;
+				}),
+			);
+			if (entryResult instanceof Response) return entryResult;
+			const entry = entryResult;
 			const etag = `"${entry.etag}"`;
 			// 304에도 x-diff-base를 실어 클라이언트가 드롭다운 라벨을 유지한다.
 			if (req.headers.get("if-none-match") === etag) {
@@ -153,7 +215,9 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
-			const { base, ref } = await resolveBaseCached(repo);
+			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			if (baseResult instanceof Response) return baseResult;
+			const { base, ref } = baseResult;
 			const summary = await getRepoSummary(repo, { base, ref });
 			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
 			return new Response(JSON.stringify(summary), {
@@ -176,7 +240,12 @@ const createHandler = (cfg: { viewerDir: string; token: string }) => {
 			}
 			const side = url.searchParams.get("side") === "old" ? "old" : "new";
 			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
-			const ref = mode === "base" ? (await resolveBaseCached(repo)).ref : null;
+			let ref: string | null = null;
+			if (mode === "base") {
+				const baseResult = await awaitFlight(resolveBaseCached(repo));
+				if (baseResult instanceof Response) return baseResult;
+				ref = baseResult.ref;
+			}
 			const bytes = await getFileBytes(
 				repo,
 				path,
@@ -213,6 +282,9 @@ export const startDiffServer = (opts: {
 	port: number;
 	viewerDir: string;
 	env?: Env;
+	// 테스트 전용 — CLI(cli.ts/args.ts)에는 배선돼 있지 않다. createHandler의
+	// 같은 이름 필드로 그대로 흘러간다.
+	flightTimeoutMs?: number;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	// Mint the token but don't write it yet — Bun.serve throws if the port is
@@ -221,16 +293,27 @@ export const startDiffServer = (opts: {
 	// (which rejects it), so bind first and only then publish.
 	const existing = readTokenSync(env);
 	const token = existing ?? generateToken();
-	const handler = createHandler({ viewerDir: opts.viewerDir, token });
+	const handler = createHandler({
+		viewerDir: opts.viewerDir,
+		token,
+		flightTimeoutMs: opts.flightTimeoutMs,
+	});
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
 		// Bun.serve 기본 idleTimeout(10초)은 콜드스타트 자원 경합(브라우저 기동
 		// + prewarm git 서브프로세스 버스트)으로 첫 diff 응답이 10초를 넘는 순간
-		// 커넥션을 강제 종료한다("request timed out after 10 seconds"). 클라이언트
-		// fetchDiff엔 재시도가 없어 뷰어가 "Loading…"에 영구 고착되는 행이 됐다
-		// (경합 시 간헐 재현). 평시 응답은 1초대이므로 60초는 순수 여유분이다.
-		idleTimeout: 60,
+		// 커넥션을 강제 종료한다("request timed out after 10 seconds"). 120초는
+		// /api/diff가 순차로 기다리는 두 플라이트(baseFlight → diffFlight)의
+		// 합(singleFlight.ts의 기본 타임아웃 45초 × 2 = 90초)이 실제로 응답을
+		// (정상이든 503이든) 만들어 낼 시간을 확보하고서도 isGitRepo·응답 전송에
+		// ~30초 여유를 남기도록 고른 값이다 — 개별 플라이트가 아니라 "그 요청이
+		// 기다리는 플라이트의 합 < idleTimeout"이 진짜 불변식이다. 예전엔 fn()이
+		// settle하지 않을 때 이 값에 걸려도 클라이언트가 재시도하지 않아 뷰어가
+		// "Loading…"에 영구 고착됐다 — 지금은 singleFlight 타임아웃이 503으로
+		// 응답을 만들고, browser/main.ts의 fetchDiff가 그 503과 네트워크 실패를
+		// 재시도해 자가 치유한다.
+		idleTimeout: 120,
 		fetch: handler,
 	});
 	if (existing == null) persistToken(token, env);
