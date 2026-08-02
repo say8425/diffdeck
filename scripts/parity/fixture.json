@@ -1,5 +1,12 @@
 [
 	{
+		"name": "scripts/build.bat",
+		"status": "modified",
+		"binary": false,
+		"oldContents": "@echo off\nREM build the viewer bundle\nsetlocal\nset TARGET=dist\nif not exist %TARGET% goto :missing\necho Building into %TARGET%\ngoto :done\n:missing\necho Target directory not found 1>&2\nexit /b 1\n:done\nendlocal\n",
+		"newContents": "@echo off\nREM build the viewer bundle\nsetlocal enabledelayedexpansion\nset TARGET=dist\nif not exist %TARGET% mkdir %TARGET%\nfor %%f in (src\\*.ts) do (\n  echo Compiling %%f\n)\necho Building into %TARGET%\ngoto :done\n:done\nendlocal\n"
+	},
+	{
 		"name": "src/core/engine/renderer/pipeline/tokenizer.ts",
 		"status": "modified",
 		"binary": false,
