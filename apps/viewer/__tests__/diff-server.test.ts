@@ -408,3 +408,35 @@ describe("diff server summary", () => {
 		expect(s.workingFiles).toBe(1);
 	});
 });
+
+describe("diff server flight timeout", () => {
+	// await-flight.test.ts는 손으로 만든 SingleFlightTimeoutError가 503으로
+	// 바뀌는 것을, single-flight.test.ts는 진짜 타임아웃이 그 에러를 낳는
+	// 것을 각각 단위로 증명한다. 이 테스트는 그 둘을 실제 서버 위에서 이어
+	// 붙인다 — createHandler의 flightTimeoutMs 훅(테스트 전용, CLI 표면에는
+	// 없음)으로 baseFlight/diffFlight 타임아웃을 몇 ms로 낮추면, 정상적인
+	// git 서브프로세스 왕복조차 그보다 오래 걸려 진짜 타임아웃이 걸리고,
+	// 그 결과가 손으로 만든 Response가 아니라 실제 HTTP 응답으로 도착하는지
+	// 검증한다.
+	test("api/diff answers a real flight timeout with a real 503 + Retry-After over HTTP", async () => {
+		const timeoutCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-timeout-"));
+		const timeoutHandle = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: timeoutCacheHome },
+			flightTimeoutMs: 1,
+		});
+		try {
+			const timeoutBase = `http://127.0.0.1:${timeoutHandle.server.port}`;
+			const res = await fetch(
+				`${timeoutBase}/api/diff?repo=${encodeURIComponent(repo)}&token=${timeoutHandle.token}`,
+			);
+			expect(res.status).toBe(503);
+			expect(res.headers.get("retry-after")).toBe("1");
+			expect(await res.text()).toBe("diff pipeline busy, retry shortly");
+		} finally {
+			timeoutHandle.stop();
+			rmSync(timeoutCacheHome, { recursive: true, force: true });
+		}
+	});
+});

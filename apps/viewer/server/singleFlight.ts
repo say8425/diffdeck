@@ -24,11 +24,15 @@ export class SingleFlightTimeoutError extends Error {
 	}
 }
 
-// 30초: Bun.serve의 idleTimeout(60초, server.ts)보다 반드시 낮아야 한다 —
-// 안 그러면 타임아웃이 응답을 만들기도 전에 커넥션이 먼저 끊긴다. 동시에
-// 콜드스타트 정상 작업(server.ts의 관측 기록상 첫 diff 응답이 10초를 넘긴
-// 사례 있음)보다는 충분히 여유 있어야 정상 응답을 오탐으로 취소하지 않는다.
-const DEFAULT_TIMEOUT_MS = 30_000;
+// 45초. 제약은 개별 플라이트가 아니라 **합**이다: /api/diff는 baseFlight →
+// diffFlight를 순차로 두 번 기다리므로(server.ts), 한 요청의 최악 경로는
+// 이 값의 2배(90초)까지 걸릴 수 있다. 그 합이 Bun.serve의
+// idleTimeout(120초, server.ts)보다 반드시 낮아야 한다 — 안 그러면 응답을
+// 만들기도 전에 커넥션이 먼저 끊긴다(90 < 120, isGitRepo·응답 전송 등에
+// ~30초 여유). 동시에 콜드스타트 정상 작업(server.ts의 관측 기록상 첫 diff
+// 응답이 10초를 넘긴 사례 있음)보다는 충분히 여유 있어야 정상 응답을
+// 오탐으로 취소하지 않는다.
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 export const createSingleFlight = <T>(
 	timeoutMs = DEFAULT_TIMEOUT_MS,

@@ -1073,12 +1073,17 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 const sleep = (ms: number): Promise<void> =>
 	new Promise((resolve) => setTimeout(resolve, ms));
 
-// 서버의 single-flight 타임아웃(30초, singleFlight.ts)이 503으로 응답하는
+// 서버의 single-flight 타임아웃(45초, singleFlight.ts)이 503으로 응답하는
 // 순간엔 그 키가 이미 비워져 있으므로(createSingleFlight의 `.finally()`),
-// 곧바로 다시 요청하면 죽은 플라이트가 아니라 새 플라이트에 합류한다 — 서버
-// 쪽 Retry-After(1초)와 자릿수를 맞춘 짧은 지연 두 번이면 충분하다. 범용
-// 재시도 라이브러리가 아니라 이 한 호출 전용의 최소 구현이다.
-const RETRY_DELAYS_MS = [500, 1500] as const;
+// 곧바로 다시 요청하면 죽은 플라이트가 아니라 새 플라이트에 합류한다.
+// 딱 한 번만 재시도한다(두 번이 아니라) — /api/diff는 baseFlight·diffFlight
+// 두 플라이트를 순차로 기다리므로(server.ts) 시도 하나가 최악의 경우 이미
+// 45초 × 2 = 90초까지 걸릴 수 있고, diff.ts의 BUILD_CONCURRENCY=8는 호출당
+// 상한이라 겹치는 시도마다 동시 git 서브프로세스 수가 그대로 곱해진다 —
+// 재시도를 늘릴수록 정확히 그 경합을 키워 다음 시도를 더 오래 걸리게
+// 만든다. 지연값(1000ms)은 서버 쪽 Retry-After(1초, server.ts)와 의도적으로
+// 맞춘 수다. 범용 재시도 라이브러리가 아니라 이 한 호출 전용의 최소 구현.
+const RETRY_DELAYS_MS = [1000] as const;
 
 const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
