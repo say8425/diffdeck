@@ -13,7 +13,15 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.releases_created }}
+      # Plural on purpose — verified against the action's src/index.ts, which is
+      # byte-identical in v4.4.1 and v5.0.0. The action emits `releases_created`
+      # unconditionally, but its singular `release_created` is path-prefixed
+      # (`apps/viewer--release_created`) and omitted entirely when nothing is released.
+      # Reading the singular here would yield an empty value, the publish gate below
+      # would never match, and releases would stop reaching npm silently — the
+      # release/tag still get cut, so nothing goes red. Keep this name and the gate
+      # below in sync.
+      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       # release-please opens/updates the release PR. It is merged by a human on
       # purpose: a release is an npm publish, so it gets a review gate. Merging
@@ -28,7 +36,8 @@ jobs:
 
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    # Name must match the release-please job output above; see the note there.
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
