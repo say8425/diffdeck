@@ -1035,7 +1035,17 @@ type FetchDiffResult =
 	| { kind: "data"; files: DiffFile[]; base: string; etag: string | null }
 	| { kind: "unchanged"; base: string };
 
-const fetchDiff = async (): Promise<FetchDiffResult | null> => {
+type FetchDiffAttempt =
+	| FetchDiffResult
+	// 서버가 살아있고 이 요청 자체가 잘못됐다는 신호(토큰 불일치·git repo
+	// 아님) — 재시도해도 같은 답을 받으므로 즉시 포기한다.
+	| { kind: "terminal" }
+	// 서버가 일시적으로 응답을 못 만든(single-flight 타임아웃 503,
+	// singleFlight.ts) 경우와 네트워크 레벨 실패(fetch 자체가 throw) —
+	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다.
+	| { kind: "retryable" };
+
+const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 	const query = new URLSearchParams({
 		repo,
 		token,
@@ -1050,12 +1060,38 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 		});
 		const base = res.headers.get("x-diff-base") ?? "";
 		if (res.status === 304) return { kind: "unchanged", base };
-		if (!res.ok) return null;
+		if (res.status === 503) return { kind: "retryable" };
+		if (!res.ok) return { kind: "terminal" };
 		const files = (await res.json()) as DiffFile[];
 		return { kind: "data", files, base, etag: res.headers.get("etag") };
 	} catch (err) {
 		console.error(err);
-		return null;
+		return { kind: "retryable" };
+	}
+};
+
+const sleep = (ms: number): Promise<void> =>
+	new Promise((resolve) => setTimeout(resolve, ms));
+
+// 서버의 single-flight 타임아웃(30초, singleFlight.ts)이 503으로 응답하는
+// 순간엔 그 키가 이미 비워져 있으므로(createSingleFlight의 `.finally()`),
+// 곧바로 다시 요청하면 죽은 플라이트가 아니라 새 플라이트에 합류한다 — 서버
+// 쪽 Retry-After(1초)와 자릿수를 맞춘 짧은 지연 두 번이면 충분하다. 범용
+// 재시도 라이브러리가 아니라 이 한 호출 전용의 최소 구현이다.
+const RETRY_DELAYS_MS = [500, 1500] as const;
+
+const fetchDiff = async (): Promise<FetchDiffResult | null> => {
+	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
+	// 재시도)에 의존하므로 의도적으로 순차 실행 — Promise.all로 병렬화할 대상이
+	// 아니다 (diff.ts:resolveBaseRef와 동일 관례).
+	for (let attempt = 0; ; attempt++) {
+		// oxlint-disable-next-line no-await-in-loop
+		const result = await fetchDiffOnce();
+		if (result.kind === "data" || result.kind === "unchanged") return result;
+		if (result.kind === "terminal") return null;
+		if (attempt >= RETRY_DELAYS_MS.length) return null;
+		// oxlint-disable-next-line no-await-in-loop
+		await sleep(RETRY_DELAYS_MS[attempt]);
 	}
 };
 

@@ -274,6 +274,23 @@ describe("api/blob", () => {
 		]);
 	});
 
+	test("mode=base serves image bytes from the merge-base ref", async () => {
+		await $`git -C ${repo} branch -M main`;
+		writeFileSync(join(repo, "icon.png"), Buffer.from([0x10, 0x20]));
+		await $`git -C ${repo} add icon.png`;
+		await $`git -C ${repo} commit -qm icon`;
+		await $`git -C ${repo} checkout -qb feature`;
+		writeFileSync(join(repo, "icon.png"), Buffer.from([0x30, 0x40]));
+
+		const res = await fetch(
+			`${base}/api/blob?repo=${encodeURIComponent(repo)}&token=${handle.token}&path=icon.png&side=old&mode=base`,
+		);
+		expect(res.status).toBe(200);
+		expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([
+			0x10, 0x20,
+		]);
+	});
+
 	test("404 for a missing side", async () => {
 		writeFileSync(join(repo, "fresh.png"), Buffer.from([0x00]));
 		const res = await fetch(
