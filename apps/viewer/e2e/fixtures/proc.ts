@@ -45,6 +45,13 @@ export const runToExit = (
 
 export interface LongRunningProcess {
 	stdout: Readable;
+	/**
+	 * 지금까지 자식이 stderr로 뱉은 것 전부. 예전엔 stderr를 pipe로 열어만 두고
+	 * 아무도 읽지 않아 버퍼에 쌓였다가 kill과 함께 사라졌다 — 그래서 서버가
+	 * 죽었을 때 CI 로그에 `exited with code 1` 말고는 아무 단서도 안 남았다
+	 * (30k줄 lockfile 픽스처에서 /api/diff가 끝나지 않은 실제 사례 2건).
+	 */
+	stderr: () => string;
 	exited: Promise<number>;
 	kill: (signal?: NodeJS.Signals) => void;
 }
@@ -74,8 +81,20 @@ export const spawnLongRunning = (
 	// catch marks it handled without swallowing the rejection for real
 	// consumers (Promise settlement fires all attached handlers).
 	exited.catch(() => {});
+	// stderr를 실제로 읽는다. 읽지 않으면 pipe 버퍼에 쌓이기만 하다 kill과 함께
+	// 버려지고, 자식이 죽은 이유를 아무도 못 본다.
+	// setEncoding으로 받는다 — Buffer.toString()을 청크마다 부르면 멀티바이트가
+	// 청크 경계에서 쪼개져 깨진다. 이 리포의 서버 로그는 한국어라 그건 실제
+	// 손실이고, 같은 픽스처의 readUrlFromStdout이 TextDecoder({stream:true})를
+	// 쓰는 것과 같은 이유다.
+	let stderrBuffer = "";
+	child.stderr.setEncoding("utf8");
+	child.stderr.on("data", (chunk: string) => {
+		stderrBuffer += chunk;
+	});
 	return {
 		stdout: child.stdout,
+		stderr: () => stderrBuffer,
 		exited,
 		kill: (signal = "SIGTERM") => {
 			child.kill(signal);

@@ -61,11 +61,57 @@ export const launchViewer = async (
 		},
 	);
 
-	const url = await readUrlFromStdout(proc.stdout);
+	// 기동 실패를 원인과 함께 던진다 — 예전엔 readUrlFromStdout의 타임아웃만
+	// 보이고 서버가 왜 못 떴는지는 stderr에 남아 그대로 버려졌다.
+	let url: string;
+	try {
+		url = await readUrlFromStdout(proc.stdout);
+	} catch (err) {
+		const stderr = proc.stderr().trim();
+		throw new Error(
+			`viewer failed to start: ${String(err)}${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(server wrote nothing to stderr)"}`,
+		);
+	}
+
+	// 서버가 우리가 끄기 "전에" 스스로 죽었는지 표시해 둔다. 실제로 관측된
+	// 실패 모드가 그것이다 — 기동은 정상이고 요청 몇 개를 처리한 뒤 /api/diff
+	// 도중 죽어, 화면이 "Loading…"에 고착된다. 그 경우 stderr가 유일한 단서인데
+	// 예전엔 읽히지 않고 버려졌다.
+	// 두 번째 인자로 rejection도 받는다 — .then(cb)만 쓰면 파생 프라미스에
+	// 핸들러가 없어, proc.exited가 reject할 때 unhandled rejection이 된다
+	// (proc.ts가 원본 프라미스에 대해 문서화해 둔 바로 그 함정).
+	let diedOnItsOwn = false;
+	void proc.exited.then(
+		() => {
+			diedOnItsOwn = true;
+		},
+		() => {},
+	);
 
 	const stop = async (): Promise<void> => {
+		// 플래그와 종료 코드를 둘 다 본다 — 어느 쪽도 단독으로 완전하지 않다.
+		// 플래그는 자식이 죽었지만 libuv가 아직 close를 전달하지 않은 창을
+		// 놓치고, 코드 검사는 자식이 0으로 스스로 죽은 경우를 놓친다. SIGINT로
+		// 우리가 죽이면 code는 null → 0이므로 code !== 0은 자기 사망의 독립
+		// 증거다.
+		const flaggedDead = diedOnItsOwn;
 		proc.kill("SIGINT");
-		await proc.exited;
+		const code = await proc.exited;
+		const stderr = proc.stderr().trim();
+		const diedEarly = flaggedDead || code !== 0;
+		// 게이트가 "죽었을 때"가 아니라 "할 말이 있을 때"인 이유: 실제로 겪는
+		// 빨간불은 서버가 **살아 있는 채로** /api/diff를 안 끝내는 행업이라
+		// 죽음 게이트로는 아무것도 안 나온다. 조용한 서버면 이 블록은 침묵한다.
+		if (stderr || diedEarly) {
+			// throw하지 않는다 — stop()은 대개 finally에서 불리므로 던지면 진짜
+			// 실패를 덮는다. Playwright가 테스트 출력에 실어 주므로 그걸로 족하다.
+			const how = diedEarly
+				? `서버가 stop() 전에 스스로 종료했다 (code ${code})`
+				: "서버는 살아 있었지만 stderr에 출력이 있다";
+			console.error(
+				`[launchViewer] ${how}.${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(stderr 비어 있음)"}`,
+			);
+		}
 		repo.cleanup();
 		rmSync(cacheHome, { recursive: true, force: true });
 	};
