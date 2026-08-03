@@ -83,7 +83,10 @@ jobs:
       # 실패 → 재시도 통과)는 잡을 실패시키지 않는다(종료 코드 0). 그런데
       # trace: "retain-on-failure"는 그 실패한 시도의 trace.zip을 여전히 만든다 —
       # failure()로 걸면 흔들림을 진단할 유일한 단서가 만들어지자마자 러너와 함께
-      # 버려진다. 전부 통과한 런에서는 .last-run.json 45바이트만 올라가 무해하다.
+      # 버려진다. 실측(run 30784007411): worker-highlight가 16.8초에 실패하고
+      # retry #1에서 11.9초로 통과 → `1 flaky / 70 passed`, 잡은 초록, 아티팩트
+      # 498KB(그 실패 시도의 trace). failure()였다면 그대로 사라졌을 증거다.
+      # 한 번도 실패하지 않은 런에서는 .last-run.json 45바이트만 올라간다.
       - name: Upload failure artifacts
         if: always()
         uses: actions/upload-artifact@v7
