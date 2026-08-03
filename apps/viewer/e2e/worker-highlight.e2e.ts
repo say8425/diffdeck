@@ -157,7 +157,13 @@ test("first entry into the overscan window must not freeze the frame", async ({
 									?.querySelector("span[style]") != null,
 						),
 					),
-				{ timeout: 20_000 },
+				// liveness 폴이지 프레임 예산이 아니다 — "색이 결국 입혀지는가"만
+				// 본다. 이 테스트의 하드 단언은 위의 scrollGapMs이고 그건 그대로다.
+				// 워커 옵션이 어긋나면 색은 영원히 안 입혀지므로(위 옵션 정합 함정)
+				// 상한을 올려도 그 회귀는 동일하게 잡히고, 느린 공유 러너에서
+				// 나던 헛실패만 사라진다 — CI 실측 통상 ~12.5초인데 37.6초까지
+				// 늘어 20초를 넘긴 적이 있다(run 30752383588).
+				{ timeout: 40_000 },
 			)
 			.toBe(true);
 	} finally {

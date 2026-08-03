@@ -61,11 +61,39 @@ export const launchViewer = async (
 		},
 	);
 
-	const url = await readUrlFromStdout(proc.stdout);
+	// 기동 실패를 원인과 함께 던진다 — 예전엔 readUrlFromStdout의 타임아웃만
+	// 보이고 서버가 왜 못 떴는지는 stderr에 남아 그대로 버려졌다.
+	let url: string;
+	try {
+		url = await readUrlFromStdout(proc.stdout);
+	} catch (err) {
+		const stderr = proc.stderr().trim();
+		throw new Error(
+			`viewer failed to start: ${String(err)}${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(server wrote nothing to stderr)"}`,
+		);
+	}
+
+	// 서버가 우리가 끄기 "전에" 스스로 죽었는지 표시해 둔다. 실제로 관측된
+	// 실패 모드가 그것이다 — 기동은 정상이고 요청 몇 개를 처리한 뒤 /api/diff
+	// 도중 죽어, 화면이 "Loading…"에 고착된다. 그 경우 stderr가 유일한 단서인데
+	// 예전엔 읽히지 않고 버려졌다.
+	let diedOnItsOwn = false;
+	void proc.exited.then(() => {
+		diedOnItsOwn = true;
+	});
 
 	const stop = async (): Promise<void> => {
+		const crashed = diedOnItsOwn;
 		proc.kill("SIGINT");
-		await proc.exited;
+		const code = await proc.exited;
+		if (crashed) {
+			const stderr = proc.stderr().trim();
+			// throw하지 않는다 — stop()은 대개 finally에서 불리므로 던지면 진짜
+			// 실패를 덮는다. Playwright가 테스트 출력에 실어 주므로 그걸로 족하다.
+			console.error(
+				`[launchViewer] 서버가 stop() 전에 스스로 종료했다 (code ${code}).${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(stderr 비어 있음)"}`,
+			);
+		}
 		repo.cleanup();
 		rmSync(cacheHome, { recursive: true, force: true });
 	};
