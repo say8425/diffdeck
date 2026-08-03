@@ -83,9 +83,14 @@ export const spawnLongRunning = (
 	exited.catch(() => {});
 	// stderr를 실제로 읽는다. 읽지 않으면 pipe 버퍼에 쌓이기만 하다 kill과 함께
 	// 버려지고, 자식이 죽은 이유를 아무도 못 본다.
+	// setEncoding으로 받는다 — Buffer.toString()을 청크마다 부르면 멀티바이트가
+	// 청크 경계에서 쪼개져 깨진다. 이 리포의 서버 로그는 한국어라 그건 실제
+	// 손실이고, 같은 픽스처의 readUrlFromStdout이 TextDecoder({stream:true})를
+	// 쓰는 것과 같은 이유다.
 	let stderrBuffer = "";
-	child.stderr.on("data", (chunk: Buffer) => {
-		stderrBuffer += chunk.toString();
+	child.stderr.setEncoding("utf8");
+	child.stderr.on("data", (chunk: string) => {
+		stderrBuffer += chunk;
 	});
 	return {
 		stdout: child.stdout,
