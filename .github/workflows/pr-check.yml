@@ -87,8 +87,11 @@ jobs:
       # retry #1에서 11.9초로 통과 → `1 flaky / 70 passed`, 잡은 초록, 아티팩트
       # 498KB(그 실패 시도의 trace). failure()였다면 그대로 사라졌을 증거다.
       # 한 번도 실패하지 않은 런에서는 .last-run.json 45바이트만 올라간다.
-      - name: Upload failure artifacts
-        if: always()
+      # always()가 아니라 !cancelled()인 이유: 이 워크플로는 cancel-in-progress라
+      # 연속 푸시 때 가장 무거운 e2e가 가장 자주 취소되는데, always()는 그때도
+      # 참이라 진단 가치 없는 반쪽 test-results를 매번 올리고 취소를 늦춘다.
+      - name: Upload e2e artifacts
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: playwright-results
