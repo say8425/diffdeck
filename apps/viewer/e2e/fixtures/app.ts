@@ -68,8 +68,11 @@ export const launchViewer = async (
 		url = await readUrlFromStdout(proc.stdout);
 	} catch (err) {
 		const stderr = proc.stderr().trim();
+		// cause로 원본을 붙인다 — 메시지에 String(err)로 찍는 것만으로는 스택이
+		// 끊긴다. 진단 정보를 보존하려고 만든 경로에서 그걸 버리면 앞뒤가 안 맞는다.
 		throw new Error(
-			`viewer failed to start: ${String(err)}${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(server wrote nothing to stderr)"}`,
+			`viewer failed to start${stderr ? `\n--- server stderr ---\n${stderr}` : "\n(server wrote nothing to stderr)"}`,
+			{ cause: err },
 		);
 	}
 
@@ -82,10 +85,8 @@ export const launchViewer = async (
 	// (proc.ts가 원본 프라미스에 대해 문서화해 둔 바로 그 함정).
 	let diedOnItsOwn = false;
 	void proc.exited.then(
-		() => {
-			diedOnItsOwn = true;
-		},
-		() => {},
+		() => (diedOnItsOwn = true),
+		() => false,
 	);
 
 	const stop = async (): Promise<void> => {
