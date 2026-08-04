@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ParsedArgs } from "../cli/args.ts";
 import { realDeps, run, type CliDeps } from "../cli.ts";
+import { SAFE_CWD } from "../server/cwd.ts";
 import type { DiffServerHandle } from "../server/server.ts";
 
 class ExitSignal extends Error {
@@ -59,6 +60,7 @@ const makeDeps = (over: Partial<CliDeps> = {}): CliDeps => ({
 	}) as unknown as CliDeps["exit"],
 	onSignal: mock(),
 	cwd: mock(() => "/repo"),
+	toSafeCwd: mock(),
 	viewerDir: "/v",
 	prewarm: mock(),
 	...over,
@@ -172,6 +174,7 @@ describe("run — normal startup", () => {
 		expect(deps.startServer).toHaveBeenCalledWith({
 			port: 49573,
 			viewerDir: "/v",
+			repairCwd: deps.toSafeCwd,
 		});
 		expect(deps.buildUrl).toHaveBeenCalledWith({
 			port: 5000,
@@ -228,6 +231,7 @@ describe("run — normal startup", () => {
 		expect(deps.startServer).toHaveBeenCalledWith({
 			port: 6001,
 			viewerDir: "/v",
+			repairCwd: deps.toSafeCwd,
 		});
 	});
 
@@ -240,7 +244,53 @@ describe("run — normal startup", () => {
 		expect(deps.startServer).toHaveBeenCalledWith({
 			port: 49573,
 			viewerDir: "/v",
+			repairCwd: deps.toSafeCwd,
 		});
+	});
+
+	// 순서가 곧 계약이다. toSafeCwd가 cwd()보다 먼저면 repo가 "/"가 되어
+	// 엉뚱한 리포를 서빙하고, startServer보다 나중이면 그 사이에 기동
+	// 디렉토리가 지워지는 창이 남는다.
+	test("repo를 읽은 뒤, 서버를 띄우기 전에 안전 cwd로 이탈한다", () => {
+		const calls: string[] = [];
+		const deps = makeDeps({
+			cwd: mock(() => {
+				calls.push("cwd");
+				return "/repo";
+			}),
+			toSafeCwd: mock(() => {
+				calls.push("toSafeCwd");
+			}),
+			startServer: mock(() => {
+				calls.push("startServer");
+				return makeHandle(5000);
+			}) as unknown as CliDeps["startServer"],
+		});
+
+		run([], deps);
+
+		expect(calls).toEqual(["cwd", "toSafeCwd", "startServer"]);
+	});
+
+	test("이탈 전에 읽은 repo가 URL에 실린다", () => {
+		const deps = makeDeps({ cwd: mock(() => "/repo") });
+
+		run([], deps);
+
+		expect(deps.buildUrl).toHaveBeenCalledWith(
+			expect.objectContaining({ repo: "/repo" }),
+		);
+	});
+
+	test("같은 이탈 함수를 서버의 복구 훅으로 주입한다", () => {
+		const toSafeCwd = mock();
+		const deps = makeDeps({ toSafeCwd });
+
+		run([], deps);
+
+		expect(deps.startServer).toHaveBeenCalledWith(
+			expect.objectContaining({ repairCwd: toSafeCwd }),
+		);
 	});
 
 	test("undefined handle.server.port falls back to the requested port in buildUrl", () => {
@@ -339,6 +389,20 @@ describe("realDeps", () => {
 
 	test("cwd delegates to process.cwd", () => {
 		expect(realDeps.cwd()).toBe(process.cwd());
+	});
+
+	// realDeps.toSafeCwd는 커버리지 게이트(함수 100%) 대상이라 실제로 한 번
+	// 불려야 한다. bun test는 파일들을 한 프로세스에서 순차 실행하므로
+	// chdir이 새어나가면 뒤따르는 테스트 파일이 전부 오염된다 — finally로
+	// 반드시 되돌린다.
+	test("realDeps.toSafeCwd가 프로세스를 안전 경로로 옮긴다", () => {
+		const before = process.cwd();
+		try {
+			realDeps.toSafeCwd();
+			expect(process.cwd()).toBe(SAFE_CWD);
+		} finally {
+			process.chdir(before);
+		}
 	});
 
 	test("prewarm is fire-and-forget and never throws, even unreachable", () => {
