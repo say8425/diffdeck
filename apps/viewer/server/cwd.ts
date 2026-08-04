@@ -24,4 +24,16 @@ export const SAFE_CWD = "/";
 export const isCwdAlive = (deps: {
 	cwd: () => string;
 	exists: (path: string) => boolean;
-}): boolean => deps.exists(deps.cwd());
+}): boolean => {
+	try {
+		return deps.exists(deps.cwd());
+	} catch {
+		// 런타임에 따라 삭제된 cwd에서 process.cwd()가 throw한다 — 동일
+		// darwin에서 Node는 uv_cwd ENOENT를 던지고 Bun은 캐시된 스테일
+		// 문자열을 돌려준다(실측). throw했다는 사실 자체가 "cwd가 죽었다"는
+		// 증거이므로 false가 정답이다. 여기서 삼키지 않으면 핸들러 진입부가
+		// 그대로 터져 Bun.serve에 error 핸들러가 없는 지금 모든 라우트가
+		// 500이 된다 — 고치려는 버그보다 나쁘다.
+		return false;
+	}
+};

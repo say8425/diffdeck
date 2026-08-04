@@ -138,7 +138,8 @@ const createHandler = (cfg: {
 		// 되살린다. 라우트마다 흩지 않고 진입부에 두는 이유는 git을 쓰는
 		// 라우트가 앞으로 늘어도 자동으로 덮이기 때문이고, 비용이 요청당
 		// ~1µs(실측)라 그래도 되기 때문이다.
-		if (!isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS)) cfg.repairCwd?.();
+		if (cfg.repairCwd && !isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS))
+			cfg.repairCwd();
 
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
@@ -309,6 +310,8 @@ export const startDiffServer = (opts: {
 	// 같은 이름 필드로 그대로 흘러간다.
 	flightTimeoutMs?: number;
 	repairCwd?: () => void;
+	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
+	// flightTimeoutMs와 같은 패턴이다.
 	cwdDeps?: { cwd: () => string; exists: (path: string) => boolean };
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;

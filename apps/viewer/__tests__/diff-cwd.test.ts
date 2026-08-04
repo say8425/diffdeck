@@ -27,6 +27,18 @@ describe("isCwdAlive", () => {
 		});
 		expect(seen).toEqual(["/x"]);
 	});
+
+	// 커버리지 게이트가 branch를 세지 않으므로 이 분기를 일부러 찌른다.
+	test("cwd()가 throw하면 죽은 것으로 판정한다", () => {
+		expect(
+			isCwdAlive({
+				cwd: () => {
+					throw new Error("ENOENT: uv_cwd");
+				},
+				exists: () => true,
+			}),
+		).toBe(false);
+	});
 });
 
 describe("SAFE_CWD", () => {

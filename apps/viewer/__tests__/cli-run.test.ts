@@ -272,7 +272,7 @@ describe("run — normal startup", () => {
 		expect(calls).toEqual(["cwd", "toSafeCwd", "startServer"]);
 	});
 
-	test("이탈 전에 읽은 repo가 URL에 실린다", () => {
+	test("buildUrl은 기동 디렉토리를 repo로 받는다", () => {
 		const deps = makeDeps({ cwd: mock(() => "/repo") });
 
 		run([], deps);
