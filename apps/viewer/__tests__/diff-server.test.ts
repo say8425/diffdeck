@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -232,6 +232,42 @@ describe("diff server", () => {
 
 		const statusLine = response.split("\r\n")[0] ?? "";
 		expect(statusLine).toContain("403");
+	});
+
+	// 커버리지 게이트는 branch를 세지 않으므로 분기 양쪽을 각각 찌른다 —
+	// 한쪽만 있으면 repairCwd가 영영 안 불려도 100%로 찍힌다.
+	test("cwd가 삭제됐으면 요청 처리 전에 복구를 호출한다", async () => {
+		const repairCwd = mock();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			repairCwd,
+			cwdDeps: { cwd: () => "/gone", exists: () => false },
+		});
+		try {
+			await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(repairCwd).toHaveBeenCalledTimes(1);
+		} finally {
+			h.stop();
+		}
+	});
+
+	test("cwd가 살아있으면 복구를 호출하지 않는다", async () => {
+		const repairCwd = mock();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			repairCwd,
+			cwdDeps: { cwd: () => repo, exists: () => true },
+		});
+		try {
+			await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(repairCwd).not.toHaveBeenCalled();
+		} finally {
+			h.stop();
+		}
 	});
 });
 
