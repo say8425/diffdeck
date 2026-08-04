@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Server } from "bun";
 import packageJson from "../package.json";
-import { isCwdAlive } from "./cwd.ts";
+import { type CwdDeps, isCwdAlive } from "./cwd.ts";
 import {
 	getDiffFiles,
 	getFileBytes,
@@ -103,7 +103,7 @@ const createHandler = (cfg: {
 	repairCwd?: () => void;
 	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
 	// flightTimeoutMs와 같은 패턴이다.
-	cwdDeps?: { cwd: () => string; exists: (path: string) => boolean };
+	cwdDeps?: CwdDeps;
 }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
@@ -136,10 +136,19 @@ const createHandler = (cfg: {
 		// 위한 자가회복. cwd가 삭제되면 git 호출이 repo와 무관하게 전부
 		// 죽으므로(자식 프로세스 생성 자체가 불가) 요청을 처리하기 전에
 		// 되살린다. 라우트마다 흩지 않고 진입부에 두는 이유는 git을 쓰는
-		// 라우트가 앞으로 늘어도 자동으로 덮이기 때문이고, 비용이 요청당
-		// ~1µs(실측)라 그래도 되기 때문이다.
-		if (cfg.repairCwd && !isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS))
+		// 라우트가 앞으로 늘어도 자동으로 덮이기 때문이고, repairCwd가 주입된
+		// 경우 비용이 요청당 ~1µs(실측)라 그래도 되기 때문이다.
+		//
+		// `cfg.repairCwd &&`를 먼저 보는 게 계약이다 — repairCwd가 없으면
+		// isCwdAlive 호출 자체를 건너뛴다. startDiffServer를 임베드했지만
+		// repairCwd를 안 넘긴 호스트에게는 그 감지조차 원하지 않는 순수
+		// 비용(위 ~1µs가 아니라 0이어야 하는 비용)이기 때문이다. 순서를
+		// `if (!isCwdAlive(...)) cfg.repairCwd?.();`로 "정리"하면 매 요청 감지가
+		// 다시 켜져 diff-server.test.ts의 "repairCwd를 안 넘기면 cwd 탐지
+		// 자체를 건너뛴다" 테스트가 빨간불이 된다.
+		if (cfg.repairCwd && !isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS)) {
 			cfg.repairCwd();
+		}
 
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
@@ -309,10 +318,12 @@ export const startDiffServer = (opts: {
 	// 테스트 전용 — CLI(cli.ts/args.ts)에는 배선돼 있지 않다. createHandler의
 	// 같은 이름 필드로 그대로 흘러간다.
 	flightTimeoutMs?: number;
+	// 셋 중 유일하게 프로덕션에서 실제로 배선되는 필드 — cli.ts가 toSafeCwd를
+	// 넘긴다. 위아래가 테스트 전용 훅이라고 이 필드까지 그렇게 읽지 말 것.
 	repairCwd?: () => void;
 	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
 	// flightTimeoutMs와 같은 패턴이다.
-	cwdDeps?: { cwd: () => string; exists: (path: string) => boolean };
+	cwdDeps?: CwdDeps;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	// Mint the token but don't write it yet — Bun.serve throws if the port is

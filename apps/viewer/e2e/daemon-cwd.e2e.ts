@@ -29,6 +29,6 @@ test("기동 디렉토리가 삭제돼도 다른 repo를 계속 서빙한다", a
 		expect(files.length).toBeGreaterThan(0);
 	} finally {
 		await viewer.stop();
-		rmSync(throwaway.dir, { recursive: true, force: true });
+		throwaway.cleanup();
 	}
 });

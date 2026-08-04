@@ -11,6 +11,16 @@
 export const SAFE_CWD = "/";
 
 /**
+ * cwd 생존 판정에 필요한 syscall 의존. server.ts의 `createHandler` cfg·
+ * `startDiffServer` opts와 이 파일의 `isCwdAlive` 파라미터, 총 세 곳에서
+ * 같은 모양을 반복해 여기서 한 번만 선언하고 재사용한다.
+ */
+export interface CwdDeps {
+	cwd: () => string;
+	exists: (path: string) => boolean;
+}
+
+/**
  * cwd가 아직 살아 있는지 판정한다.
  *
  * `existsSync(".")`·`statSync(".")`로는 못 잡는다: 디렉토리가 unlink돼도
@@ -21,10 +31,7 @@ export const SAFE_CWD = "/";
  * syscall을 직접 부르지 않고 주입받는 이유는 이 판정을 hermetic하게
  * 단위 테스트하기 위해서다.
  */
-export const isCwdAlive = (deps: {
-	cwd: () => string;
-	exists: (path: string) => boolean;
-}): boolean => {
+export const isCwdAlive = (deps: CwdDeps): boolean => {
 	try {
 		return deps.exists(deps.cwd());
 	} catch {
