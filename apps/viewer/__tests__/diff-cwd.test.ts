@@ -9,9 +9,7 @@ describe("isCwdAlive", () => {
 	});
 
 	test("삭제된 cwd 경로에 false", () => {
-		expect(isCwdAlive({ cwd: () => "/gone", exists: () => false })).toBe(
-			false,
-		);
+		expect(isCwdAlive({ cwd: () => "/gone", exists: () => false })).toBe(false);
 	});
 
 	// 이 계약이 이 모듈의 존재 이유다. existsSync(".")/statSync(".")는
