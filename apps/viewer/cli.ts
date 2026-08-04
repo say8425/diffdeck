@@ -7,6 +7,7 @@ import {
 import { openerCommand } from "./cli/opener.ts";
 import packageJson from "./package.json";
 import { resolveDiffPort } from "./server/config.ts";
+import { SAFE_CWD } from "./server/cwd.ts";
 import { buildDiffViewerUrl } from "./server/link.ts";
 import { prewarmDiff } from "./server/prewarm.ts";
 import { startDiffServer } from "./server/server.ts";
@@ -50,6 +51,8 @@ export interface CliDeps {
 	exit: (code: number) => never;
 	onSignal: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
 	cwd: () => string;
+	/** 프로세스를 재오염 불가능한 경로로 옮긴다. 예방과 복구 양쪽에 쓰인다. */
+	toSafeCwd: () => void;
 	viewerDir: string;
 	prewarm: (opts: {
 		port: number;
@@ -82,9 +85,20 @@ export const run = (argv: string[], deps: CliDeps): void => {
 	const port = args.port ?? deps.resolvePort();
 	const repo = deps.cwd();
 
+	// repo를 읽었으니 프로세스 cwd는 더 이상 쓰이지 않는다(이후 git 호출
+	// 17곳은 전부 repo를 명시적으로 넘긴다). 여기서 이탈해 두면 이 디렉토리가
+	// — 대개 worktree라 작업이 끝나면 삭제된다 — 나중에 지워져도 데몬이
+	// 살아남는다. cwd가 unlink된 프로세스는 자식 프로세스를 하나도 띄울 수
+	// 없어(OS 제약) git 호출이 repo와 무관하게 전부 죽는다.
+	deps.toSafeCwd();
+
 	let handle: ReturnType<typeof startDiffServer>;
 	try {
-		handle = deps.startServer({ port, viewerDir: deps.viewerDir });
+		handle = deps.startServer({
+			port,
+			viewerDir: deps.viewerDir,
+			repairCwd: deps.toSafeCwd,
+		});
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		deps.error(`diffdeck: failed to start server on port ${port}: ${message}`);
@@ -164,6 +178,7 @@ export const realDeps: CliDeps = {
 		process.on(signal, handler);
 	},
 	cwd: () => process.cwd(),
+	toSafeCwd: () => process.chdir(SAFE_CWD),
 	viewerDir: `${import.meta.dir}/viewer`,
 	prewarm: (opts) => void prewarmDiff(opts),
 };

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -232,6 +232,84 @@ describe("diff server", () => {
 
 		const statusLine = response.split("\r\n")[0] ?? "";
 		expect(statusLine).toContain("403");
+	});
+
+	// 커버리지 게이트는 branch를 세지 않으므로 분기 양쪽을 각각 찌른다 —
+	// 한쪽만 있으면 repairCwd가 영영 안 불려도 100%로 찍힌다.
+	test("cwd가 삭제됐으면 요청 처리 전에 복구를 호출한다", async () => {
+		const repairCwd = mock();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			repairCwd,
+			cwdDeps: { cwd: () => "/gone", exists: () => false },
+		});
+		try {
+			await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(repairCwd).toHaveBeenCalledTimes(1);
+		} finally {
+			h.stop();
+		}
+	});
+
+	test("cwd가 살아있으면 복구를 호출하지 않는다", async () => {
+		const repairCwd = mock();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			repairCwd,
+			cwdDeps: { cwd: () => repo, exists: () => true },
+		});
+		try {
+			await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(repairCwd).not.toHaveBeenCalled();
+		} finally {
+			h.stop();
+		}
+	});
+
+	// cwdDeps를 안 넘기면 REAL_CWD_DEPS(process.cwd()/existsSync)가
+	// 쓰인다 — M-4로 탐지가 repairCwd 유무로 단축평가되면서, cwdDeps까지
+	// 생략한 호출이 없으면 REAL_CWD_DEPS.cwd가 영영 호출되지 않아 함수
+	// 커버리지가 100%에서 떨어진다(실측). 실제 cwd는 살아있으므로 복구는
+	// 안 불리지만, 이 테스트의 목적은 그 경로 자체가 실행되는 것이다.
+	test("repairCwd만 넘기고 cwdDeps는 생략하면 실제 process.cwd()를 쓴다", async () => {
+		const repairCwd = mock();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			repairCwd,
+		});
+		try {
+			await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(repairCwd).not.toHaveBeenCalled();
+		} finally {
+			h.stop();
+		}
+	});
+
+	// repairCwd를 안 넘긴 호스트는 정의상 cwd를 건드리길 원하지 않는
+	// 쪽이므로 탐지 자체(isCwdAlive 호출)가 매 요청 순수 비용이 되면 안
+	// 된다 — cwdDeps가 "죽었다"고 답하도록 세팅해 두고도 exists가 한
+	// 번도 안 불리는 것으로 탐지가 통째로 건너뛰었음을 증명한다.
+	test("repairCwd를 안 넘기면 cwd 탐지 자체를 건너뛴다", async () => {
+		const exists = mock(() => false);
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			cwdDeps: { cwd: () => "/gone", exists },
+		});
+		try {
+			const res = await fetch(`http://127.0.0.1:${h.server.port}/api/ping`);
+			expect(res.status).toBe(204);
+			expect(exists).not.toHaveBeenCalled();
+		} finally {
+			h.stop();
+		}
 	});
 });
 

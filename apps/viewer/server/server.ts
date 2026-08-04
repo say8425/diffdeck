@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Server } from "bun";
 import packageJson from "../package.json";
+import { type CwdDeps, isCwdAlive } from "./cwd.ts";
 import {
 	getDiffFiles,
 	getFileBytes,
@@ -79,6 +81,10 @@ export const awaitFlight = async <T>(
 	}
 };
 
+// 실제 syscall 바인딩. cwd.ts를 순수하게 유지하려고 밖에 둔다 —
+// 단위 테스트는 isCwdAlive에 fake를 직접 주입한다.
+const REAL_CWD_DEPS = { cwd: () => process.cwd(), exists: existsSync };
+
 const createHandler = (cfg: {
 	viewerDir: string;
 	token: string;
@@ -89,6 +95,15 @@ const createHandler = (cfg: {
 	// awaitFlight까지 이어지는 진짜 타임아웃이 실제 HTTP 503으로 나오는지
 	// 검증할 수 있다.
 	flightTimeoutMs?: number;
+	// 프로세스 cwd가 삭제된 상태로 발견되면 부를 복구 함수. cli.ts가
+	// toSafeCwd를 넘긴다. process.chdir()은 프로세스 전역 부작용이라
+	// 라이브러리인 여기서 직접 부르지 않는다 — startDiffServer를 임베드한
+	// 호스트의 cwd를 말없이 옮기게 되기 때문. 감지는 여기서, 복구 권한은
+	// 프로세스를 소유한 쪽에서.
+	repairCwd?: () => void;
+	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
+	// flightTimeoutMs와 같은 패턴이다.
+	cwdDeps?: CwdDeps;
 }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
@@ -116,6 +131,24 @@ const createHandler = (cfg: {
 	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
+
+		// 예방(cli.ts의 toSafeCwd)이 어떤 이유로든 적용되지 않은 프로세스를
+		// 위한 자가회복. cwd가 삭제되면 git 호출이 repo와 무관하게 전부
+		// 죽으므로(자식 프로세스 생성 자체가 불가) 요청을 처리하기 전에
+		// 되살린다. 라우트마다 흩지 않고 진입부에 두는 이유는 git을 쓰는
+		// 라우트가 앞으로 늘어도 자동으로 덮이기 때문이고, repairCwd가 주입된
+		// 경우 비용이 요청당 ~1µs(실측)라 그래도 되기 때문이다.
+		//
+		// `cfg.repairCwd &&`를 먼저 보는 게 계약이다 — repairCwd가 없으면
+		// isCwdAlive 호출 자체를 건너뛴다. startDiffServer를 임베드했지만
+		// repairCwd를 안 넘긴 호스트에게는 그 감지조차 원하지 않는 순수
+		// 비용(위 ~1µs가 아니라 0이어야 하는 비용)이기 때문이다. 순서를
+		// `if (!isCwdAlive(...)) cfg.repairCwd?.();`로 "정리"하면 매 요청 감지가
+		// 다시 켜져 diff-server.test.ts의 "repairCwd를 안 넘기면 cwd 탐지
+		// 자체를 건너뛴다" 테스트가 빨간불이 된다.
+		if (cfg.repairCwd && !isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS)) {
+			cfg.repairCwd();
+		}
 
 		if (url.pathname === "/api/ping") {
 			return new Response(null, {
@@ -285,6 +318,12 @@ export const startDiffServer = (opts: {
 	// 테스트 전용 — CLI(cli.ts/args.ts)에는 배선돼 있지 않다. createHandler의
 	// 같은 이름 필드로 그대로 흘러간다.
 	flightTimeoutMs?: number;
+	// 셋 중 유일하게 프로덕션에서 실제로 배선되는 필드 — cli.ts가 toSafeCwd를
+	// 넘긴다. 위아래가 테스트 전용 훅이라고 이 필드까지 그렇게 읽지 말 것.
+	repairCwd?: () => void;
+	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
+	// flightTimeoutMs와 같은 패턴이다.
+	cwdDeps?: CwdDeps;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	// Mint the token but don't write it yet — Bun.serve throws if the port is
@@ -297,6 +336,8 @@ export const startDiffServer = (opts: {
 		viewerDir: opts.viewerDir,
 		token,
 		flightTimeoutMs: opts.flightTimeoutMs,
+		repairCwd: opts.repairCwd,
+		cwdDeps: opts.cwdDeps,
 	});
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
