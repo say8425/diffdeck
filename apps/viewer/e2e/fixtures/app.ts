@@ -48,6 +48,10 @@ export interface LaunchedViewer {
 export const launchViewer = async (
 	flags: string[] = [],
 	repoOptions: FixtureRepoOptions = {},
+	// 기동 시 CLI의 cwd. 기본값은 픽스처 repo 자신이라 기존 호출부는 그대로다.
+	// daemon-cwd.e2e.ts만 이걸 따로 준다 — 기동 cwd를 지웠을 때도 서빙 대상
+	// repo는 살아 있어야 "cwd 삭제"와 "repo 삭제"를 구분할 수 있기 때문.
+	launchCwd?: string,
 ): Promise<LaunchedViewer> => {
 	const repo = makeFixtureRepo(repoOptions);
 	const cacheHome = mkdtempSync(join(tmpdir(), "dd-e2e-cache-"));
@@ -56,7 +60,7 @@ export const launchViewer = async (
 		"bun",
 		[cliPath, "--no-open", "--port", "0", ...flags],
 		{
-			cwd: repo.dir,
+			cwd: launchCwd ?? repo.dir,
 			env: { ...process.env, XDG_CACHE_HOME: cacheHome },
 		},
 	);
