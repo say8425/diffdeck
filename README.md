@@ -171,7 +171,7 @@ scripts/        source-map extraction tool, css-inline Bun plugin, render-parity
 docs/           README translations and screenshots
 ```
 
-Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
+Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map` — these are the packages' own dependencies; the published CLI bundles everything, so nothing is resolved at install time.
 
 ## Development
 

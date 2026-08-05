@@ -161,7 +161,7 @@ scripts/        source-map extraction tool, css-inline Bun plugin, render-parity
 docs/           README translations and screenshots
 ```
 
-依赖关系图：`path-store`（无依赖）← `trees`；`theming`（shiki）← `diffs`、`trees`。运行时外部依赖：shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`。
+依赖关系图：`path-store`（无依赖）← `trees`；`theming`（shiki）← `diffs`、`trees`。运行时外部依赖：shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`——这些是各包自身的依赖；发布的 CLI 会全部打包，因此安装时不会解析任何依赖。
 
 ## 开发
 

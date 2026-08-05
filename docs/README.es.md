@@ -161,7 +161,7 @@ scripts/        herramienta de extracción de source maps, plugin de Bun css-inl
 docs/           traducciones del README y capturas de pantalla
 ```
 
-Grafo de dependencias: `path-store` (sin dependencias) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Externals en runtime: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
+Grafo de dependencias: `path-store` (sin dependencias) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Externals en runtime: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map` — son dependencias de los propios paquetes; la CLI publicada lo empaqueta todo, así que no se resuelve nada al instalar.
 
 ## Desarrollo
 

@@ -33,6 +33,18 @@ const extractOptionsFlags = (help: string): string[] => {
  * 문서에서 플래그는 항상 코드 스팬으로 적힌다: `--split` 또는 `--port <n>`.
  * 여는 백틱을 요구해 산문 속 우연한 일치를 막고, 뒤에 백틱이나 공백을 요구해
  * `--tree-right`가 가상의 `--tree-right-foo`에 매칭되지 않게 한다.
+ *
+ * 이 게이트의 한계를 알고 쓸 것 — 셋 다 실측으로 확인했다:
+ * 1. **단방향**이다. HELP의 각 플래그가 문서에 있는지만 본다. 플래그를
+ *    삭제하면 문서에 남은 유령 플래그가 그대로 통과한다.
+ * 2. **언급**을 증명하지 실제 **위치**를 증명하지 않는다. 표의 행을 지우고
+ *    같은 코드 스팬을 산문 한 줄로 옮겨도 통과한다. 그래도 표 문법에
+ *    앵커를 걸지 않는 건, 번역 4종의 컬럼 폭이 제각각이고 SKILL.md는
+ *    애초에 표가 아니라서다 — 앵커를 걸면 게이트가 먼저 부서진다.
+ * 3. `Options:` 블록만 읽는다. `install-skill`의 `--codex`·`--project`는
+ *    Commands 섹션이라 이 게이트 밖이다.
+ * 무는 곳은 확실히 문다: 번역에서 행 하나를 지우면 그 문서만 빨간불이 되고,
+ * HELP에 새 플래그를 넣으면 일곱 문서가 한꺼번에 빨간불이 된다.
  */
 const documents = (content: string, flag: string): boolean =>
 	new RegExp(`\`${flag}[\`\\s]`).test(content);
@@ -49,10 +61,13 @@ describe("CLI flag parity between cli.ts HELP and every doc that lists flags", (
 		expect(flags).not.toContain("--version");
 	});
 
+	// 파일 읽기는 test 콜백 **안**에서 한다. describe 본문에서 읽으면 경로가
+	// 하나만 틀려도 테스트가 등록되기 전에 throw해서, "문서 X가 없다"가 아니라
+	// 정체불명의 수집 크래시로 보인다 — 위 가드 두 개조차 돌지 않는다.
 	for (const doc of DOCS) {
-		const content = readFileSync(join(repoRoot, doc), "utf8");
 		for (const flag of flags) {
 			test(`${doc} documents ${flag}`, () => {
+				const content = readFileSync(join(repoRoot, doc), "utf8");
 				expect(documents(content, flag)).toBe(true);
 			});
 		}

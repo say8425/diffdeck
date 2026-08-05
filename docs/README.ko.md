@@ -161,7 +161,7 @@ scripts/        source-map extraction tool, css-inline Bun plugin, render-parity
 docs/           README translations and screenshots
 ```
 
-의존성 그래프: `path-store`(의존성 없음) ← `trees`; `theming`(shiki) ← `diffs`, `trees`. 런타임 외부 의존성: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
+의존성 그래프: `path-store`(의존성 없음) ← `trees`; `theming`(shiki) ← `diffs`, `trees`. 런타임 외부 의존성: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map` — 패키지들 자신의 의존성이며, 배포되는 CLI는 전부 번들하므로 설치 시점에 resolve되는 것은 없습니다.
 
 ## 개발
 
