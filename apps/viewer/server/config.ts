@@ -12,9 +12,6 @@ export const resolveDiffPort = (env: Env = process.env): number => {
 	return Number.isInteger(n) && n > 0 && n < 65536 ? n : DEFAULT_DIFF_PORT;
 };
 
-export const isDiffViewerDisabled = (env: Env = process.env): boolean =>
-	env.DIFFDECK_DISABLE === "1";
-
 export const getCacheDir = (env: Env = process.env): string => {
 	const base = env.XDG_CACHE_HOME || join(env.HOME || homedir(), ".cache");
 	return join(base, "diffdeck");

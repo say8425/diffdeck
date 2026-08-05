@@ -15,7 +15,7 @@ Pierre の [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs) と [`
 
 diffdeck は、もともと [cc-statusline](https://github.com/say8425/cc-statusline) に組み込まれていたローカル diff ビューアを、独立した製品として切り出したものです。アップストリームの Pierre パッケージ — 変化が激しく(`@pierre/diffs` は頻繁に破壊的変更が入り、`@pierre/trees` はまだ 1.0 未満のベータ版)、しかも内部マークアップにすでに深く依存していた — にそのまま依存し続ける代わりに、diffdeck は **パッケージのソースマップから元の TypeScript を復元してベンダリングし**、レンダリングエンジンを完全に自前で保有しています。
 
-その結果、改変が難しい、フレームワークに依存しない diff エンジン(Pierre の `CodeView`、約 27,000 行)はそのまま維持しつつ、カスタマイズする部分だけを自前のコードに置く、という構成の Bun ワークスペースのモノレポになっています。
+その結果、改変が難しい、フレームワークに依存しない diff エンジン(Pierre の `CodeView`、約 29,500 行)はそのまま維持しつつ、カスタマイズする部分だけを自前のコードに置く、という構成の Bun ワークスペースのモノレポになっています。
 
 ## 機能
 
@@ -93,6 +93,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--tree-right` | ファイルツリーを右側に配置した状態で開始 |
 | `--split` | split ビューで開始(デフォルトは unified) |
 | `--hide-tree` | ファイルツリーを非表示にした状態で開始 |
+| `--fold-with-tree` | サイドバーのディレクトリ折りたたみを diff の折りたたみと同期した状態で開始 |
 | `-h`, `--help` | ヘルプを表示 |
 | `-v`, `--version` | バージョンを表示 |
 
@@ -154,8 +155,10 @@ packages/
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (vanilla render)
-apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer + agent skill
+apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer
+skills/         エージェントスキル(SKILL.md) — ビルド時にパッケージへコピーされる
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
+docs/           README の翻訳とスクリーンショット
 ```
 
 依存関係グラフ: `path-store`(依存なし)← `trees`、`theming`(shiki)← `diffs`, `trees`。ランタイムの外部依存: shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`。
@@ -177,7 +180,7 @@ bun run format      # oxfmt
 3つのレーンがあります:
 
 - `bun test` — ユニット/統合テスト、高速。`*.e2e.ts` の spec は収集対象から除外されるため、ブラウザは起動しません。
-- `bun run test:coverage` — 同じテストスイートに、**diffdeck が所有するランタイムコード(`apps/viewer/{browser,cli,server}`)への 100% カバレッジゲート** を加えたもの。意図的にゲート対象外としているのは、ベンダリングされた `packages/*`、ブラウザエントリの `main.ts`(統合エントリ — インプロセスではなく e2e スイートで代わりに検証)、そして `build.ts` です。
+- `bun run test:coverage` — 同じテストスイートに、**diffdeck が所有するランタイムコード(`apps/viewer/{browser,cli,server}`)への 100% カバレッジゲート** を加えたもの。意図的にゲート対象外としているのは、ベンダリングされた `packages/*`、`scripts/` 配下のツール、ブラウザエントリの `main.ts`(統合エントリ — インプロセスではなく e2e スイートで代わりに検証)、`build.ts`、そしてスペック自身(`*.test.ts`、`e2e/**`)です。
 - `bun run test:e2e` — Playwright による実ブラウザスイート(`apps/viewer/e2e/`)。`channel: "chrome"` 経由でシステムの Google Chrome を操作し(Chromium のダウンロードは不要)、`main.ts` とベンダリングされたレンダリングパスをエンドツーエンドでカバーします。
 
 ### レンダーパリティハーネス
