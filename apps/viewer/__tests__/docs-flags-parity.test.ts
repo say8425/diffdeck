@@ -8,8 +8,9 @@ const repoRoot = join(import.meta.dir, "..", "..", "..");
 // cli.ts의 HELP가 CLI 표면의 단일 진실이고, 아래 문서들은 전부 그 표면을
 // 사람에게 되풀이해 말한다. 예전엔 SKILL.md 하나만 대조했는데, 그 사이
 // `--fold-with-tree`가 npm README(apps/viewer/README.md)와 번역 4종에서
-// 조용히 빠져 있었다 — 플래그가 생긴 #14이 루트 README와 SKILL.md만
-// 갱신했기 때문이다. 게이트가 한 문서만 보면 나머지는 아무도 지키지 않는다.
+// 조용히 빠져 있었다 — 플래그를 만든 #14은 루트 README와 CLAUDE.md만
+// 갱신했고, SKILL.md는 이 테스트를 만든 #24이 뒤늦게 채웠기 때문이다.
+// 게이트가 감시하는 문서만 따라잡힌다. 그래서 목록을 전부로 넓혔다.
 const DOCS = [
 	"skills/diffdeck/SKILL.md",
 	"README.md",

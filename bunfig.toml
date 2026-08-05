@@ -8,7 +8,10 @@ root = "."
 # is intentionally NOT preloaded here. Registering happy-dom globally replaces
 # Node's fetch/http with happy-dom's implementations for the *entire* test run,
 # which broke apps/viewer's real HTTP server tests (diff-server, api/blob,
-# built-serving — 21 failures). Trees view/DOM tests must instead
+# built-serving) with `NetworkError: ... Parse Error` out of happy-dom's fetch.
+# The blast radius scales with the suite: 21 failures when first hit, 58 when
+# re-measured on 2026-08-05 — don't treat the count as a constant, just keep
+# happy-dom out of this list. Trees view/DOM tests must instead
 # `import "../__tests__/happydom";` at the top of each file that needs a DOM
 # (see happydom-smoke.test.ts).
 preload = ["./scripts/parity/preload.ts"]
