@@ -15,7 +15,7 @@ Un visor de diff local, construido sobre un fork vendorizado de los paquetes de 
 
 diffdeck es el visor de diff local que originalmente estaba embebido en [cc-statusline](https://github.com/say8425/cc-statusline), ahora extraído como un producto propio. En lugar de depender de los paquetes originales de Pierre — que evolucionan rápido (`@pierre/diffs` cambia mucho; `@pierre/trees` está en beta pre-1.0) y cuyo markup interno ya estaba fuertemente acoplado a nuestro código —, diffdeck **recupera el TypeScript original a partir de los source maps de los paquetes y lo vendoriza**, de modo que somos dueños por completo del motor de renderizado.
 
-El resultado es un monorepo de workspaces de Bun donde un motor de diff sólido y agnóstico de framework (el `CodeView` de Pierre, ~29.5k líneas) se mantiene tal cual, mientras que las partes que personalizamos viven en nuestro propio código.
+El resultado es un monorepo de workspaces de Bun donde un motor de diff sólido y agnóstico de framework (el `CodeView` de Pierre — las ~29 500 líneas de `packages/diffs`) se mantiene tal cual, mientras que las partes que personalizamos viven en nuestro propio código.
 
 ## Características
 
@@ -93,13 +93,13 @@ Opciones:
 | `--tree-right`     | Iniciar con el árbol de archivos a la derecha                                     |
 | `--split`          | Iniciar en vista split (unified es el valor predeterminado)                       |
 | `--hide-tree`      | Iniciar con el árbol de archivos oculto                                            |
-| `--fold-with-tree` | Iniciar con el plegado de directorios de la barra lateral sincronizado con el diff |
+| `--fold-with-tree` | Iniciar con el plegado de directorios de la barra lateral sincronizado con el plegado del diff |
 | `-h`, `--help`     | Mostrar ayuda                                                                      |
 | `-v`, `--version`  | Mostrar versión                                                                    |
 
 Estos flags de vista establecen el estado inicial solo para este lanzamiento — no cambian tus preferencias guardadas, y los toggles dentro de la app reflejan el estado con el que se lanzó.
 
-Entorno: `DIFFDECK_PORT` establece el puerto predeterminado. El token se guarda en caché bajo `~/.cache/diffdeck/`.
+Entorno: `DIFFDECK_PORT` establece el puerto predeterminado. El token se guarda en caché bajo `$XDG_CACHE_HOME/diffdeck/`, o `~/.cache/diffdeck/` si esa variable no está definida.
 
 ## Skills
 
@@ -156,7 +156,7 @@ packages/
   diffs/        @diffdeck/diffs         motor de renderizado de diffs CodeView
   trees/        @diffdeck/trees         motor FileTree (render vanilla)
 apps/viewer/    @say8425/diffdeck — CLI + diff-server (API de datos) + visor de navegador
-skills/         el agent skill (SKILL.md), copiado al paquete durante el build
+skills/         la skill de agente (SKILL.md), copiada al paquete durante el build
 scripts/        herramienta de extracción de source maps, plugin de Bun css-inline, arnés de paridad de renderizado
 docs/           traducciones del README y capturas de pantalla
 ```
@@ -180,7 +180,7 @@ bun run format      # oxfmt
 Tres carriles:
 
 - `bun test` — tests unitarios/de integración, rápidos. Las specs `*.e2e.ts` quedan excluidas de la recolección, así que esto nunca lanza un navegador.
-- `bun run test:coverage` — la misma suite con una **puerta de cobertura del 100% sobre el código de runtime propio de diffdeck** (`apps/viewer/{browser,cli,server}`). Intencionalmente fuera de la puerta: los `packages/*` vendorizados, las herramientas bajo `scripts/`, el punto de entrada del navegador `main.ts` (entry de integración — ejercitado por la suite e2e en su lugar, no in-process), `build.ts`, y las propias specs (`*.test.ts`, `e2e/**`).
+- `bun run test:coverage` — la misma suite con una **puerta de cobertura del 100% sobre el código de runtime propio de diffdeck** (`apps/viewer/{browser,cli,server}`). Intencionalmente fuera de la puerta: los `packages/*` vendorizados, las herramientas bajo `scripts/`, el punto de entrada del navegador `main.ts` (entry de integración — ejercitado por la suite e2e en su lugar, no in-process), `build.ts` y las propias specs (`*.test.ts`, `e2e/**`).
 - `bun run test:e2e` — la suite de Playwright con navegador real (`apps/viewer/e2e/`). Conduce el Google Chrome del sistema vía `channel: "chrome"` (sin descarga de Chromium) y cubre `main.ts` y las rutas de render vendorizadas de extremo a extremo.
 
 ### Arnés de paridad de renderizado

@@ -15,7 +15,7 @@ Pierre의 [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs)와 [`@p
 
 diffdeck는 원래 [cc-statusline](https://github.com/say8425/cc-statusline)에 내장되어 있던 로컬 diff 뷰어를 별도 제품으로 분리한 것입니다. 빠르게 변화하는(`@pierre/diffs`는 변경이 잦고, `@pierre/trees`는 아직 1.0 이전 베타 단계입니다) 업스트림 Pierre 패키지에 의존하는 대신 — 게다가 내부 마크업에 이미 깊이 결합되어 있었기 때문에 — diffdeck는 **패키지의 소스맵에서 원본 TypeScript를 복원해 vendoring**해서, 렌더링 엔진을 완전히 직접 소유합니다.
 
-그 결과 구현하기 어려운, 프레임워크에 종속되지 않는 diff 엔진(Pierre의 `CodeView`, 약 29,500줄)은 그대로 유지하고, 우리가 커스터마이즈하는 부분만 자체 코드에 두는 Bun 워크스페이스 모노레포 구조가 되었습니다.
+그 결과 구현하기 어려운, 프레임워크에 종속되지 않는 diff 엔진(Pierre의 `CodeView` — `packages/diffs` 약 29,500줄)은 그대로 유지하고, 우리가 커스터마이즈하는 부분만 자체 코드에 두는 Bun 워크스페이스 모노레포 구조가 되었습니다.
 
 ## 기능
 
@@ -93,13 +93,13 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--tree-right`      | 파일 트리를 오른쪽에 둔 상태로 시작                                 |
 | `--split`           | split 뷰로 시작(unified가 기본값)                                  |
 | `--hide-tree`       | 파일 트리를 숨긴 상태로 시작                                       |
-| `--fold-with-tree`  | 사이드바 디렉토리 접기를 diff 접기와 동기화한 상태로 시작           |
+| `--fold-with-tree`  | 파일 트리에서 디렉토리를 접으면 diff도 함께 접히는 상태로 시작       |
 | `-h`, `--help`      | 도움말 표시                                                        |
 | `-v`, `--version`   | 버전 표시                                                          |
 
 이 뷰 플래그들은 이번 실행에서만 초기 상태를 설정합니다 — 저장된 설정을 바꾸지 않으며, 인앱 토글은 실행된 상태를 그대로 반영합니다.
 
-환경 변수: `DIFFDECK_PORT`로 기본 포트를 설정합니다. 토큰은 `~/.cache/diffdeck/`에 캐시됩니다.
+환경 변수: `DIFFDECK_PORT`로 기본 포트를 설정합니다. 토큰은 `$XDG_CACHE_HOME/diffdeck/`에, 그 값이 없으면 `~/.cache/diffdeck/`에 캐시됩니다.
 
 ## 스킬
 
@@ -156,9 +156,9 @@ packages/
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (vanilla render)
 apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer
-skills/         agent skill(SKILL.md) — 빌드 시 패키지로 복사됨
+skills/         the agent skill (SKILL.md), copied into the package at build time
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
-docs/           README 번역본과 스크린샷
+docs/           README translations and screenshots
 ```
 
 의존성 그래프: `path-store`(의존성 없음) ← `trees`; `theming`(shiki) ← `diffs`, `trees`. 런타임 외부 의존성: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
@@ -180,7 +180,7 @@ bun run format      # oxfmt
 세 가지 레인으로 구성됩니다:
 
 - `bun test` — 단위/통합 테스트, 빠릅니다. `*.e2e.ts` 스펙은 수집 대상에서 제외되므로 브라우저를 절대 띄우지 않습니다.
-- `bun run test:coverage` — 동일한 스위트를 실행하되 **diffdeck가 직접 소유한 런타임 코드**(`apps/viewer/{browser,cli,server}`)에 대해 **100% 커버리지 게이트**를 적용합니다. 게이트에서 의도적으로 제외된 것: vendoring된 `packages/*`, `scripts/` 아래의 도구, 브라우저 엔트리 `main.ts`(통합 엔트리 — in-process가 아니라 e2e 스위트로 검증됨), `build.ts`, 그리고 스펙 자신(`*.test.ts`, `e2e/**`).
+- `bun run test:coverage` — 동일한 스위트를 실행하되 **diffdeck가 직접 소유한 런타임 코드**(`apps/viewer/{browser,cli,server}`)에 대해 **100% 커버리지 게이트**를 적용합니다. 게이트에서 의도적으로 제외된 것: vendoring된 `packages/*`, `scripts/` 아래의 도구, 브라우저 엔트리 `main.ts`(통합 엔트리 — in-process가 아니라 e2e 스위트로 검증됨), `build.ts`, 스펙 파일 자체(`*.test.ts`, `e2e/**`).
 - `bun run test:e2e` — Playwright 실제 브라우저 스위트(`apps/viewer/e2e/`)입니다. `channel: "chrome"`로 시스템에 설치된 Google Chrome을 구동하며(Chromium 다운로드 없음), `main.ts`와 vendoring된 렌더링 경로를 엔드투엔드로 커버합니다.
 
 ### 렌더 패리티 하네스

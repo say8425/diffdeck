@@ -15,7 +15,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 
 diffdeck is the local diff viewer originally embedded in [cc-statusline](https://github.com/say8425/cc-statusline), extracted into its own product. Instead of depending on the upstream Pierre packages — which move fast (`@pierre/diffs` churns heavily; `@pierre/trees` is pre-1.0 beta) and whose internal markup we had already coupled to heavily — diffdeck **recovers the original TypeScript from the packages' source maps and vendors it**, so we own the rendering engine outright.
 
-The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, ~29.5k lines) is kept as-is, while the parts we customize live in our own code.
+The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, the ~29.5k lines of `packages/diffs`) is kept as-is, while the parts we customize live in our own code.
 
 ## Features
 
@@ -102,7 +102,7 @@ These view flags set the initial state for this launch only — they don't chang
 your saved preferences, and the in-app toggles reflect the launched state.
 
 Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
-`~/.cache/diffdeck/`.
+`$XDG_CACHE_HOME/diffdeck/`, or `~/.cache/diffdeck/` when that is unset.
 
 ## Skills
 

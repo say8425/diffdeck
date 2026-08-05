@@ -15,7 +15,7 @@ Pierre の [`@pierre/diffs`](https://www.npmjs.com/package/@pierre/diffs) と [`
 
 diffdeck は、もともと [cc-statusline](https://github.com/say8425/cc-statusline) に組み込まれていたローカル diff ビューアを、独立した製品として切り出したものです。アップストリームの Pierre パッケージ — 変化が激しく(`@pierre/diffs` は頻繁に破壊的変更が入り、`@pierre/trees` はまだ 1.0 未満のベータ版)、しかも内部マークアップにすでに深く依存していた — にそのまま依存し続ける代わりに、diffdeck は **パッケージのソースマップから元の TypeScript を復元してベンダリングし**、レンダリングエンジンを完全に自前で保有しています。
 
-その結果、改変が難しい、フレームワークに依存しない diff エンジン(Pierre の `CodeView`、約 29,500 行)はそのまま維持しつつ、カスタマイズする部分だけを自前のコードに置く、という構成の Bun ワークスペースのモノレポになっています。
+その結果、改変が難しい、フレームワークに依存しない diff エンジン(Pierre の `CodeView` — `packages/diffs` の約 29,500 行)はそのまま維持しつつ、カスタマイズする部分だけを自前のコードに置く、という構成の Bun ワークスペースのモノレポになっています。
 
 ## 機能
 
@@ -99,7 +99,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 
 これらの表示フラグは、この起動時のみの初期状態を設定するものです — 保存済みの設定を変更するわけではなく、アプリ内のトグルは起動時の状態をそのまま反映します。
 
-環境変数: `DIFFDECK_PORT` でデフォルトポートを設定できます。トークンは `~/.cache/diffdeck/` にキャッシュされます。
+環境変数: `DIFFDECK_PORT` でデフォルトポートを設定できます。トークンは `$XDG_CACHE_HOME/diffdeck/` に、未設定なら `~/.cache/diffdeck/` にキャッシュされます。
 
 ## スキル
 
@@ -156,9 +156,9 @@ packages/
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (vanilla render)
 apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer
-skills/         エージェントスキル(SKILL.md) — ビルド時にパッケージへコピーされる
+skills/         the agent skill (SKILL.md), copied into the package at build time
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
-docs/           README の翻訳とスクリーンショット
+docs/           README translations and screenshots
 ```
 
 依存関係グラフ: `path-store`(依存なし)← `trees`、`theming`(shiki)← `diffs`, `trees`。ランタイムの外部依存: shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`。
