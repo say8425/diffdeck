@@ -15,7 +15,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 
 diffdeck is the local diff viewer originally embedded in [cc-statusline](https://github.com/say8425/cc-statusline), extracted into its own product. Instead of depending on the upstream Pierre packages — which move fast (`@pierre/diffs` churns heavily; `@pierre/trees` is pre-1.0 beta) and whose internal markup we had already coupled to heavily — diffdeck **recovers the original TypeScript from the packages' source maps and vendors it**, so we own the rendering engine outright.
 
-The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, ~27k lines) is kept as-is, while the parts we customize live in our own code.
+The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, the ~29.5k lines of `packages/diffs`) is kept as-is, while the parts we customize live in our own code.
 
 ## Features
 
@@ -102,7 +102,7 @@ These view flags set the initial state for this launch only — they don't chang
 your saved preferences, and the in-app toggles reflect the launched state.
 
 Environment: `DIFFDECK_PORT` sets the default port. The token is cached under
-`~/.cache/diffdeck/`.
+`$XDG_CACHE_HOME/diffdeck/`, or `~/.cache/diffdeck/` when that is unset.
 
 ## Skills
 
@@ -165,11 +165,13 @@ packages/
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (vanilla render)
-apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer + agent skill
+apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer
+skills/         the agent skill (SKILL.md), copied into the package at build time
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
+docs/           README translations and screenshots
 ```
 
-Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map`.
+Dependency graph: `path-store` (no deps) ← `trees`; `theming` (shiki) ← `diffs`, `trees`. Runtime externals: shiki + `@shikijs/*`, `diff`, `hast-util-to-html`, `lru_map` — these are the packages' own dependencies; the published CLI bundles everything, so nothing is resolved at install time.
 
 ## Development
 
@@ -191,9 +193,10 @@ Three lanes:
   collection, so this never launches a browser.
 - `bun run test:coverage` — the same suite with a **100% coverage gate on
   diffdeck's owned runtime code** (`apps/viewer/{browser,cli,server}`).
-  Intentionally out of the gate: the vendored `packages/*`, the browser entry
-  `main.ts` (integration entry — exercised by the e2e suite instead, not
-  in-process), and `build.ts`.
+  Intentionally out of the gate: the vendored `packages/*`, the tooling under
+  `scripts/`, the browser entry `main.ts` (integration entry — exercised by the
+  e2e suite instead, not in-process), `build.ts`, and the specs themselves
+  (`*.test.ts`, `e2e/**`).
 - `bun run test:e2e` — the Playwright real-browser suite (`apps/viewer/e2e/`).
   Drives the system Google Chrome via `channel: "chrome"` (no Chromium
   download) and covers `main.ts` and the vendored render paths end-to-end.

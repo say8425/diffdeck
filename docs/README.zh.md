@@ -15,7 +15,7 @@
 
 diffdeck 最初是内置在 [cc-statusline](https://github.com/say8425/cc-statusline) 中的本地 diff 查看器，现已被拆分为独立产品。相比继续依赖上游的 Pierre 包——它们迭代很快（`@pierre/diffs` 变动频繁；`@pierre/trees` 仍处于 1.0 之前的 beta 阶段），而我们又已经深度耦合了它们的内部标记结构——diffdeck **从这些包的 source map 中还原出原始 TypeScript 并将其 vendor（内置）进来**，从而完全掌握渲染引擎的所有权。
 
-最终形成了一个 Bun workspace monorepo：与框架无关、已高度成熟稳定的 diff 引擎（Pierre 的 `CodeView`，约 27k 行代码）保持原样，而我们自定义的部分则保存在自己的代码中。
+最终形成了一个 Bun workspace monorepo：与框架无关、已高度成熟稳定的 diff 引擎（Pierre 的 `CodeView`，即 `packages/diffs` 的约 29.5k 行代码）保持原样，而我们自定义的部分则保存在自己的代码中。
 
 ## 功能
 
@@ -93,12 +93,13 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--tree-right`      | 启动时文件树显示在右侧                                      |
 | `--split`           | 以 split 视图启动（默认是 unified）                          |
 | `--hide-tree`       | 启动时隐藏文件树                                            |
+| `--fold-with-tree`  | 启动时让侧边栏目录折叠与 diff 折叠保持同步                   |
 | `-h`, `--help`      | 显示帮助                                                    |
 | `-v`, `--version`   | 显示版本号                                                  |
 
 这些视图相关的参数只设置本次启动的初始状态——不会更改你已保存的偏好设置，应用内的开关会反映启动时的状态。
 
-环境变量：`DIFFDECK_PORT` 用于设置默认端口。令牌缓存在 `~/.cache/diffdeck/` 下。
+环境变量：`DIFFDECK_PORT` 用于设置默认端口。令牌缓存在 `$XDG_CACHE_HOME/diffdeck/` 下；该变量未设置时则为 `~/.cache/diffdeck/`。
 
 ## 技能
 
@@ -154,11 +155,13 @@ packages/
   theming/      @diffdeck/theming      theme system + 10 vendored shiki theme JSONs
   diffs/        @diffdeck/diffs         CodeView diff-rendering engine
   trees/        @diffdeck/trees         FileTree engine (vanilla render)
-apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer + agent skill
+apps/viewer/    @say8425/diffdeck — CLI + diff-server (data API) + browser viewer
+skills/         the agent skill (SKILL.md), copied into the package at build time
 scripts/        source-map extraction tool, css-inline Bun plugin, render-parity harness
+docs/           README translations and screenshots
 ```
 
-依赖关系图：`path-store`（无依赖）← `trees`；`theming`（shiki）← `diffs`、`trees`。运行时外部依赖：shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`。
+依赖关系图：`path-store`（无依赖）← `trees`；`theming`（shiki）← `diffs`、`trees`。运行时外部依赖：shiki + `@shikijs/*`、`diff`、`hast-util-to-html`、`lru_map`——这些是各包自身的依赖；发布的 CLI 会全部打包，因此安装时不会解析任何依赖。
 
 ## 开发
 
@@ -177,7 +180,7 @@ bun run format      # oxfmt
 包含三条测试线：
 
 - `bun test` —— 单元/集成测试，速度快。`*.e2e.ts` 规格文件会被排除在收集范围之外，因此这一步永远不会启动浏览器。
-- `bun run test:coverage` —— 同一套测试，并对 **diffdeck 自有的运行时代码**（`apps/viewer/{browser,cli,server}`）施加 **100% 覆盖率门槛**。以下部分被有意排除在门槛之外：vendored 的 `packages/*`、浏览器入口 `main.ts`（属于集成入口——改为由 e2e 套件而非进程内测试来覆盖），以及 `build.ts`。
+- `bun run test:coverage` —— 同一套测试，并对 **diffdeck 自有的运行时代码**（`apps/viewer/{browser,cli,server}`）施加 **100% 覆盖率门槛**。以下部分被有意排除在门槛之外：vendored 的 `packages/*`、`scripts/` 下的工具、浏览器入口 `main.ts`（属于集成入口——改为由 e2e 套件而非进程内测试来覆盖）、`build.ts`，以及测试文件本身（`*.test.ts`、`e2e/**`）。
 - `bun run test:e2e` —— 基于 Playwright 的真实浏览器测试套件（`apps/viewer/e2e/`）。通过 `channel: "chrome"` 驱动系统自带的 Google Chrome（无需下载 Chromium），端到端覆盖 `main.ts` 及 vendored 的渲染路径。
 
 ### 渲染一致性验证工具
