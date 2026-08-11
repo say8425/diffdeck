@@ -28,6 +28,11 @@ const fencedSnippet = (encoded: string): string[] => {
 	const lines = encoded.split("\n");
 	const open = lines.findIndex((l) => /^`{3,}$/.test(l));
 	const close = lines.findIndex((l, i) => i > open && /^`{3,}$/.test(l));
+	// 펜스를 못 찾으면 open/close가 -1이라 slice가 그럴듯한 쓰레기를 돌려준다 —
+	// 그러면 단언이 엉뚱한 곳을 가리키며 실패한다. 여기서 크게 터뜨린다.
+	if (open < 0 || close < 0) {
+		throw new Error(`no fenced block in encoded output: ${encoded}`);
+	}
 	const body = lines.slice(open + 1, close);
 	return body.slice(body.findIndex((l) => l === "") + 1);
 };
@@ -354,20 +359,25 @@ test("⑦ watch 폴이 열려 있던 grab 팝오버를 닫는다", async ({
 	}
 });
 
-test("⑧ 단순 클릭(드래그도 멀티클릭도 아님)은 팝오버를 열지 않는다 — 멀티클릭 게이트의 positive control", async ({
+test("⑧ 단순 클릭(드래그도 멀티클릭도 아님)은 팝오버를 열지 않는다", async ({
 	page,
 	viewerUrl,
 }) => {
 	await page.goto(viewerUrl);
 	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 
-	// 단순 클릭은 애초에 선택 자체가 안 생기므로(진짜 collapsed range →
-	// resolveSelectionRange가 null) 드래그 게이트(main.ts pointerup의
-	// pointerDown/movedBeyondThreshold) 이전에도 걸러졌다. 그럼에도 이 테스트가
-	// vacuous가 아닌 이유는 **멀티클릭 게이트** 때문이다: 더블/트리플클릭이
-	// 팝오버를 열게 된 뒤(⑬⑭), 그 경로의 문턱값이 `click.detail >= 2`가 아니라
-	// `>= 1`로 밀리면 평범한 클릭 한 번이 곧장 팝오버를 열어버린다. 이 단언이
-	// 정확히 그 회귀를 잡는다.
+	// 이 테스트가 무엇을 증명하지 않는지 알 것: **멀티클릭 문턱값의 positive
+	// control이 아니다.** 단순 클릭은 애초에 선택 자체를 안 만들고(진짜
+	// collapsed range → resolveSelectionRange가 null), 그래서 문턱값을
+	// `click.detail >= 2`에서 `>= 1`로 풀어도 이 테스트는 그대로 통과한다
+	// (실측으로 확인 — 팝오버는 여전히 안 열린다). 문턱값을 실제로 가르려면
+	// detail이 1이면서 살아있는 선택을 만드는 제스처(shift+클릭 확장)가
+	// 필요한데, 그건 지금 팝오버를 여는 제스처가 아니라서 여기서 계약으로
+	// 박아두지 않았다(CLAUDE.md의 Grab 절에 알려진 제외로 기록).
+	//
+	// 그래서 이건 문턱값 가드가 아니라 "평범한 클릭이 팝오버를 열지 않는다"는
+	// 사용자 계약의 스모크 체크다 — 드래그 게이트든 멀티클릭 게이트든 어느
+	// 쪽이 통째로 사라지면 잡힌다.
 	const container = page
 		.locator("diffs-container")
 		.filter({ has: page.locator('[data-fold="README.md"]') });
@@ -381,124 +391,6 @@ test("⑧ 단순 클릭(드래그도 멀티클릭도 아님)은 팝오버를 열
 	await page.mouse.click(box.x + 40, box.y + box.height / 2);
 	// 두 경로 다 선택 확정을 한 틱(setTimeout 0) 뒤로 미루므로 그 이후까지
 	// 기다렸다가 단언한다.
-	await page.waitForTimeout(80);
-	await expect(page.locator("#grab-popover")).toBeHidden();
-});
-
-test("⑬ 더블클릭 단어 선택도 팝오버를 연다 — 잡히는 건 줄 전체가 아니라 그 단어", async ({
-	page,
-	viewerUrl,
-	context,
-}) => {
-	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-	await page.goto(viewerUrl);
-	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
-
-	// 브라우저 네이티브 더블클릭은 마우스 이동 없이 단어 하나를 실제로
-	// 선택한다. 드래그 게이트(이동거리 > 6px)만으로는 이 제스처가 통과하지
-	// 못하므로, 멀티클릭은 click 이벤트의 detail로 따로 인지해야 한다
-	// (pointerup.detail은 Chrome에서 항상 0 — 실측).
-	const container = page
-		.locator("diffs-container")
-		.filter({ has: page.locator('[data-fold="README.md"]') });
-	await expect(container).toBeVisible();
-	await waitForHighlighted(container);
-
-	const row = container.locator("[data-line]").first();
-	const box = await row.boundingBox();
-	if (!box) throw new Error("text row not visible");
-	const lineText = (await row.textContent()) ?? "";
-
-	await page.mouse.click(box.x + 40, box.y + box.height / 2, {
-		clickCount: 2,
-	});
-
-	const popover = page.locator("#grab-popover");
-	await expect(popover).toBeVisible();
-	const input = page.locator("#grab-popover textarea");
-	await expect(input).toBeFocused();
-	await input.press("Enter");
-	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
-	const out = await readClipboard(page);
-	expect(out).toContain("File: README.md");
-
-	// 더블클릭 끝점은 양쪽 다 [data-line] 안에 직접 떨어지므로 chars(CharSpan)
-	// 경로를 탄다 → 스니펫은 줄 전체가 아니라 그 단어여야 한다. toContain으로는
-	// 판별이 안 된다(줄 전체도 단어를 포함한다 — grab-highlight ⑥과 같은 vacuous
-	// 함정)이므로 펜스 본문을 꺼내 길이로 가른다.
-	const snippet = fencedSnippet(out);
-	expect(snippet).toHaveLength(1);
-	expect(snippet[0].length).toBeGreaterThan(0);
-	expect(lineText).toContain(snippet[0]);
-	expect(snippet[0].length).toBeLessThan(lineText.length);
-});
-
-test("⑭ 트리플클릭은 줄 전체를 잡는다 — 같은 멀티클릭 경로가 detail 3까지 덮는다", async ({
-	page,
-	viewerUrl,
-	context,
-}) => {
-	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-	await page.goto(viewerUrl);
-	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
-
-	// 트리플클릭에는 전용 이벤트가 없다(dblclick은 두 번째 클릭에서 끝난다).
-	// click.detail이 3으로 올라오는 것으로만 인지되므로, 게이트를 dblclick
-	// 이벤트로 짰다면 세 번째 클릭의 문단 선택이 반영되지 않고 ⑬의 단어
-	// 스니펫에 머문다 — 이 테스트가 그 구현 갈림길을 가른다.
-	const container = page
-		.locator("diffs-container")
-		.filter({ has: page.locator('[data-fold="README.md"]') });
-	await expect(container).toBeVisible();
-	await waitForHighlighted(container);
-
-	const row = container.locator("[data-line]").first();
-	const box = await row.boundingBox();
-	if (!box) throw new Error("text row not visible");
-	const lineText = (await row.textContent()) ?? "";
-
-	await page.mouse.click(box.x + 40, box.y + box.height / 2, {
-		clickCount: 3,
-	});
-
-	const input = page.locator("#grab-popover textarea");
-	await expect(page.locator("#grab-popover")).toBeVisible();
-	await expect(input).toBeFocused();
-	await input.press("Enter");
-	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
-	const out = await readClipboard(page);
-	// 판별점은 "첫 줄이 단어가 아니라 줄 전체"다(⑬과 갈리는 지점). 그 뒤에 빈
-	// 줄 하나가 더 붙는 것은 Chrome 문단 선택이 다음 행의 offset 0까지 걸치기
-	// 때문이고, chars(CharSpan)가 그 끝점을 그대로 옮기므로 하이라이트도 똑같이
-	// 거기서 끝난다 — "보이는 범위 == 복사되는 범위"는 유지된다.
-	expect(fencedSnippet(out)[0]).toBe(lineText);
-});
-
-test("⑮ 파일 헤더(파일명) 더블클릭은 팝오버를 열지 않는다", async ({
-	page,
-	viewerUrl,
-}) => {
-	await page.goto(viewerUrl);
-	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
-
-	// ⑨(헤더 드래그)의 멀티클릭 판. resolveTextTarget의 "[data-line] 밖에서
-	// 끝나는 선택은 null" 가드가 새 경로에도 그대로 걸리는지 확인한다 — 이
-	// 가드가 새 경로에서 빠지면 파일명을 더블클릭하는 것만으로 팝오버가 뜬다.
-	const container = page
-		.locator("diffs-container")
-		.filter({ has: page.locator('[data-fold="README.md"]') });
-	await expect(container).toBeVisible();
-	await waitForHighlighted(container);
-
-	const title = container.locator("[data-title]");
-	const box = await title.boundingBox();
-	if (!box) throw new Error("file title not visible");
-	await page.mouse.click(box.x + 6, box.y + box.height / 2, { clickCount: 2 });
-
-	// vacuous-test 가드: 더블클릭이 실제로 단어를 선택했는지부터 확인한다.
-	await expect
-		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
-		.not.toBe("");
 	await page.waitForTimeout(80);
 	await expect(page.locator("#grab-popover")).toBeHidden();
 });
@@ -672,4 +564,135 @@ test("⑫ 보내기 버튼 클릭도 Enter와 같이 복사하고, 입력 포커
 		"data-state",
 		"ok",
 	);
+});
+
+test("⑬ 더블클릭 단어 선택도 팝오버를 연다 — 잡히는 건 줄 전체가 아니라 그 단어", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// 브라우저 네이티브 더블클릭은 마우스 이동 없이 단어 하나를 실제로
+	// 선택한다. 드래그 게이트(이동거리 > 6px)만으로는 이 제스처가 통과하지
+	// 못하므로, 멀티클릭은 click 이벤트의 detail로 따로 인지해야 한다
+	// (pointerup.detail은 Chrome에서 항상 0 — 실측).
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const row = container.locator("[data-line]").first();
+	const box = await row.boundingBox();
+	if (!box) throw new Error("text row not visible");
+	const lineText = (await row.textContent()) ?? "";
+
+	await page.mouse.click(box.x + 40, box.y + box.height / 2, {
+		clickCount: 2,
+	});
+
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+	const input = page.locator("#grab-popover textarea");
+	await expect(input).toBeFocused();
+	await input.press("Enter");
+	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
+	const out = await readClipboard(page);
+	expect(out).toContain("File: README.md");
+
+	// 더블클릭 끝점은 양쪽 다 [data-line] 안에 직접 떨어지므로 chars(CharSpan)
+	// 경로를 탄다 → 스니펫은 줄 전체가 아니라 그 단어여야 한다. toContain으로는
+	// 판별이 안 된다(줄 전체도 단어를 포함한다 — grab-highlight ⑥과 같은 vacuous
+	// 함정)이므로 펜스 본문을 꺼내 길이로 가른다.
+	const snippet = fencedSnippet(out);
+	expect(snippet).toHaveLength(1);
+	expect(snippet[0].length).toBeGreaterThan(0);
+	expect(lineText).toContain(snippet[0]);
+	expect(snippet[0].length).toBeLessThan(lineText.length);
+});
+
+test("⑭ 트리플클릭은 줄 전체를 잡는다 — 같은 멀티클릭 경로가 detail 3까지 덮는다", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// 트리플클릭에는 전용 이벤트가 없다(dblclick은 두 번째 클릭에서 끝난다).
+	// click.detail이 3으로 올라오는 것으로만 인지되므로, 게이트를 dblclick
+	// 이벤트로 짰다면 세 번째 클릭의 문단 선택이 반영되지 않고 ⑬의 단어
+	// 스니펫에 머문다 — 이 테스트가 그 구현 갈림길을 가른다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const row = container.locator("[data-line]").first();
+	const box = await row.boundingBox();
+	if (!box) throw new Error("text row not visible");
+	const lineText = (await row.textContent()) ?? "";
+
+	await page.mouse.click(box.x + 40, box.y + box.height / 2, {
+		clickCount: 3,
+	});
+
+	const input = page.locator("#grab-popover textarea");
+	await expect(page.locator("#grab-popover")).toBeVisible();
+	await expect(input).toBeFocused();
+	await input.press("Enter");
+	await expect.poll(() => readClipboard(page)).toContain("diffdeck selection");
+	const out = await readClipboard(page);
+	// 판별점은 "첫 줄이 단어가 아니라 줄 전체"다(⑬과 갈리는 지점). 그 뒤에 빈
+	// 줄 하나가 더 붙는 것은 Chrome 문단 선택이 다음 행의 offset 0까지 걸치기
+	// 때문이고, chars(CharSpan)가 그 끝점을 그대로 옮기므로 하이라이트도 똑같이
+	// 거기서 끝난다 — "보이는 범위 == 복사되는 범위"는 유지된다.
+	expect(fencedSnippet(out)[0]).toBe(lineText);
+});
+
+test("⑮ 파일 헤더(파일명) 더블클릭은 팝오버를 열지 않는다", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// ⑨(헤더 드래그)의 멀티클릭 판. resolveTextTarget의 "[data-line] 밖에서
+	// 끝나는 선택은 null" 가드가 새 경로에도 그대로 걸리는지 확인한다 — 이
+	// 가드가 새 경로에서 빠지면 파일명을 더블클릭하는 것만으로 팝오버가 뜬다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	// 파일을 **먼저 접어 둔다.** 펼친 채로 더블클릭하면 첫 클릭이 헤더 폴드
+	// 토글을 때리고(둘째 클릭은 selection 가드에 걸려 안 때린다) 파일이
+	// 접히는데, 접힌 파일에는 [data-line] 행이 아예 없어서 "행 밖 선택은
+	// null"이 아니라 "행이 하나도 없음"으로 통과하는 vacuous 테스트가 된다
+	// (실측: 팝오버 해석 시점의 행 수가 [0, 0]이었다). 접어 두면 첫 클릭이
+	// 도로 펼쳐 두 틱 모두 행이 살아 있다(실측: [5, 5]) — 그래야 이 테스트가
+	// 실제로 가드를 행사한다. ⑨(드래그)는 폴드 토글의 드래그 가드에 걸려
+	// 애초에 접히지 않으므로 이 처리가 필요 없다.
+	const title = container.locator("[data-title]");
+	await title.click();
+	await expect(container.locator("[data-line]")).toHaveCount(0);
+
+	const box = await title.boundingBox();
+	if (!box) throw new Error("file title not visible");
+	await page.mouse.click(box.x + 6, box.y + box.height / 2, { clickCount: 2 });
+
+	// vacuous-test 가드 둘: 더블클릭이 실제로 단어를 선택했고, 그 시점에 이
+	// 파일에 행이 실제로 렌더돼 있었는가.
+	await expect
+		.poll(() => page.evaluate(() => document.getSelection()?.toString()))
+		.not.toBe("");
+	await expect(container.locator("[data-line]").first()).toBeVisible();
+	await page.waitForTimeout(80);
+	await expect(page.locator("#grab-popover")).toBeHidden();
 });
