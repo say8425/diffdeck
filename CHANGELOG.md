@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.2](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.1...diffdeck-v1.3.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* 더블·트리플클릭 텍스트 선택도 grab 팝오버를 열게 한다 ([#65](https://github.com/say8425/diffdeck/issues/65)) ([7f857f0](https://github.com/say8425/diffdeck/commit/7f857f0627d867b365b93a25a60a6c16bc2dadac))
+* 데몬 cwd 삭제로 인한 프로세스 오염 방지 + 자가회복 ([#62](https://github.com/say8425/diffdeck/issues/62)) ([884fe1a](https://github.com/say8425/diffdeck/commit/884fe1a42bae09f4e0e40cc8033067e0fcdd0a8f))
+
 ## [1.3.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.0...diffdeck-v1.3.1) (2026-08-02)
 
 
