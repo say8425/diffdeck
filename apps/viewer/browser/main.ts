@@ -526,24 +526,17 @@ const openGrabPopover = (
 	});
 };
 
-diffMount.addEventListener("pointerup", (event) => {
-	// 드래그 게이트: 스펙은 "드래그 릴리스 시"이지, 선택이 존재하기만 하면
-	// 여는 게 아니다 — 폴드 토글(위 click 핸들러 :87-96)과 동일하게
-	// pointerDown/movedBeyondThreshold로 실제 드래그였는지 확인한다. 이
-	// 가드가 없으면 더블/트리플클릭의 네이티브 단어/문단 선택(마우스 이동
-	// 없이도 비어있지 않은 Selection을 만든다)이 곧장 팝오버를 열어버린다.
-	const upPoint = { x: event.clientX, y: event.clientY };
-	if (
-		!pointerDown ||
-		!movedBeyondThreshold(pointerDown, upPoint, DRAG_THRESHOLD)
-	) {
-		return;
-	}
-	// 선택 확정은 pointerup 직후 이벤트 루프 한 틱 뒤가 안전(워커 하이라이트
-	// DOM 교체·recycle이 선택을 죽여도 스냅샷은 이미 고정된 뒤). 거터 "+"
-	// 경로와 동일하게 트리거 버튼 없이 즉시 팝오버를 연다 — 같은 제스처의
-	// pointerup에서 열어도 외부 dismiss는 pointerdown/mousedown에만 걸려
-	// 있어 자기-dismiss는 없다.
+/**
+ * 네이티브 텍스트 선택을 스냅샷으로 굳혀 팝오버를 연다. 앵커는 제스처가 끝난
+ * 좌표(0크기 rect) — 행 전체 rect를 쓰면 커서와 무관하게 파일 왼쪽 끝에 뜬다.
+ *
+ * 선택 확정을 이벤트 루프 한 틱(setTimeout 0) 뒤로 미루는 게 계약이다: 워커
+ * 하이라이트 DOM 교체·recycle이 선택을 죽여도 스냅샷은 이미 고정된 뒤가 된다.
+ * 거터 "+" 경로와 동일하게 트리거 버튼 없이 즉시 열며, 같은 제스처의
+ * pointerup/click에서 열어도 외부 dismiss는 pointerdown/mousedown에만 걸려
+ * 있어 자기-dismiss는 없다.
+ */
+const openGrabFromTextSelection = (at: { x: number; y: number }): void => {
 	setTimeout(() => {
 		const roots = [...diffMount.querySelectorAll<HTMLElement>(DIFFS_TAG_NAME)]
 			.map((c) => c.shadowRoot)
@@ -557,12 +550,34 @@ diffMount.addEventListener("pointerup", (event) => {
 		if (!target || !snap) return;
 		grabTextTarget = { fileId: target.fileId, range: target.range };
 		paintGrabHighlight();
-		openGrabPopover(snap, {
-			left: upPoint.x,
-			top: upPoint.y,
-			bottom: upPoint.y,
-		});
+		openGrabPopover(snap, { left: at.x, top: at.y, bottom: at.y });
 	}, 0);
+};
+
+diffMount.addEventListener("pointerup", (event) => {
+	// 드래그 게이트: 선택이 존재하기만 하면 여는 게 아니라, 폴드 토글(위 click
+	// 핸들러 :87-96)과 동일하게 pointerDown/movedBeyondThreshold로 실제
+	// 드래그였는지 확인한다. 마우스를 움직이지 않은 제스처는 여기서 걸러지고,
+	// 그중 멀티클릭만 아래 click 핸들러가 따로 받는다.
+	const upPoint = { x: event.clientX, y: event.clientY };
+	if (
+		!pointerDown ||
+		!movedBeyondThreshold(pointerDown, upPoint, DRAG_THRESHOLD)
+	) {
+		return;
+	}
+	openGrabFromTextSelection(upPoint);
+});
+
+// 멀티클릭 경로: 더블/트리플클릭의 네이티브 단어·문단 선택은 마우스 이동 없이
+// 만들어지므로 위 드래그 게이트를 통과하지 못한다. 클릭 횟수를 읽을 수 있는
+// 지점은 click 이벤트뿐이다 — Chrome의 pointerdown/pointerup은 detail이 늘
+// 0이다(실측). detail >= 2 하나로 더블(2)·트리플(3)을 함께 덮고, 평범한 단일
+// 클릭(detail 1)은 그대로 제외된다. dblclick 이벤트를 쓰지 않는 이유도 여기
+// 있다: 트리플클릭엔 전용 이벤트가 없어 세 번째 클릭의 문단 선택을 놓친다.
+diffMount.addEventListener("click", (event) => {
+	if (event.detail < 2) return;
+	openGrabFromTextSelection({ x: event.clientX, y: event.clientY });
 });
 
 const codeViewOptions = (): ConstructorParameters<
