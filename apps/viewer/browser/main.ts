@@ -43,7 +43,7 @@ import { extractSnippet } from "./grab/snippet.ts";
 import { resolveTextTarget, rowSide } from "./grab/textSelection.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
-import { isLargeFile } from "./largeFile.ts";
+import { countChangedLines, isLargeFile } from "./largeFile.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
 	FLATTEN_KEY,
@@ -887,8 +887,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			// collapsed on first sight.
 			if (!seenIds.has(f.name)) {
 				seenIds.add(f.name);
-				const changedLines =
-					fileDiff.additionLines.length + fileDiff.deletionLines.length;
+				const changedLines = countChangedLines(fileDiff.hunks);
 				if (isLargeFile(f.name, changedLines)) collapsedIds.add(f.name);
 			}
 			return {
