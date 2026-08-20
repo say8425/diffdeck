@@ -41,6 +41,7 @@ import {
 } from "./grab/selectionAdapter.ts";
 import { extractSnippet } from "./grab/snippet.ts";
 import { resolveTextTarget, rowSide } from "./grab/textSelection.ts";
+import { decodeHeaderValue } from "./headerValue.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { countChangedLines, isLargeFile } from "./largeFile.ts";
@@ -1072,7 +1073,7 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		const res = await fetch(`/api/diff?${query.toString()}`, {
 			headers: lastEtag ? { "if-none-match": lastEtag } : {},
 		});
-		const base = res.headers.get("x-diff-base") ?? "";
+		const base = decodeHeaderValue(res.headers.get("x-diff-base"));
 		if (res.status === 304) return { kind: "unchanged", base };
 		if (res.status === 503) return { kind: "retryable" };
 		if (!res.ok) return { kind: "terminal" };

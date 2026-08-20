@@ -227,14 +227,14 @@ const createHandler = (cfg: {
 			if (req.headers.get("if-none-match") === etag) {
 				return new Response(null, {
 					status: 304,
-					headers: { etag, "x-diff-base": base ?? "" },
+					headers: { etag, "x-diff-base": encodeURIComponent(base ?? "") },
 				});
 			}
 			// NOTE: intentionally no Access-Control-Allow-Origin — cross-origin pages must not read this.
 			return new Response(entry.body, {
 				headers: {
 					"content-type": "application/json; charset=utf-8",
-					"x-diff-base": base ?? "",
+					"x-diff-base": encodeURIComponent(base ?? ""),
 					etag,
 				},
 			});

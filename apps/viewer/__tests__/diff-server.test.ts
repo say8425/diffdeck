@@ -579,3 +579,46 @@ describe("diff server flight timeout", () => {
 		}
 	});
 });
+
+// HTTP 헤더 값은 latin1이다. git은 refname에 비ASCII를 허용하므로 base 브랜치
+// 이름이 한글/일본어/중국어이면 x-diff-base를 실은 Response 생성이 throw하고
+// 응답 전체가 500이 된다(Bun 1.3.12 실측). 클라의 fetchDiffOnce는 비-503
+// non-ok를 terminal로 매핑해 재시도 없이 "Failed to load diff."를 띄우므로,
+// 그런 리포는 diff가 아예 뜨지 않는다. 이 리포는 이미 korean-filename.e2e.ts를
+// 갖고 있어 비ASCII git 식별자는 범위 안이다.
+describe("diff server non-latin1 base name", () => {
+	// 원격 없이 refs만 세워 hermetic하게 만든다: origin/HEAD -> origin/<한글>.
+	// resolveBaseRef의 defaultBranchName 갈래가 이걸 읽어 base를 낸다.
+	//
+	// refname을 반드시 ${보간}으로 넘길 것 — Bun 1.3.12의 $ 템플릿에 비ASCII를
+	// 리터럴로 적으면 "uAE30uB2A5" 같은 ASCII 텍스트로 뭉개져(실측: 코드포인트
+	// 75 41 45 33 30 …) 한글이 아닌 브랜치가 만들어지고, 테스트가 조용히
+	// 아무것도 검증하지 않게 된다.
+	const KOREAN_BRANCH = "기능";
+	const setUpKoreanBase = async (): Promise<void> => {
+		const head = (await $`git -C ${repo} rev-parse HEAD`.text()).trim();
+		const ref = `refs/remotes/origin/${KOREAN_BRANCH}`;
+		await $`git -C ${repo} update-ref ${ref} ${head}`;
+		await $`git -C ${repo} symbolic-ref refs/remotes/origin/HEAD ${ref}`;
+	};
+
+	test("serves the diff instead of 500 when the base branch is non-latin1", async () => {
+		await setUpKoreanBase();
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(res.status).toBe(200);
+	});
+
+	test("reports the non-latin1 base name so the client can render it", async () => {
+		await setUpKoreanBase();
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(decodeURIComponent(res.headers.get("x-diff-base") ?? "")).toBe(
+			KOREAN_BRANCH,
+		);
+	});
+});
