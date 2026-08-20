@@ -33,7 +33,8 @@ export const isLargeFile = (name: string, changedLines: number): boolean =>
 // **string[]**이고, 뷰어처럼 파일 전량으로 파싱한 diff(`isPartial === false`)에서는
 // 각각 새/옛 파일의 전체 내용이다 — 세면 "변경량"이 아니라 "파일 길이 × 2"가 된다.
 // 실제 변경 줄 수는 hunk 쪽 동명 **숫자** 필드에만 있고, 파일 헤더에 뜨는
-// `+N -M` 배지도 같은 값을 센다(`createFileHeaderElement`).
+// `-M +N` 배지도 같은 값을 센다(`createFileHeaderElement` — 삭제 span을 먼저
+// push하므로 화면 순서가 `-M +N`이지 `+N -M`이 아니다).
 export const countChangedLines = (
 	hunks: readonly Pick<Hunk, "additionLines" | "deletionLines">[],
 ): number =>
