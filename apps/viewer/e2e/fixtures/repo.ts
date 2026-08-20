@@ -73,6 +73,13 @@ export interface FixtureRepoOptions {
 	 */
 	bigFileLines?: number;
 	/**
+	 * Opt-in: commit `src/long.ts` with LONG_FILE_LINES lines and edit only a
+	 * handful of them in the working tree — a file that is long but whose diff
+	 * is small. large-file-collapse.e2e.ts 전용 (다른 스펙의 픽스처를 바꾸지
+	 * 않도록 opt-in — bulkFiles/lockfileLines와 같은 이유).
+	 */
+	longFileSmallEdit?: boolean;
+	/**
 	 * Opt-in: skip every working-tree edit so the diff is empty on launch
 	 * (the untracked `data.txt` is still written — hidden behind the
 	 * untracked toggle). Also renames the branch to `main` so the resolved
@@ -106,6 +113,12 @@ const bulkFileLines = (marker: string, length = 200): string =>
 		(_, i) =>
 			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
 	).join("\n")}\n`;
+
+// 길지만 변경은 작은 파일: 자동 접힘이 "파일 길이"가 아니라 "변경량"으로
+// 판정되는지 가르는 픽스처. 구 로직(파일 전량 카운트)이면 4,000줄로 읽혀
+// 접히고, 변경량(6줄)으로 읽으면 접히지 않는다.
+const LONG_FILE_LINES = 2000;
+const LONG_FILE_EDITED_LINES = 3;
 
 // pnpm-lock.yaml 흉내: 실제 lockfile처럼 패키지 블록이 반복되는 YAML.
 // mutate 시 20줄마다 버전만 바꿔 수천 줄짜리 현실적인 diff를 만든다.
@@ -162,6 +175,12 @@ export const makeFixtureRepo = (
 		writeFileSync(
 			join(dir, "src", "big.ts"),
 			bulkFileLines("base", bigFileLines),
+		);
+	}
+	if (options.longFileSmallEdit) {
+		writeFileSync(
+			join(dir, "src", "long.ts"),
+			bulkFileLines("base", LONG_FILE_LINES),
 		);
 	}
 	if (options.nestedChainFile) {
@@ -229,6 +248,13 @@ export const makeFixtureRepo = (
 				join(dir, "src", "big.ts"),
 				bulkFileLines("edited", bigFileLines),
 			);
+		}
+		if (options.longFileSmallEdit) {
+			const lines = bulkFileLines("base", LONG_FILE_LINES).split("\n");
+			for (let i = 0; i < LONG_FILE_EDITED_LINES; i++) {
+				lines[i] = lines[i]?.replaceAll("base", "edited") ?? "";
+			}
+			writeFileSync(join(dir, "src", "long.ts"), lines.join("\n"));
 		}
 		if (options.nestedChainFile) {
 			writeFileSync(

@@ -5,5 +5,5 @@ dist/
 scripts/parity/out/
 .superpowers/
 docs/superpowers/
-apps/viewer/test-results/
-apps/viewer/playwright-report/
+test-results/
+playwright-report/
