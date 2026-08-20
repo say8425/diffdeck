@@ -1,5 +1,12 @@
 import type { Hunk } from "@diffdeck/diffs";
 
+// 자동 접힘의 문턱 — 한 파일에서 **변경된** 줄 수(`+`와 `-`의 합)와 비교한다.
+// `countChangedLines` 도입 전에는 같은 값이 "파일 길이 × 2"와 비교돼 사실상
+// 750줄짜리 파일을 걸렀다. 의미가 바뀌었지만 값은 의도적으로 유지했다 —
+// 이제 대략 "750줄 파일을 통째로 다시 쓴 정도"가 접힘 기준이라 자동 접힘이
+// 훨씬 드물어지는데, 그게 이 수정이 노린 바다. 값을 1,600 이상으로 올리면
+// `large-file-collapse.e2e.ts` ②(800줄 전량 재작성 = 1,600줄 변경)가 먼저
+// 빨간불이 된다 — 우연이 아니라 의도된 트립와이어다.
 export const LARGE_FILE_LINE_THRESHOLD = 1500;
 
 export const LOCKFILE_NAMES: ReadonlySet<string> = new Set([
