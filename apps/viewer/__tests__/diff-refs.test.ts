@@ -167,7 +167,11 @@ describe("getRefs against a real repository", () => {
 
 	test("lists live worktrees and drops the one whose directory is gone", async () => {
 		const { worktrees } = await getRefs(repo);
-		expect(worktrees.map((w) => w.branch).sort()).toEqual(["feat-a", "main"]);
+		expect(
+			worktrees
+				.map((w) => w.branch)
+				.toSorted((a, b) => String(a).localeCompare(String(b))),
+		).toEqual(["feat-a", "main"]);
 	});
 
 	test("attributes a branch to its worktree but not to a dead one", async () => {

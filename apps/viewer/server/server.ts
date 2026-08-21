@@ -157,7 +157,10 @@ const createHandler = (cfg: {
 	): Promise<{ base: string | null; ref: string | null } | Response> => {
 		if (sel.base.kind === "ref") {
 			const verified = await verifyBaseRef(repo, sel.base.ref);
-			return verified ?? new Response("unknown base ref", { status: 400 });
+			return (
+				verified ??
+				new Response(`unknown base ref: ${sel.base.ref}`, { status: 400 })
+			);
 		}
 		return awaitFlight(resolveBaseCached(repo));
 	};
@@ -291,7 +294,10 @@ const createHandler = (cfg: {
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
-			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			// 빈 상태 카드가 diff와 **다른 비교**를 설명하면 안 된다. 여기서
+			// resolveBaseCached를 그냥 부르면 사용자가 develop을 골라 놓고도
+			// 카드는 "No changes vs main"이라고 말한다.
+			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
 			const summary = await getRepoSummary(repo, { base, ref });

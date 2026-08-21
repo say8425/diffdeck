@@ -24,6 +24,14 @@ export const AUTO_BASE = "@auto";
 const parseBase = (params: URLSearchParams): BaseSelector => {
 	const raw = params.get("base") ?? "";
 	if (raw === AUTO_BASE) return { kind: "auto" };
+	// HEAD는 참조로 취급하지 않고 head 종류로 **정규화**한다. 겉보기엔
+	// merge-base(HEAD, HEAD) === HEAD라 같지만 두 가지가 다르다.
+	// ① 커밋이 하나도 없는 리포(unborn HEAD)에서는 `rev-parse --verify HEAD`가
+	//    실패해 참조 검증이 400을 내고, 새 프로젝트에서 처음 켠 화면이 통째로
+	//    실패 카드가 된다.
+	// ② 정규화해야 prewarm이 데운 슬롯과 브라우저 첫 요청의 캐시 키가 같아진다
+	//    (`head` vs `ref:HEAD`는 서로 다른 슬롯이다).
+	if (raw === "HEAD") return { kind: "head" };
 	// base가 있으면 mode는 무시한다. 한 축을 두 파라미터가 인코딩하면
 	// `mode=working&base=main` 같은 모순 상태가 생기고 우선순위 규칙이
 	// 필요해진다 — 새 파라미터가 이긴다는 규칙 하나로 그 상태를 없앤다.

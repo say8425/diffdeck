@@ -705,3 +705,42 @@ describe("diff server caller-supplied base", () => {
 		expect(await withHead.json()).toEqual(await plain.json());
 	});
 });
+
+// 커밋이 하나도 없는 리포(unborn HEAD)는 diffdeck을 새 프로젝트에서 처음
+// 켜는 경로다. e2e 픽스처는 항상 base 커밋을 만들므로 이 상태를 원리적으로
+// 만들 수 없어, 여기서 지킨다.
+describe("diff server unborn HEAD", () => {
+	let unborn: string;
+
+	beforeEach(async () => {
+		unborn = mkdtempSync(join(tmpdir(), "cc-srv-unborn-"));
+		await $`git -C ${unborn} init -q`;
+		await $`git -C ${unborn} config user.email t@t.co`;
+		await $`git -C ${unborn} config user.name test`;
+		writeFileSync(join(unborn, "a.txt"), "first file, never committed\n");
+	});
+
+	afterEach(() => rmSync(unborn, { recursive: true, force: true }));
+
+	// 피커의 "Working tree" 행이 보내는 값이다. rev-parse --verify HEAD가
+	// unborn에서 실패하므로, 검증을 그대로 태우면 첫 화면이 실패 카드가 된다.
+	test("base=HEAD serves the working tree instead of refusing", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(unborn)}&token=${token}&untracked=1&base=HEAD`,
+		);
+		expect(res.status).toBe(200);
+		const files = (await res.json()) as Array<{ name: string }>;
+		expect(files.map((f) => f.name)).toContain("a.txt");
+	});
+
+	// 레거시 wire가 내던 것과 같은 결과여야 한다 — 옛 링크와 새 기본값이
+	// 같은 화면을 보는 것이 이 값의 존재 이유다.
+	test("base=HEAD matches what the legacy mode=working wire returned", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const q = `repo=${encodeURIComponent(unborn)}&token=${token}&untracked=1`;
+		const viaBase = await fetch(`${base}/api/diff?${q}&base=HEAD`);
+		const viaMode = await fetch(`${base}/api/diff?${q}&mode=working`);
+		expect(await viaBase.json()).toEqual(await viaMode.json());
+	});
+});

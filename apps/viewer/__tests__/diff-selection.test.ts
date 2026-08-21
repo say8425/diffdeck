@@ -111,10 +111,11 @@ describe("parseSelection with an explicit base", () => {
 		});
 	});
 
-	test("base=HEAD expresses uncommitted-only, the same view as mode=working", () => {
+	// 참조로 두지 않고 정규화한다: unborn HEAD 리포에서 참조 검증이 실패해
+	// 첫 화면이 400이 되는 것을 막고, prewarm 슬롯과 캐시 키를 일치시킨다.
+	test("base=HEAD normalizes to the head selector, not a ref named HEAD", () => {
 		expect(parseSelection(params("repo=/r&base=HEAD")).base).toEqual({
-			kind: "ref",
-			ref: "HEAD",
+			kind: "head",
 		});
 	});
 });

@@ -31,7 +31,17 @@ Lo que ofrece el motor de renderizado de diffs:
 
 El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada, watch/auto-actualización, y un selector de base de comparación con búsqueda — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck.
 
-![El visor de diffdeck — árbol de archivos con insignias de estado de git, diff de imagen en línea y diffs con resaltado de sintaxis](screenshot.png)
+![El visor de diffdeck — árbol de archivos con insignias de estado de git y diffs con resaltado de sintaxis](screenshot.png)
+
+### Comparar contra cualquier rama
+
+El selector de la barra de herramientas decide contra qué se mide el diff: tu trabajo sin confirmar (**Working tree**), o cualquier rama local o remota. Escribe para filtrar.
+
+![El selector de base de comparación abierto, con Working tree junto a las ramas del repositorio](ref-picker.png)
+
+Dos etiquetas te ahorran un momento de desconcierto. La rama que este worktree tiene activa lleva `HEAD` — comparar contra ella siempre se ve vacío, porque es donde ya estás. La rama por defecto del repositorio lleva `default`, así que la elección habitual se encuentra de inmediato.
+
+Al elegir una rama, la comparación es contra la **merge base**: el commit del que se bifurcó tu trabajo. Así ves solo tus propios cambios, y no todo lo que haya llegado a la otra rama desde entonces.
 
 ### Grab — envía una selección del diff a tu agente de código
 

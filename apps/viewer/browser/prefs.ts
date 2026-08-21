@@ -82,9 +82,11 @@ export const compareBaseKey = (repo: string): string =>
 	`diffdeck:compare-base:${repo}`;
 
 /**
- * URL 파라미터 → localStorage → null. null이면 `base`를 아예 보내지 않고
- * 서버가 자동 해석하므로, 아무것도 고르지 않은 사용자는 오늘과 같은 화면을
- * 본다.
+ * URL 파라미터 → localStorage → null.
+ *
+ * null은 "고른 적 없음"이라는 뜻일 뿐이고, 그 경우 무엇을 보낼지는 호출부가
+ * 정한다(main.ts는 워킹트리를 뜻하는 `HEAD`로 떨어진다). 이 함수 자체는
+ * 어떤 wire 값도 가정하지 않는다.
  */
 export const resolveCompareBase = (
 	urlParam: string | null,
