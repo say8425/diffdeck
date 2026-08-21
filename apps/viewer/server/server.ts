@@ -8,6 +8,7 @@ import {
 	getFileBytes,
 	isGitRepo,
 	resolveBaseRef,
+	verifyBaseRef,
 } from "./diff.ts";
 import { repoFingerprint } from "./fingerprint.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
@@ -16,6 +17,12 @@ import {
 	type PayloadCacheEntry,
 	payloadEtag,
 } from "./payloadCache.ts";
+import { getRefs, type RefsResult } from "./refs.ts";
+import {
+	parseSelection,
+	type Selection,
+	selectionCacheKey,
+} from "./selection.ts";
 import {
 	createSingleFlight,
 	SingleFlightTimeoutError,
@@ -43,6 +50,9 @@ export interface DiffServerHandle {
 // 시작해 baseFlight가 miss로 되돌아가고 그 테스트는 조용히 baseFlight
 // 가드만 다시 증명하게 된다 — 첫 번째 테스트와 똑같은 것을, 티 나지 않게.
 const BASE_TTL_MS = 10_000;
+// 피커 목록의 수명. 브랜치·워크트리는 diff 내용보다 훨씬 덜 움직이므로
+// 짧게 잡아도 팝오버를 열 때마다 git을 두 번 부르지 않는다.
+const REFS_TTL_MS = 5_000;
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
@@ -129,6 +139,46 @@ const createHandler = (cfg: {
 	// 같은 (repo, untracked, mode)의 지문 계산+파이프라인을 동시에 한 번만 —
 	// 콜드 상태에서 프리워밍과 첫 화면 요청이 겹쳐도 중복 실행되지 않는다.
 	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
+	// 피커 목록. baseCache와 달리 **핸들러 스코프**에 둔다 — baseCache가 모듈
+	// 스코프인 것은 flight 타임아웃 테스트 둘이 "따로 띄운 두 서버가 같은 warm
+	// 항목을 본다"에 의존하는 특수 사정 때문이고(CLAUDE.md), 여기엔 그런 요구가
+	// 없다. 서버 인스턴스가 자기 캐시를 갖는 쪽이 격리에 낫다.
+	const refsFlight = createSingleFlight<RefsResult>(cfg.flightTimeoutMs);
+	const refsCache = new Map<string, { value: RefsResult; at: number }>();
+	// base 해석의 단일 지점. /api/diff와 /api/blob이 서로 다른 기준을 고르면
+	// 텍스트 diff와 이미지 카드가 다른 비교를 보여주게 된다.
+	//
+	// 사용자가 고른 ref는 서버가 해석할 것이 없다. 목록 밖 값이면 조용히
+	// auto로 흘려보내지 않고 거절한다 — 고르지도 않은 기준의 diff를 보여주는
+	// 것이 에러보다 나쁘다.
+	const resolveSelectionBase = async (
+		repo: string,
+		sel: Selection,
+	): Promise<{ base: string | null; ref: string | null } | Response> => {
+		if (sel.base.kind === "ref") {
+			const verified = await verifyBaseRef(repo, sel.base.ref);
+			// 상태 코드만으로는 "not a git repository" 400과 구분되지 않는다.
+			// 클라이언트가 저장된 기준만 골라 버리려면 그 둘을 갈라야 하므로
+			// 이 응답에만 표식을 얹는다(본문 문자열 매칭은 취약하다).
+			return (
+				verified ??
+				new Response(`unknown base ref: ${sel.base.ref}`, {
+					status: 400,
+					headers: { "x-diff-error": "unknown-base" },
+				})
+			);
+		}
+		return awaitFlight(resolveBaseCached(repo));
+	};
+	const getRefsCached = (repo: string): Promise<RefsResult> =>
+		refsFlight(repo, async () => {
+			const now = Date.now();
+			const hit = refsCache.get(repo);
+			if (hit && now - hit.at < REFS_TTL_MS) return hit.value;
+			const value = await getRefs(repo);
+			refsCache.set(repo, { value, at: now });
+			return value;
+		});
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
@@ -180,20 +230,21 @@ const createHandler = (cfg: {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
-			const untracked = url.searchParams.get("untracked") === "1";
-			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
-			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			const untracked = sel.untracked;
+			const mode = sel.base.kind === "head" ? "working" : "base";
+			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
 			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
 			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
 			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
 			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
-			const cacheKey = `${repo}\0${untracked}\0${mode}`;
+			const cacheKey = selectionCacheKey(sel, ref);
 			const entryResult = await awaitFlight(
 				diffFlight(cacheKey, async () => {
 					const fingerprint = await repoFingerprint(repo, {
@@ -227,14 +278,14 @@ const createHandler = (cfg: {
 			if (req.headers.get("if-none-match") === etag) {
 				return new Response(null, {
 					status: 304,
-					headers: { etag, "x-diff-base": base ?? "" },
+					headers: { etag, "x-diff-base": encodeURIComponent(base ?? "") },
 				});
 			}
 			// NOTE: intentionally no Access-Control-Allow-Origin — cross-origin pages must not read this.
 			return new Response(entry.body, {
 				headers: {
 					"content-type": "application/json; charset=utf-8",
-					"x-diff-base": base ?? "",
+					"x-diff-base": encodeURIComponent(base ?? ""),
 					etag,
 				},
 			});
@@ -244,11 +295,15 @@ const createHandler = (cfg: {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
-			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			// 빈 상태 카드가 diff와 **다른 비교**를 설명하면 안 된다. 여기서
+			// resolveBaseCached를 그냥 부르면 사용자가 develop을 골라 놓고도
+			// 카드는 "No changes vs main"이라고 말한다.
+			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
 			const summary = await getRepoSummary(repo, { base, ref });
@@ -258,11 +313,30 @@ const createHandler = (cfg: {
 			});
 		}
 
+		// 피커가 고를 수 있는 것들. /api/diff의 순차 flight 사슬에 끼우지 않고
+		// 자기 라우트에서 자기 예산으로 돈다.
+		if (url.pathname === "/api/refs") {
+			if (url.searchParams.get("token") !== cfg.token) {
+				return new Response("forbidden", { status: 403 });
+			}
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
+			if (!repo || !(await isGitRepo(repo))) {
+				return new Response("not a git repository", { status: 400 });
+			}
+			const result = await awaitFlight(getRefsCached(repo));
+			if (result instanceof Response) return result;
+			return new Response(JSON.stringify(result), {
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+
 		if (url.pathname === "/api/blob") {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
@@ -272,10 +346,10 @@ const createHandler = (cfg: {
 				return new Response("not found", { status: 404 });
 			}
 			const side = url.searchParams.get("side") === "old" ? "old" : "new";
-			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
+			const mode = sel.base.kind === "head" ? "working" : "base";
 			let ref: string | null = null;
 			if (mode === "base") {
-				const baseResult = await awaitFlight(resolveBaseCached(repo));
+				const baseResult = await resolveSelectionBase(repo, sel);
 				if (baseResult instanceof Response) return baseResult;
 				ref = baseResult.ref;
 			}

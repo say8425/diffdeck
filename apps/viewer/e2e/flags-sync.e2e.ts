@@ -90,3 +90,29 @@ test("launch flags are reflected in the in-app toggle state", async ({
 		foldWithTreeToggle: true,
 	});
 });
+
+// 메뉴 최하단의 버전 줄. 값은 /api/ping의 x-diffdeck-version 헤더에서 오는데,
+// 브라우저는 원래 그 라우트를 부르지 않았으므로 이 배선이 유일한 소비자다.
+// main.ts는 커버리지 게이트 밖이라 여기서만 지켜진다.
+test("the overflow menu ends with a version line linking to the repository", async ({
+	page,
+}) => {
+	const { url, stop } = await launchViewer();
+	try {
+		await page.goto(url);
+		await page.locator("#overflow-btn").click();
+
+		const link = page.locator("#version-link");
+		await expect(link).toBeVisible();
+		await expect(link).toHaveAttribute(
+			"href",
+			"https://github.com/say8425/diffdeck",
+		);
+		// 새 탭으로 여는 링크는 opener를 끊어야 한다.
+		await expect(link).toHaveAttribute("rel", /noopener/);
+		// 서버가 실제로 보고한 버전이어야 한다 — 하드코딩된 문자열이 아니라.
+		await expect(page.locator("#version-value")).toHaveText(/^v\d+\.\d+\.\d+/);
+	} finally {
+		await stop();
+	}
+});

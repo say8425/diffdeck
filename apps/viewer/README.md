@@ -1,8 +1,8 @@
 # @say8425/diffdeck
 
-A local git diff viewer. Run it in any git repository to browse working-tree
-and branch diffs in your browser, with syntax highlighting, a file tree, and
-inline image diffs.
+A local git diff viewer. Run it in any git repository to browse your
+working-tree changes — or compare them against any branch — in your browser,
+with syntax highlighting, a file tree, and inline image diffs.
 
 ## Usage
 

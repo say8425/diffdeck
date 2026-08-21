@@ -118,6 +118,35 @@ describe("blobUrl", () => {
 		expect(params.get("v")).toBe("v1");
 	});
 
+	// 이미지 카드와 텍스트 diff가 같은 비교를 보여줘야 한다 — 기준이 갈리면
+	// 한쪽은 고른 브랜치를, 다른 쪽은 워킹트리를 보여준다.
+	test("carries the chosen compare base", () => {
+		const url = blobUrl({
+			repo: "/r",
+			token: "t",
+			path: "a.png",
+			side: "new",
+			mode: "base",
+			base: "develop",
+		});
+		expect(
+			new URLSearchParams(url.slice("/api/blob?".length)).get("base"),
+		).toBe("develop");
+	});
+
+	test("omits base when none was chosen, leaving the server on mode", () => {
+		const url = blobUrl({
+			repo: "/r",
+			token: "t",
+			path: "a.png",
+			side: "new",
+			mode: "working",
+		});
+		expect(
+			new URLSearchParams(url.slice("/api/blob?".length)).has("base"),
+		).toBe(false);
+	});
+
 	test("omits the version param when absent", () => {
 		const url = blobUrl({
 			repo: "/r",

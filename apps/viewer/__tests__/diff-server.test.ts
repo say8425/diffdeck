@@ -579,3 +579,192 @@ describe("diff server flight timeout", () => {
 		}
 	});
 });
+
+// HTTP 헤더 값은 latin1이다. git은 refname에 비ASCII를 허용하므로 base 브랜치
+// 이름이 한글/일본어/중국어이면 x-diff-base를 실은 Response 생성이 throw하고
+// 응답 전체가 500이 된다(Bun 1.3.12 실측). 클라의 fetchDiffOnce는 비-503
+// non-ok를 terminal로 매핑해 재시도 없이 "Failed to load diff."를 띄우므로,
+// 그런 리포는 diff가 아예 뜨지 않는다. 이 리포는 이미 korean-filename.e2e.ts를
+// 갖고 있어 비ASCII git 식별자는 범위 안이다.
+describe("diff server non-latin1 base name", () => {
+	// 원격 없이 refs만 세워 hermetic하게 만든다: origin/HEAD -> origin/<한글>.
+	// resolveBaseRef의 defaultBranchName 갈래가 이걸 읽어 base를 낸다.
+	//
+	// refname을 반드시 ${보간}으로 넘길 것 — Bun 1.3.12의 $ 템플릿에 비ASCII를
+	// 리터럴로 적으면 "uAE30uB2A5" 같은 ASCII 텍스트로 뭉개져(실측: 코드포인트
+	// 75 41 45 33 30 …) 한글이 아닌 브랜치가 만들어지고, 테스트가 조용히
+	// 아무것도 검증하지 않게 된다.
+	const KOREAN_BRANCH = "기능";
+	const setUpKoreanBase = async (): Promise<void> => {
+		const head = (await $`git -C ${repo} rev-parse HEAD`.text()).trim();
+		const ref = `refs/remotes/origin/${KOREAN_BRANCH}`;
+		await $`git -C ${repo} update-ref ${ref} ${head}`;
+		await $`git -C ${repo} symbolic-ref refs/remotes/origin/HEAD ${ref}`;
+	};
+
+	test("serves the diff instead of 500 when the base branch is non-latin1", async () => {
+		await setUpKoreanBase();
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(res.status).toBe(200);
+	});
+
+	test("reports the non-latin1 base name so the client can render it", async () => {
+		await setUpKoreanBase();
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(decodeURIComponent(res.headers.get("x-diff-base") ?? "")).toBe(
+			KOREAN_BRANCH,
+		);
+	});
+});
+
+describe("diff server refs route", () => {
+	test("rejects a request without the token", async () => {
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(repo)}`,
+		);
+		expect(res.status).toBe(403);
+	});
+
+	test("rejects a path that is not a git repository", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(viewerDir)}&token=${token}`,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	test("lists the current worktree and its branch", async () => {
+		await $`git -C ${repo} branch -M main`;
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			worktrees: Array<{ branch: string | null }>;
+			refs: Array<{ name: string; worktreePath: string | null }>;
+			defaultBranch: string | null;
+		};
+		expect(body.worktrees.map((w) => w.branch)).toEqual(["main"]);
+		const main = body.refs.find((r) => r.name === "main");
+		expect(main?.worktreePath).not.toBeNull();
+	});
+});
+
+describe("diff server caller-supplied base", () => {
+	const tok = (): string =>
+		readTokenSync({ XDG_CACHE_HOME: cacheHome }) as string;
+
+	const diff = (query: string): Promise<Response> =>
+		fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${tok()}&${query}`,
+		);
+
+	test("compares against the branch the caller names", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feature`;
+		writeFileSync(join(repo, "c.txt"), "on the branch\n");
+		await $`git -C ${repo} add c.txt`;
+		await $`git -C ${repo} commit -qm branch-work`;
+
+		const res = await diff("base=main");
+		expect(res.status).toBe(200);
+		expect(decodeURIComponent(res.headers.get("x-diff-base") ?? "")).toBe(
+			"main",
+		);
+		const files = (await res.json()) as Array<{ name: string }>;
+		expect(files.map((f) => f.name)).toContain("c.txt");
+	});
+
+	// 조용히 auto로 흘려보내면 사용자가 고르지 않은 기준의 diff를 보여주게 된다.
+	test("refuses a base that does not exist instead of falling back", async () => {
+		const res = await diff("base=no-such-branch");
+		expect(res.status).toBe(400);
+	});
+
+	// Bun의 $는 셸을 이스케이프하지 git의 옵션 파싱을 막지 않는다. 첫 글자가
+	// "-"인 ref가 git diff에 도달하면 --output=<path>로 임의의 파일을 만들거나
+	// 비울 수 있다. refExists(rev-parse --verify)가 옵션 꼴을 거부하는 것이
+	// 그 통로를 닫는다.
+	test("refuses an option-shaped base and writes nothing", async () => {
+		const victim = join(cacheHome, "pwned.txt");
+		const res = await diff(`base=${encodeURIComponent(`--output=${victim}`)}`);
+		expect(res.status).toBe(400);
+		expect(existsSync(victim)).toBe(false);
+	});
+
+	test("base=HEAD shows the same files as the default working view", async () => {
+		const withHead = await diff("base=HEAD");
+		const plain = await diff("untracked=0");
+		expect(await withHead.json()).toEqual(await plain.json());
+	});
+});
+
+// 커밋이 하나도 없는 리포(unborn HEAD)는 diffdeck을 새 프로젝트에서 처음
+// 켜는 경로다. e2e 픽스처는 항상 base 커밋을 만들므로 이 상태를 원리적으로
+// 만들 수 없어, 여기서 지킨다.
+describe("diff server unborn HEAD", () => {
+	let unborn: string;
+
+	beforeEach(async () => {
+		unborn = mkdtempSync(join(tmpdir(), "cc-srv-unborn-"));
+		await $`git -C ${unborn} init -q`;
+		await $`git -C ${unborn} config user.email t@t.co`;
+		await $`git -C ${unborn} config user.name test`;
+		writeFileSync(join(unborn, "a.txt"), "first file, never committed\n");
+	});
+
+	afterEach(() => rmSync(unborn, { recursive: true, force: true }));
+
+	// 피커의 "Working tree" 행이 보내는 값이다. rev-parse --verify HEAD가
+	// unborn에서 실패하므로, 검증을 그대로 태우면 첫 화면이 실패 카드가 된다.
+	test("base=HEAD serves the working tree instead of refusing", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(unborn)}&token=${token}&untracked=1&base=HEAD`,
+		);
+		expect(res.status).toBe(200);
+		const files = (await res.json()) as Array<{ name: string }>;
+		expect(files.map((f) => f.name)).toContain("a.txt");
+	});
+
+	// 레거시 wire가 내던 것과 같은 결과여야 한다 — 옛 링크와 새 기본값이
+	// 같은 화면을 보는 것이 이 값의 존재 이유다.
+	test("base=HEAD matches what the legacy mode=working wire returned", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const q = `repo=${encodeURIComponent(unborn)}&token=${token}&untracked=1`;
+		const viaBase = await fetch(`${base}/api/diff?${q}&base=HEAD`);
+		const viaMode = await fetch(`${base}/api/diff?${q}&mode=working`);
+		expect(await viaBase.json()).toEqual(await viaMode.json());
+	});
+});
+
+// 400이 두 종류인데 상태 코드가 같다. 클라이언트는 "고른 기준이 사라졌다"일
+// 때만 저장된 프리퍼런스를 버려야 하므로, 그 구분이 응답에 실려야 한다 —
+// 없으면 repo가 사라진 경우에도 프리퍼런스만 조용히 지워지고 화면은 그대로
+// 실패 카드다.
+describe("diff server 400 kinds are distinguishable", () => {
+	test("an unknown base ref is marked so the client can drop its preference", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}&base=no-such-branch`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-base");
+	});
+
+	test("a non-repository is not marked, so nothing is dropped", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(viewerDir)}&token=${token}&base=main`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBeNull();
+	});
+});

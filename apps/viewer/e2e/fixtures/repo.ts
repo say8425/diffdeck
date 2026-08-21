@@ -102,6 +102,14 @@ export interface FixtureRepoOptions {
 	 * `row.side === side` filter. grab-highlight.e2e.ts 전용.
 	 */
 	contextBetweenDeletions?: boolean;
+	/**
+	 * Opt-in: rename to `main` and create these extra branches at the base
+	 * commit, so the compare-base picker has a list worth filtering. Kept
+	 * opt-in like every other shape here — the default fixture must stay
+	 * byte-identical for the ~30 specs written against it.
+	 * ref-picker.e2e.ts 전용.
+	 */
+	branches?: string[];
 }
 
 // Wide enough that each line is one diff row; deliberately free of the words
@@ -206,8 +214,12 @@ export const makeFixtureRepo = (
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
 
-	if (options.clean || options.featureBranchCommit) {
-		git(dir, ["branch", "-M", "main"]);
+	// 옵션과 무관하게 항상 고정한다. git init은 머신의 init.defaultBranch를
+	// 따르므로(개발자 로컬 main, CI 러너 master) 고정하지 않으면 브랜치명을
+	// 건드리는 스펙이 개발자 머신에서만 통과한다 — 실제로 CI에서 한 번 밟았다.
+	git(dir, ["branch", "-M", "main"]);
+	for (const branch of options.branches ?? []) {
+		git(dir, ["branch", branch]);
 	}
 	if (options.featureBranchCommit) {
 		git(dir, ["checkout", "-qb", "feature"]);

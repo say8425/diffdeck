@@ -29,9 +29,19 @@ diff 渲染引擎提供的功能：
 - **虚拟化渲染**，在大型 diff 下仍保持流畅，并带有粘性（sticky）文件头。
 - **每个文件独立的 Shadow DOM 封装**，确保查看器的样式不会泄漏到页面中。
 
-包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及 working-tree 与 base 对比模式——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
+包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及可搜索的对比基准选择器——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
 
-![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
+![diffdeck 查看器 —— 带 git 状态徽章的文件树与语法高亮 diff](screenshot.png)
+
+### 与任意分支对比
+
+工具栏的选择器决定 diff 以什么为基准：尚未提交的改动(**Working tree**)，或任意本地／远程分支。输入即可筛选。
+
+![打开的对比基准选择器，同时列出 Working tree 与仓库中的分支](ref-picker.png)
+
+两个标签可以省下一次困惑。当前工作树检出的分支带 `HEAD` —— 那正是你所在的位置，与它对比永远看起来是空的。仓库的默认分支带 `default`，常用的选择一眼可见。
+
+选定分支后，对比的是 **merge base**，也就是你的工作分叉出去的那个提交。因此你只会看到自己改动的部分，而不会混入分叉之后落到对方分支上的内容。
 
 ### Grab — 把 diff 选区交给编码智能体
 

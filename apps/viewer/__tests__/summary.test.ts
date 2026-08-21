@@ -103,3 +103,17 @@ describe("getRepoSummary", () => {
 		expect(s.aheadCommits).toBeNull();
 	});
 });
+
+// 피커가 "이 숫자는 어느 행의 것인가"를 가리려면 표시명이 아니라 잰 참조가
+// 필요하다. base는 origin/ 접두가 벗겨져 있어 로컬 동명 브랜치와 구별되지
+// 않는다.
+test("reports the ref it measured against, prefix intact", async () => {
+	const head = (await $`git -C ${repo} rev-parse HEAD`.text()).trim();
+	await $`git -C ${repo} update-ref refs/remotes/origin/main ${head}`;
+	const summary = await getRepoSummary(repo, {
+		base: "main",
+		ref: "origin/main",
+	});
+	expect(summary.base).toBe("main");
+	expect(summary.ref).toBe("origin/main");
+});

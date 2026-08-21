@@ -24,6 +24,32 @@ const refExists = async (repo: string, ref: string): Promise<boolean> => {
 	return r.exitCode === 0;
 };
 
+/**
+ * 호출자가 고른 base 참조를 검증하고 표시명을 만든다.
+ *
+ * **보안 경계다.** Bun의 `$`는 셸을 이스케이프하지 git의 옵션 파싱을 막아주지
+ * 않는다 — 첫 글자가 `-`인 참조가 `git diff`에 도달하면 `--output=<path>`로
+ * 데몬이 쓸 수 있는 아무 경로나 만들거나 비울 수 있다. `refExists`가 쓰는
+ * `rev-parse --verify --quiet`는 옵션 꼴 문자열을 거부하지만, 그 방어에만
+ * 기대지 않고 여기서 먼저 끊는다.
+ *
+ * 알려진 한계: `rev-parse --verify`는 커밋이 아닌 리비전(`HEAD:a.txt` 같은
+ * blob)도 통과시킨다. 그런 값은 `merge-base`가 실패해 빈 diff가 되는데,
+ * 보안 문제는 아니지만 조용한 빈 화면이라 목록 밖 값은 애초에 고를 수 없게
+ * 하는 것이 옳다(피커는 /api/refs가 준 목록에서만 고른다).
+ */
+export const verifyBaseRef = async (
+	repo: string,
+	ref: string,
+): Promise<{ base: string; ref: string } | null> => {
+	if (ref === "" || ref.startsWith("-")) return null;
+	if (!(await refExists(repo, ref))) return null;
+	return {
+		base: ref.startsWith("origin/") ? ref.slice("origin/".length) : ref,
+		ref,
+	};
+};
+
 export const prBaseName = async (repo: string): Promise<string | null> => {
 	try {
 		const out = await $`gh pr view --json baseRefName -q .baseRefName`

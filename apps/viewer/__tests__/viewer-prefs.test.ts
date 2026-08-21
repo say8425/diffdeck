@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import {
-	clampTreeWidth,
+	type Getter,
 	DEFAULT_TREE_WIDTH,
 	FLATTEN_KEY,
 	MAX_TREE_WIDTH,
 	MIN_TREE_WIDTH,
+	TREE_SIDE_KEY,
+	TREE_WIDTH_KEY,
+	clampTreeWidth,
+	compareBaseKey,
 	readFlatten,
 	readTreeSide,
 	readTreeWidth,
+	resolveCompareBase,
 	resolveDiffStyle,
 	resolveFlatten,
 	resolveFoldWithTree,
@@ -15,8 +20,6 @@ import {
 	resolveTreeSide,
 	resolveUntracked,
 	resolveWatch,
-	TREE_SIDE_KEY,
-	TREE_WIDTH_KEY,
 } from "../browser/prefs.ts";
 
 const fake =
@@ -148,5 +151,48 @@ describe("readTreeWidth", () => {
 		expect(readTreeWidth(fake({ [TREE_WIDTH_KEY]: "bogus" }))).toBe(
 			DEFAULT_TREE_WIDTH,
 		);
+	});
+});
+
+describe("compare base preference", () => {
+	const store =
+		(entries: Record<string, string>): Getter =>
+		(k) =>
+			entries[k] ?? null;
+
+	test("the URL parameter wins over the stored choice", () => {
+		expect(
+			resolveCompareBase(
+				"develop",
+				store({ [compareBaseKey("/r")]: "main" }),
+				"/r",
+			),
+		).toBe("develop");
+	});
+
+	test("falls back to the stored choice when the URL is silent", () => {
+		expect(
+			resolveCompareBase(null, store({ [compareBaseKey("/r")]: "main" }), "/r"),
+		).toBe("main");
+	});
+
+	// null이면 base 파라미터를 아예 보내지 않고 서버가 자동 해석한다 —
+	// 오늘의 기본 동작이 그대로 유지된다.
+	test("resolves to null when neither layer has a value", () => {
+		expect(resolveCompareBase(null, store({}), "/r")).toBeNull();
+	});
+
+	test("an empty URL parameter behaves as absent", () => {
+		expect(
+			resolveCompareBase("", store({ [compareBaseKey("/r")]: "main" }), "/r"),
+		).toBe("main");
+	});
+
+	// 워크트리마다 견주는 기준이 다르다. 네임스페이스가 없으면 한 워크트리의
+	// 선택이 다른 워크트리로 새어 나간다(기존 여섯 키가 그 상태다).
+	test("keeps each repository's choice separate", () => {
+		const get = store({ [compareBaseKey("/a")]: "main" });
+		expect(resolveCompareBase(null, get, "/a")).toBe("main");
+		expect(resolveCompareBase(null, get, "/b")).toBeNull();
 	});
 });

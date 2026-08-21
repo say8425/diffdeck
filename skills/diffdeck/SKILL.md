@@ -7,7 +7,7 @@ license: Apache-2.0
 # diffdeck — show the human a visual diff
 
 diffdeck runs a local web server that renders the current git repository's diff
-(working-tree changes, or a branch vs its base) in the browser: a file tree with
+(working-tree changes, or a comparison against any branch) in the browser: a file tree with
 git-status badges, unified/split views, in-app search, image diffs, live watch,
 and **grab** — the human can select code in the diff and copy it back to you with
 an exact reference attached. Use it to let the **human** see changes visually
