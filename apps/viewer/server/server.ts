@@ -157,9 +157,15 @@ const createHandler = (cfg: {
 	): Promise<{ base: string | null; ref: string | null } | Response> => {
 		if (sel.base.kind === "ref") {
 			const verified = await verifyBaseRef(repo, sel.base.ref);
+			// 상태 코드만으로는 "not a git repository" 400과 구분되지 않는다.
+			// 클라이언트가 저장된 기준만 골라 버리려면 그 둘을 갈라야 하므로
+			// 이 응답에만 표식을 얹는다(본문 문자열 매칭은 취약하다).
 			return (
 				verified ??
-				new Response(`unknown base ref: ${sel.base.ref}`, { status: 400 })
+				new Response(`unknown base ref: ${sel.base.ref}`, {
+					status: 400,
+					headers: { "x-diff-error": "unknown-base" },
+				})
 			);
 		}
 		return awaitFlight(resolveBaseCached(repo));

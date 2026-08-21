@@ -744,3 +744,27 @@ describe("diff server unborn HEAD", () => {
 		expect(await viaBase.json()).toEqual(await viaMode.json());
 	});
 });
+
+// 400이 두 종류인데 상태 코드가 같다. 클라이언트는 "고른 기준이 사라졌다"일
+// 때만 저장된 프리퍼런스를 버려야 하므로, 그 구분이 응답에 실려야 한다 —
+// 없으면 repo가 사라진 경우에도 프리퍼런스만 조용히 지워지고 화면은 그대로
+// 실패 카드다.
+describe("diff server 400 kinds are distinguishable", () => {
+	test("an unknown base ref is marked so the client can drop its preference", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}&base=no-such-branch`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-base");
+	});
+
+	test("a non-repository is not marked, so nothing is dropped", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(viewerDir)}&token=${token}&base=main`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBeNull();
+	});
+});

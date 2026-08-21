@@ -1077,7 +1077,7 @@ type FetchDiffAttempt =
 	| FetchDiffResult
 	// 서버가 살아있고 이 요청 자체가 잘못됐다는 신호(토큰 불일치·git repo
 	// 아님) — 재시도해도 같은 답을 받으므로 즉시 포기한다.
-	| { kind: "terminal"; status: number }
+	| { kind: "terminal"; unknownBase: boolean }
 	// 서버가 일시적으로 응답을 못 만든(single-flight 타임아웃 503,
 	// singleFlight.ts) 경우와 네트워크 레벨 실패(fetch 자체가 throw) —
 	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다.
@@ -1099,7 +1099,12 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		const base = decodeHeaderValue(res.headers.get("x-diff-base"));
 		if (res.status === 304) return { kind: "unchanged", base };
 		if (res.status === 503) return { kind: "retryable" };
-		if (!res.ok) return { kind: "terminal", status: res.status };
+		if (!res.ok) {
+			return {
+				kind: "terminal",
+				unknownBase: res.headers.get("x-diff-error") === "unknown-base",
+			};
+		}
 		const files = (await res.json()) as DiffFile[];
 		return { kind: "data", files, base, etag: res.headers.get("etag") };
 	} catch (err) {
@@ -1131,8 +1136,10 @@ const RETRY_DELAYS_MS = [1000] as const;
 // 것이므로, 조용히 다른 것을 보여주는 편이 에러보다 나쁘다(서버가 목록 밖
 // base를 400으로 거절하는 것과 같은 근거).
 let staleBaseRecovered = false;
-const recoverFromStaleBase = (status: number): boolean => {
-	if (status !== 400) return false;
+const recoverFromStaleBase = (unknownBase: boolean): boolean => {
+	// "not a git repository" 400에서도 돌면 프리퍼런스만 조용히 사라지고
+	// 화면은 그대로 실패 카드다 — 서버가 준 표식으로만 발동한다.
+	if (!unknownBase) return false;
 	if (staleBaseRecovered || !compareBaseFromStorage) return false;
 	if (compareBase === "HEAD") return false;
 	staleBaseRecovered = true;
@@ -1152,7 +1159,13 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 		const result = await fetchDiffOnce();
 		if (result.kind === "data" || result.kind === "unchanged") return result;
 		if (result.kind === "terminal") {
-			if (recoverFromStaleBase(result.status)) continue;
+			// attempt를 되돌린다 — 복구 직후의 재요청이 503을 만나면 남은
+			// 1회 재시도가 필요하고, 그것이 CLAUDE.md "Loading… 자가치유"
+			// 3요소 중 클라이언트 몫이다.
+			if (recoverFromStaleBase(result.unknownBase)) {
+				attempt--;
+				continue;
+			}
 			return null;
 		}
 		if (attempt >= RETRY_DELAYS_MS.length) return null;
@@ -1430,10 +1443,13 @@ const urlBase =
 	params.get("base") ??
 	(urlMode === "base" ? "@auto" : urlMode === "working" ? "HEAD" : null);
 const storedLegacyMode = localStorage.getItem("cc-statusline:diff-mode");
-// URL이 기준을 명시했는지 — 저장된 값에서 왔을 때만 자가복구가 돈다.
-const compareBaseFromStorage = urlBase === null;
+// `?base=`(빈 값)는 resolveCompareBase가 "없음"으로 치므로 여기서도 같은
+// 규칙을 써야 판정이 어긋나지 않는다 — URL이 이겼는지를 실제로 이긴 값으로
+// 정한다. 저장된 값에서 왔을 때만 자가복구가 돈다.
+const urlChoice = urlBase !== null && urlBase !== "" ? urlBase : null;
+const compareBaseFromStorage = urlChoice === null;
 compareBase =
-	resolveCompareBase(urlBase, (k) => localStorage.getItem(k), repo) ??
+	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) ??
 	(storedLegacyMode === "base" ? "@auto" : "HEAD");
 syncPickerLabel();
 
