@@ -397,6 +397,20 @@
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
+			/* 구역 이름이 "무엇과 견주는가"를 말한다 — Working tree(미커밋)와
+			   브랜치(갈라진 뒤 전부)는 종류가 다른데 예전엔 같은 줄에 같은
+			   모양으로 있어 구분이 안 됐다. */
+			#ref-picker .ref-section {
+				padding: 6px 8px 3px;
+				font-size: 11px;
+				letter-spacing: 0.04em;
+				color: var(--vd-fg-muted);
+			}
+			#ref-picker .ref-divider {
+				height: 1px;
+				background: var(--vd-border);
+				margin: 6px 2px 0;
+			}
 			#ref-picker .ref-row-tag {
 				margin-left: auto;
 				padding-left: 10px;

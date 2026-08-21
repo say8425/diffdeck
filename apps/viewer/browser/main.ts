@@ -69,6 +69,7 @@ import {
 	type BaseRow,
 	buildBaseRows,
 	filterBaseRows,
+	type RowCounts,
 } from "./refPicker/model.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
@@ -1302,7 +1303,24 @@ const renderPickerRows = (): void => {
 		pickerList.append(empty);
 		return;
 	}
+	const SECTION_LABEL: Record<string, string> = {
+		uncommitted: "UNCOMMITTED",
+		branches: "COMPARE WITH A BRANCH",
+	};
+	let section: string | null = null;
 	for (const [index, row] of rows.entries()) {
+		if (row.section !== section) {
+			if (section !== null) {
+				const rule = document.createElement("div");
+				rule.className = "ref-divider";
+				pickerList.append(rule);
+			}
+			const head = document.createElement("div");
+			head.className = "ref-section";
+			head.textContent = SECTION_LABEL[row.section] ?? row.section;
+			pickerList.append(head);
+			section = row.section;
+		}
 		const el = document.createElement("div");
 		el.className = "ref-row";
 		el.id = `ref-row-${index}`;
@@ -1320,11 +1338,11 @@ const renderPickerRows = (): void => {
 		label.className = "ref-row-label";
 		label.textContent = row.label;
 		el.append(label);
-		if (row.tag) {
-			const tag = document.createElement("span");
-			tag.className = "ref-row-tag";
-			tag.textContent = row.tag;
-			el.append(tag);
+		if (row.note) {
+			const note = document.createElement("span");
+			note.className = "ref-row-tag";
+			note.textContent = row.note;
+			el.append(note);
 		}
 		el.addEventListener("click", () => void applySelection(row.value));
 		pickerList.append(el);
@@ -1341,11 +1359,29 @@ const loadPickerRows = async (): Promise<void> => {
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
+		// 개수는 /api/summary가 매 로드마다 이미 계산하는 값이라 git 호출이
+		// 늘지 않는다. 브랜치마다 붙이려면 브랜치당 호출이 하나씩 더 들기
+		// 때문에, 잰 그 비교 하나에만 붙인다.
+		const summary = await fetchSummary();
+		// 이름이 아니라 **현재 선택값**으로 맞춘다 — summary는 지금 기준으로
+		// 계산되므로 그래야 잰 것과 보여주는 자리가 정확히 같다. (표시명은
+		// origin/ 접두가 벗겨져 로컬 동명 브랜치와 헷갈릴 수 있다.)
+		const measuredAgainst =
+			compareBase === "HEAD" || compareBase === "@auto"
+				? diffBase
+				: compareBase;
+		const counts: RowCounts = {
+			working: summary?.workingFiles ?? null,
+			base:
+				summary && summary.baseFiles !== null && measuredAgainst !== ""
+					? { name: measuredAgainst, files: summary.baseFiles }
+					: null,
+		};
 		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
 		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
 		// 목록에서 자기 경로를 찾아 읽는다.
 		const current = body.worktrees.find((w) => w.path === repo)?.branch ?? null;
-		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current);
+		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current, counts);
 		renderPickerRows();
 	} catch {
 		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.

@@ -15,7 +15,9 @@ describe("buildBaseRows", () => {
 			value: "HEAD",
 			label: "Working tree",
 			kind: "working",
+			section: "uncommitted",
 			tag: null,
+			note: null,
 		});
 	});
 
@@ -93,5 +95,54 @@ describe("filterBaseRows", () => {
 
 	test("trims surrounding whitespace before matching", () => {
 		expect(filterBaseRows(rows, "  grab  ")).toHaveLength(1);
+	});
+});
+
+describe("buildBaseRows sections", () => {
+	test("puts the working tree in its own section, branches in another", () => {
+		const rows = buildBaseRows([ref("main"), ref("o/m", "remote")], null, null);
+		expect(rows.map((r) => r.section)).toEqual([
+			"uncommitted",
+			"branches",
+			"branches",
+		]);
+	});
+});
+
+describe("buildBaseRows notes", () => {
+	// 목록에서 미리 보여야 "골랐더니 비어 있더라"가 안 생긴다.
+	test("says the working tree is empty before you pick it", () => {
+		const rows = buildBaseRows([], null, null, { working: 0, base: null });
+		expect(rows[0]?.note).toBe("nothing yet");
+	});
+
+	test("counts uncommitted files when there are some", () => {
+		const rows = buildBaseRows([], null, null, { working: 3, base: null });
+		expect(rows[0]?.note).toBe("3 file(s)");
+	});
+
+	test("says nothing when the count is unknown", () => {
+		expect(buildBaseRows([], null, null)[0]?.note).toBeNull();
+	});
+
+	// 개수는 공짜인 자리에만 붙는다 — 서버가 이미 아는 그 비교 하나다.
+	// 브랜치마다 붙이려면 브랜치당 git 호출이 하나씩 더 든다.
+	test("attaches the known count only to the branch it was measured against", () => {
+		const rows = buildBaseRows([ref("main"), ref("develop")], "main", null, {
+			working: 0,
+			base: { name: "main", files: 30 },
+		});
+		expect(rows.find((r) => r.value === "main")?.note).toBe(
+			"default · 30 file(s)",
+		);
+		expect(rows.find((r) => r.value === "develop")?.note).toBeNull();
+	});
+
+	test("keeps the HEAD tag when no count is known for that branch", () => {
+		const rows = buildBaseRows([ref("feature")], null, "feature", {
+			working: 0,
+			base: { name: "main", files: 30 },
+		});
+		expect(rows.find((r) => r.value === "feature")?.note).toBe("HEAD");
 	});
 });

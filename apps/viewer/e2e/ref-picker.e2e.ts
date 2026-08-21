@@ -182,4 +182,33 @@ test.describe("compare base picker", () => {
 			await stop();
 		}
 	});
+
+	// 두 종류를 화면에서 가르는 것이 이 목록의 요점이다 — Working tree는
+	// 미커밋만, 브랜치는 갈라진 뒤 전부라 같은 줄에 같은 모양으로 두면
+	// 구분이 안 된다.
+	test("separates the working tree from the branches, and says how full it is", async ({
+		page,
+	}) => {
+		const { url, stop } = await launchViewer([], OPTS);
+		try {
+			await page.goto(url);
+			await expect(page.locator("#status")).toHaveText("3 file(s)");
+			await page.locator("#ref-picker-btn").click();
+
+			const sections = page.locator("#ref-picker .ref-section");
+			await expect(sections).toHaveText([
+				"UNCOMMITTED",
+				"COMPARE WITH A BRANCH",
+			]);
+
+			// 고르기 전에 얼마나 들어 있는지 보여야 "골랐더니 비어 있더라"가
+			// 안 생긴다.
+			const working = page
+				.locator("#ref-picker .ref-row")
+				.filter({ hasText: "Working tree" });
+			await expect(working.locator(".ref-row-tag")).toHaveText("3 file(s)");
+		} finally {
+			await stop();
+		}
+	});
 });
