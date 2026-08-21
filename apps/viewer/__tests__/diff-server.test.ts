@@ -622,3 +622,37 @@ describe("diff server non-latin1 base name", () => {
 		);
 	});
 });
+
+describe("diff server refs route", () => {
+	test("rejects a request without the token", async () => {
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(repo)}`,
+		);
+		expect(res.status).toBe(403);
+	});
+
+	test("rejects a path that is not a git repository", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(viewerDir)}&token=${token}`,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	test("lists the current worktree and its branch", async () => {
+		await $`git -C ${repo} branch -M main`;
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(
+			`${base}/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			worktrees: Array<{ branch: string | null }>;
+			refs: Array<{ name: string; worktreePath: string | null }>;
+			defaultBranch: string | null;
+		};
+		expect(body.worktrees.map((w) => w.branch)).toEqual(["main"]);
+		const main = body.refs.find((r) => r.name === "main");
+		expect(main?.worktreePath).not.toBeNull();
+	});
+});

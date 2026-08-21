@@ -16,6 +16,7 @@ import {
 	type PayloadCacheEntry,
 	payloadEtag,
 } from "./payloadCache.ts";
+import { getRefs, type RefsResult } from "./refs.ts";
 import { parseSelection, selectionCacheKey } from "./selection.ts";
 import {
 	createSingleFlight,
@@ -44,6 +45,9 @@ export interface DiffServerHandle {
 // 시작해 baseFlight가 miss로 되돌아가고 그 테스트는 조용히 baseFlight
 // 가드만 다시 증명하게 된다 — 첫 번째 테스트와 똑같은 것을, 티 나지 않게.
 const BASE_TTL_MS = 10_000;
+// 피커 목록의 수명. 브랜치·워크트리는 diff 내용보다 훨씬 덜 움직이므로
+// 짧게 잡아도 팝오버를 열 때마다 git을 두 번 부르지 않는다.
+const REFS_TTL_MS = 5_000;
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
@@ -130,6 +134,21 @@ const createHandler = (cfg: {
 	// 같은 (repo, untracked, mode)의 지문 계산+파이프라인을 동시에 한 번만 —
 	// 콜드 상태에서 프리워밍과 첫 화면 요청이 겹쳐도 중복 실행되지 않는다.
 	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
+	// 피커 목록. baseCache와 달리 **핸들러 스코프**에 둔다 — baseCache가 모듈
+	// 스코프인 것은 flight 타임아웃 테스트 둘이 "따로 띄운 두 서버가 같은 warm
+	// 항목을 본다"에 의존하는 특수 사정 때문이고(CLAUDE.md), 여기엔 그런 요구가
+	// 없다. 서버 인스턴스가 자기 캐시를 갖는 쪽이 격리에 낫다.
+	const refsFlight = createSingleFlight<RefsResult>(cfg.flightTimeoutMs);
+	const refsCache = new Map<string, { value: RefsResult; at: number }>();
+	const getRefsCached = (repo: string): Promise<RefsResult> =>
+		refsFlight(repo, async () => {
+			const now = Date.now();
+			const hit = refsCache.get(repo);
+			if (hit && now - hit.at < REFS_TTL_MS) return hit.value;
+			const value = await getRefs(repo);
+			refsCache.set(repo, { value, at: now });
+			return value;
+		});
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
@@ -257,6 +276,24 @@ const createHandler = (cfg: {
 			const summary = await getRepoSummary(repo, { base, ref });
 			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
 			return new Response(JSON.stringify(summary), {
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+
+		// 피커가 고를 수 있는 것들. /api/diff의 순차 flight 사슬에 끼우지 않고
+		// 자기 라우트에서 자기 예산으로 돈다.
+		if (url.pathname === "/api/refs") {
+			if (url.searchParams.get("token") !== cfg.token) {
+				return new Response("forbidden", { status: 403 });
+			}
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
+			if (!repo || !(await isGitRepo(repo))) {
+				return new Response("not a git repository", { status: 400 });
+			}
+			const result = await awaitFlight(getRefsCached(repo));
+			if (result instanceof Response) return result;
+			return new Response(JSON.stringify(result), {
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
