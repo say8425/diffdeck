@@ -16,6 +16,7 @@ import {
 	type PayloadCacheEntry,
 	payloadEtag,
 } from "./payloadCache.ts";
+import { parseSelection, selectionCacheKey } from "./selection.ts";
 import {
 	createSingleFlight,
 	SingleFlightTimeoutError,
@@ -180,12 +181,13 @@ const createHandler = (cfg: {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
-			const untracked = url.searchParams.get("untracked") === "1";
-			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
+			const untracked = sel.untracked;
+			const mode = sel.base.kind === "auto" ? "base" : "working";
 			const baseResult = await awaitFlight(resolveBaseCached(repo));
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
@@ -193,7 +195,7 @@ const createHandler = (cfg: {
 			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
 			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
 			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
-			const cacheKey = `${repo}\0${untracked}\0${mode}`;
+			const cacheKey = selectionCacheKey(sel, ref);
 			const entryResult = await awaitFlight(
 				diffFlight(cacheKey, async () => {
 					const fingerprint = await repoFingerprint(repo, {
@@ -244,7 +246,8 @@ const createHandler = (cfg: {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
@@ -262,7 +265,8 @@ const createHandler = (cfg: {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
 			}
-			const repo = url.searchParams.get("repo") ?? "";
+			const sel = parseSelection(url.searchParams);
+			const repo = sel.repo;
 			if (!repo || !(await isGitRepo(repo))) {
 				return new Response("not a git repository", { status: 400 });
 			}
@@ -272,7 +276,7 @@ const createHandler = (cfg: {
 				return new Response("not found", { status: 404 });
 			}
 			const side = url.searchParams.get("side") === "old" ? "old" : "new";
-			const mode = url.searchParams.get("mode") === "base" ? "base" : "working";
+			const mode = sel.base.kind === "auto" ? "base" : "working";
 			let ref: string | null = null;
 			if (mode === "base") {
 				const baseResult = await awaitFlight(resolveBaseCached(repo));
