@@ -4,9 +4,18 @@
 // 없어서 "[hidden]이 실제로 숨기는가", "패널이 정말 페인트되는가",
 // "닫을 때 포커스가 트리거로 돌아오는가"를 유닛이 원리적으로 볼 수 없다.
 import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 const OPTS = { featureBranchCommit: true, branches: ["develop"] };
+
+const run = (dir: string, args: string[]): void => {
+	const r = spawnSync("git", ["-C", dir, ...args], { stdio: "pipe" });
+	if (r.status !== 0) {
+		throw new Error(`git ${args.join(" ")} failed: ${r.stderr?.toString()}`);
+	}
+};
 
 test.describe("compare base picker", () => {
 	test("opens to a searchable list and closes on Escape", async ({ page }) => {
@@ -58,13 +67,32 @@ test.describe("compare base picker", () => {
 	test("choosing a branch widens the diff to the committed work", async ({
 		page,
 	}) => {
-		const { url, stop } = await launchViewer([], OPTS);
+		const { url, repoDir, stop } = await launchViewer([], OPTS);
 		try {
 			await page.goto(url);
 			await expect(page.locator("#ref-picker-label")).toHaveText(
 				"Working tree",
 			);
-			const before = await page.locator("#status").textContent();
+			// 기본 픽스처의 워킹트리 편집은 정확히 셋이다(src/hello.ts,
+			// README.md, assets/logo.png).
+			await expect(page.locator("#status")).toHaveText("3 file(s)");
+
+			// 브랜치에만 있는 파일을 하나 만든다. 커밋된 뒤 워킹트리에서는
+			// 깨끗하므로 HEAD 기준에는 안 보이고, main 기준(갈림점)에서만
+			// 보인다 — 그래서 "기준을 바꾸면 비교 범위가 넓어진다"를 개수로
+			// 확실히 가른다.
+			//
+			// featureBranchCommit이 커밋하는 src/hello.ts를 그대로 쓰면 안 된다:
+			// 그 파일은 이미 워킹트리에서도 편집돼 있어 기준을 바꿔도 파일
+			// 개수가 그대로다. 예전 판이 그걸 모르고 "개수가 달라진다"를
+			// 단언했다가, 로컬에서는 status가 아직 "Loading…"일 때 이전 값을
+			// 캡처하는 레이스 덕에 통과하고 CI에서만 깨졌다.
+			writeFileSync(
+				join(repoDir, "src", "branch-only.ts"),
+				"export const x = 1;\n",
+			);
+			run(repoDir, ["add", "src/branch-only.ts"]);
+			run(repoDir, ["commit", "-qm", "branch only file"]);
 
 			await page.locator("#ref-picker-btn").click();
 			await page
@@ -74,7 +102,7 @@ test.describe("compare base picker", () => {
 				.click();
 
 			await expect(page.locator("#ref-picker-label")).toHaveText("vs main");
-			await expect(page.locator("#status")).not.toHaveText(before ?? "");
+			await expect(page.locator("#status")).toHaveText("4 file(s)");
 			// 닫힌 뒤 포커스가 트리거로 돌아와야 키보드 사용자가 길을 잃지 않는다.
 			await expect(page.locator("#ref-picker-btn")).toBeFocused();
 		} finally {

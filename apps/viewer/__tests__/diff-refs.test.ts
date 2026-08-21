@@ -155,6 +155,11 @@ describe("getRefs against a real repository", () => {
 		await $`git -C ${repo} config user.email t@t.co`;
 		await $`git -C ${repo} config user.name test`;
 		await $`git -C ${repo} commit -q --allow-empty -m init`;
+		// 초기 브랜치 이름을 고정한다. git init은 머신의
+		// init.defaultBranch를 따르므로(로컬 main, CI 러너 master) 고정하지
+		// 않으면 이 스위트가 개발자 머신에서만 통과한다 — 실제로 CI에서
+		// "master"를 받고 깨졌다.
+		await $`git -C ${repo} branch -M main`;
 		await $`git -C ${repo} branch feat-a`;
 		await $`git -C ${repo} branch feat-gone`;
 		// 워크트리는 repo의 형제로 만든다 — 안에 만들면 git status에 잡힌다.
