@@ -71,3 +71,24 @@ export const readTreeWidth = (get: Getter): number => {
 	const stored = get(TREE_WIDTH_KEY);
 	return stored === null ? DEFAULT_TREE_WIDTH : clampTreeWidth(Number(stored));
 };
+
+/**
+ * 견줄 기준의 저장 키. 리포 경로로 네임스페이스한다 — 워크트리마다 견주는
+ * 기준이 다른데, 위의 여섯 `cc-statusline:` 키처럼 공유해 버리면 한 워크트리의
+ * 선택이 다른 워크트리로 새어 나간다. (그 여섯은 마이그레이션 코드가 없어
+ * 이름을 바꾸면 모든 사용자의 설정이 조용히 초기화되므로 그대로 둔다.)
+ */
+export const compareBaseKey = (repo: string): string =>
+	`diffdeck:compare-base:${repo}`;
+
+/**
+ * URL 파라미터 → localStorage → null. null이면 `base`를 아예 보내지 않고
+ * 서버가 자동 해석하므로, 아무것도 고르지 않은 사용자는 오늘과 같은 화면을
+ * 본다.
+ */
+export const resolveCompareBase = (
+	urlParam: string | null,
+	get: Getter,
+	repo: string,
+): string | null =>
+	urlParam !== null && urlParam !== "" ? urlParam : get(compareBaseKey(repo));
