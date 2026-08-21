@@ -29,9 +29,19 @@ What the diff-rendering engine provides:
 - **Virtualized rendering** that stays smooth on large diffs, with sticky file headers.
 - **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
 
-The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and working-tree-vs-base modes — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
+The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and a searchable compare-base picker — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
 
-![The diffdeck viewer — file tree with git-status badges, an inline image diff, and syntax-highlighted diffs](docs/screenshot.png)
+![The diffdeck viewer — file tree with git-status badges and a syntax-highlighted diff](docs/screenshot.png)
+
+### Compare against any branch
+
+The toolbar's picker chooses what the diff is measured against: your uncommitted work (**Working tree**), or any local or remote branch. Type to filter.
+
+![The compare-base picker, open and listing Working tree alongside the repository's branches](docs/ref-picker.png)
+
+Two labels save you a puzzled moment. The branch your worktree has checked out is tagged `HEAD` — comparing against it always looks empty, because it is where you already are. The repository's default branch is tagged `default`, so the usual choice is easy to spot.
+
+Picking a branch compares against the **merge base** — the commit your work forked from — so you see your own changes, not everything that has landed on the other branch since you branched.
 
 ### Grab — hand a diff selection to your coding agent
 

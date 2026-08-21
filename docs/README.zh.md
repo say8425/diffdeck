@@ -29,7 +29,7 @@ diff 渲染引擎提供的功能：
 - **虚拟化渲染**，在大型 diff 下仍保持流畅，并带有粘性（sticky）文件头。
 - **每个文件独立的 Shadow DOM 封装**，确保查看器的样式不会泄漏到页面中。
 
-包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及 working-tree 与 base 对比模式——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
+包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及可搜索的对比基准选择器——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
 
 ![diffdeck 查看器 —— 带 git 状态徽章的文件树、内联图片 diff 与语法高亮 diff](screenshot.png)
 
