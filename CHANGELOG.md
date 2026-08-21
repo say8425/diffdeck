@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.2...diffdeck-v1.4.0) (2026-08-21)
+
+
+### Features
+
+* 툴바의 2지선다 select를 검색 가능한 기준 피커로 바꾼다 ([#68](https://github.com/say8425/diffdeck/issues/68)) ([3b2837d](https://github.com/say8425/diffdeck/commit/3b2837d60939b3a22d36ae413165c16bf1eaf2a8))
+
+
+### Bug Fixes
+
+* 대형 파일 자동 접힘을 파일 길이가 아니라 변경량으로 판정한다 ([#66](https://github.com/say8425/diffdeck/issues/66)) ([7563667](https://github.com/say8425/diffdeck/commit/756366795d950854243d3ab9d708ad7224cf8bd1))
+
 ## [1.3.2](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.1...diffdeck-v1.3.2) (2026-08-11)
 
 
