@@ -656,3 +656,52 @@ describe("diff server refs route", () => {
 		expect(main?.worktreePath).not.toBeNull();
 	});
 });
+
+describe("diff server caller-supplied base", () => {
+	const tok = (): string =>
+		readTokenSync({ XDG_CACHE_HOME: cacheHome }) as string;
+
+	const diff = (query: string): Promise<Response> =>
+		fetch(
+			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${tok()}&${query}`,
+		);
+
+	test("compares against the branch the caller names", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feature`;
+		writeFileSync(join(repo, "c.txt"), "on the branch\n");
+		await $`git -C ${repo} add c.txt`;
+		await $`git -C ${repo} commit -qm branch-work`;
+
+		const res = await diff("base=main");
+		expect(res.status).toBe(200);
+		expect(decodeURIComponent(res.headers.get("x-diff-base") ?? "")).toBe(
+			"main",
+		);
+		const files = (await res.json()) as Array<{ name: string }>;
+		expect(files.map((f) => f.name)).toContain("c.txt");
+	});
+
+	// 조용히 auto로 흘려보내면 사용자가 고르지 않은 기준의 diff를 보여주게 된다.
+	test("refuses a base that does not exist instead of falling back", async () => {
+		const res = await diff("base=no-such-branch");
+		expect(res.status).toBe(400);
+	});
+
+	// Bun의 $는 셸을 이스케이프하지 git의 옵션 파싱을 막지 않는다. 첫 글자가
+	// "-"인 ref가 git diff에 도달하면 --output=<path>로 임의의 파일을 만들거나
+	// 비울 수 있다. refExists(rev-parse --verify)가 옵션 꼴을 거부하는 것이
+	// 그 통로를 닫는다.
+	test("refuses an option-shaped base and writes nothing", async () => {
+		const victim = join(cacheHome, "pwned.txt");
+		const res = await diff(`base=${encodeURIComponent(`--output=${victim}`)}`);
+		expect(res.status).toBe(400);
+		expect(existsSync(victim)).toBe(false);
+	});
+
+	test("base=HEAD shows the same files as the default working view", async () => {
+		const withHead = await diff("base=HEAD");
+		const plain = await diff("untracked=0");
+		expect(await withHead.json()).toEqual(await plain.json());
+	});
+});

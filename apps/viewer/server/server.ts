@@ -8,6 +8,7 @@ import {
 	getFileBytes,
 	isGitRepo,
 	resolveBaseRef,
+	verifyBaseRef,
 } from "./diff.ts";
 import { repoFingerprint } from "./fingerprint.ts";
 import { imageContentType, isImagePath } from "./imageTypes.ts";
@@ -17,7 +18,11 @@ import {
 	payloadEtag,
 } from "./payloadCache.ts";
 import { getRefs, type RefsResult } from "./refs.ts";
-import { parseSelection, selectionCacheKey } from "./selection.ts";
+import {
+	parseSelection,
+	type Selection,
+	selectionCacheKey,
+} from "./selection.ts";
 import {
 	createSingleFlight,
 	SingleFlightTimeoutError,
@@ -140,6 +145,22 @@ const createHandler = (cfg: {
 	// 없다. 서버 인스턴스가 자기 캐시를 갖는 쪽이 격리에 낫다.
 	const refsFlight = createSingleFlight<RefsResult>(cfg.flightTimeoutMs);
 	const refsCache = new Map<string, { value: RefsResult; at: number }>();
+	// base 해석의 단일 지점. /api/diff와 /api/blob이 서로 다른 기준을 고르면
+	// 텍스트 diff와 이미지 카드가 다른 비교를 보여주게 된다.
+	//
+	// 사용자가 고른 ref는 서버가 해석할 것이 없다. 목록 밖 값이면 조용히
+	// auto로 흘려보내지 않고 거절한다 — 고르지도 않은 기준의 diff를 보여주는
+	// 것이 에러보다 나쁘다.
+	const resolveSelectionBase = async (
+		repo: string,
+		sel: Selection,
+	): Promise<{ base: string | null; ref: string | null } | Response> => {
+		if (sel.base.kind === "ref") {
+			const verified = await verifyBaseRef(repo, sel.base.ref);
+			return verified ?? new Response("unknown base ref", { status: 400 });
+		}
+		return awaitFlight(resolveBaseCached(repo));
+	};
 	const getRefsCached = (repo: string): Promise<RefsResult> =>
 		refsFlight(repo, async () => {
 			const now = Date.now();
@@ -206,8 +227,8 @@ const createHandler = (cfg: {
 				return new Response("not a git repository", { status: 400 });
 			}
 			const untracked = sel.untracked;
-			const mode = sel.base.kind === "auto" ? "base" : "working";
-			const baseResult = await awaitFlight(resolveBaseCached(repo));
+			const mode = sel.base.kind === "head" ? "working" : "base";
+			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
 			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
@@ -313,10 +334,10 @@ const createHandler = (cfg: {
 				return new Response("not found", { status: 404 });
 			}
 			const side = url.searchParams.get("side") === "old" ? "old" : "new";
-			const mode = sel.base.kind === "auto" ? "base" : "working";
+			const mode = sel.base.kind === "head" ? "working" : "base";
 			let ref: string | null = null;
 			if (mode === "base") {
-				const baseResult = await awaitFlight(resolveBaseCached(repo));
+				const baseResult = await resolveSelectionBase(repo, sel);
 				if (baseResult instanceof Response) return baseResult;
 				ref = baseResult.ref;
 			}

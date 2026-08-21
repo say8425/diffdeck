@@ -81,3 +81,67 @@ describe("selectionCacheKey", () => {
 		).not.toBe(selectionCacheKey(parseSelection(params("repo=/a")), null));
 	});
 });
+
+describe("parseSelection with an explicit base", () => {
+	test("base names a ref to compare against", () => {
+		expect(parseSelection(params("repo=/r&base=develop")).base).toEqual({
+			kind: "ref",
+			ref: "develop",
+		});
+	});
+
+	test("the @auto sentinel asks the server to resolve the base itself", () => {
+		expect(parseSelection(params("repo=/r&base=@auto")).base).toEqual({
+			kind: "auto",
+		});
+	});
+
+	// base가 있으면 mode는 무시된다 — 한 축을 두 파라미터가 인코딩하면
+	// 서로 모순되는 상태가 생기므로, 새 파라미터가 이긴다는 규칙 하나로
+	// 그 상태를 없앤다.
+	test("an explicit base wins over the legacy mode", () => {
+		expect(
+			parseSelection(params("repo=/r&mode=working&base=develop")).base,
+		).toEqual({ kind: "ref", ref: "develop" });
+	});
+
+	test("an empty base falls back to the legacy mode", () => {
+		expect(parseSelection(params("repo=/r&base=&mode=base")).base).toEqual({
+			kind: "auto",
+		});
+	});
+
+	test("base=HEAD expresses uncommitted-only, the same view as mode=working", () => {
+		expect(parseSelection(params("repo=/r&base=HEAD")).base).toEqual({
+			kind: "ref",
+			ref: "HEAD",
+		});
+	});
+});
+
+describe("selectionCacheKey with an explicit base", () => {
+	test("two different chosen refs never share a slot", () => {
+		expect(
+			selectionCacheKey(parseSelection(params("repo=/r&base=a")), null),
+		).not.toBe(
+			selectionCacheKey(parseSelection(params("repo=/r&base=b")), null),
+		);
+	});
+
+	// 사용자가 고른 ref는 서버가 해석할 필요가 없으므로 해석값과 무관해야 한다.
+	test("a chosen ref ignores the server-resolved base", () => {
+		const sel = parseSelection(params("repo=/r&base=develop"));
+		expect(selectionCacheKey(sel, "origin/main")).toBe(
+			selectionCacheKey(sel, "origin/other"),
+		);
+	});
+
+	// 고른 ref "auto"와 자동 해석은 서로 다른 질문이다.
+	test("a ref literally named auto is not the auto selector", () => {
+		expect(
+			selectionCacheKey(parseSelection(params("repo=/r&base=auto")), null),
+		).not.toBe(
+			selectionCacheKey(parseSelection(params("repo=/r&base=@auto")), null),
+		);
+	});
+});

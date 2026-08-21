@@ -10,8 +10,28 @@
 export type BaseSelector =
 	/** HEAD 대비 — 아직 커밋하지 않은 변경만 (레거시 `mode=working`). */
 	| { kind: "head" }
-	/** 서버가 해석한 base 브랜치 대비 (레거시 `mode=base`). */
-	| { kind: "auto" };
+	/** 서버가 해석한 base 브랜치 대비 (레거시 `mode=base`, 또는 `base=@auto`). */
+	| { kind: "auto" }
+	/** 사용자가 고른 참조 대비. `base=HEAD`면 head와 같은 뷰가 된다. */
+	| { kind: "ref"; ref: string };
+
+/**
+ * `base`에 실린 "서버가 알아서 골라라" 표식. 그냥 `auto`로 하면 실제로
+ * `auto`라는 이름의 브랜치와 구별되지 않는다.
+ */
+export const AUTO_BASE = "@auto";
+
+const parseBase = (params: URLSearchParams): BaseSelector => {
+	const raw = params.get("base") ?? "";
+	if (raw === AUTO_BASE) return { kind: "auto" };
+	// base가 있으면 mode는 무시한다. 한 축을 두 파라미터가 인코딩하면
+	// `mode=working&base=main` 같은 모순 상태가 생기고 우선순위 규칙이
+	// 필요해진다 — 새 파라미터가 이긴다는 규칙 하나로 그 상태를 없앤다.
+	if (raw !== "") return { kind: "ref", ref: raw };
+	// 알 수 없는 mode 값은 400이 아니라 working으로 떨어진다 — 오늘의
+	// 관용이고, 밖에서 만들어진 오래된 링크가 깨지지 않는 쪽이다.
+	return params.get("mode") === "base" ? { kind: "auto" } : { kind: "head" };
+};
 
 export interface Selection {
 	repo: string;
@@ -22,9 +42,7 @@ export interface Selection {
 export const parseSelection = (params: URLSearchParams): Selection => ({
 	repo: params.get("repo") ?? "",
 	untracked: params.get("untracked") === "1",
-	// 알 수 없는 값은 400이 아니라 working으로 떨어진다 — 오늘의 관용이고,
-	// 밖에서 만들어진 오래된 링크가 깨지지 않는 쪽이다.
-	base: params.get("mode") === "base" ? { kind: "auto" } : { kind: "head" },
+	base: parseBase(params),
 });
 
 /**
@@ -40,6 +58,15 @@ export const parseSelection = (params: URLSearchParams): Selection => ({
  * ref는 **이름**으로 넣는다. 커밋 OID를 넣으면 커밋마다 새 슬롯이 생겨
  * 8칸짜리 LRU가 헛돈다 — OID는 지문(fingerprint)이 볼 몫이다.
  */
+const baseIdentity = (
+	base: BaseSelector,
+	resolvedBaseRef: string | null,
+): string => {
+	if (base.kind === "auto") return resolvedBaseRef ?? "";
+	if (base.kind === "ref") return base.ref;
+	return "";
+};
+
 export const selectionCacheKey = (
 	sel: Selection,
 	resolvedBaseRef: string | null,
@@ -48,7 +75,8 @@ export const selectionCacheKey = (
 		sel.repo,
 		String(sel.untracked),
 		sel.base.kind,
-		// head 기준은 해석된 ref를 쓰지 않는다. 넣으면 origin/HEAD가 움직일
-		// 때마다 워킹트리 뷰의 캐시가 이유 없이 날아간다.
-		sel.base.kind === "auto" ? (resolvedBaseRef ?? "") : "",
+		// auto만 해석값에 의존한다. 사용자가 고른 ref는 서버가 해석할 것이
+		// 없고, head 기준에 해석값을 넣으면 origin/HEAD가 움직일 때마다
+		// 워킹트리 뷰의 캐시가 이유 없이 날아간다.
+		baseIdentity(sel.base, resolvedBaseRef),
 	].join("\0");
