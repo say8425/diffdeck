@@ -317,6 +317,29 @@
 			#overflow-menu input[type="checkbox"] {
 				order: 1;
 			}
+			/* 설정 항목과 부가 정보를 가른다. 메뉴의 flex gap(10px)이 위아래
+			   여백을 주므로 margin은 두지 않는다. */
+			#overflow-menu .menu-divider {
+				height: 1px;
+				background: var(--vd-border);
+			}
+			/* 토글 행과 같은 배치(이름 왼쪽·값 오른쪽)를 따르되, 조작이 아니라
+			   정보이므로 muted로 눕는다. */
+			#overflow-menu #version-link {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+				white-space: nowrap;
+				color: var(--vd-fg-muted);
+				text-decoration: none;
+			}
+			#overflow-menu #version-link:hover {
+				color: var(--vd-fg);
+			}
+			#overflow-menu #version-value {
+				font-variant-numeric: tabular-nums;
+			}
 			/* 견줄 기준 피커. 오버플로 메뉴와 같은 종(種)이다 — 툴바 컨트롤에
 			   앵커된 절대 위치 패널이라 grab 팝오버의 좌표 계산이 필요 없다. */
 			.tb-picker {
@@ -890,6 +913,15 @@
 								><input type="checkbox" id="toggle-fold-with-tree" /> Fold with
 								tree</label
 							>
+							<div class="menu-divider"></div>
+							<a
+								id="version-link"
+								href="https://github.com/say8425/diffdeck"
+								target="_blank"
+								rel="noopener noreferrer"
+								title="Open diffdeck on GitHub"
+								><span>diffdeck</span><span id="version-value"></span
+							></a>
 						</div>
 					</div>
 				</div>

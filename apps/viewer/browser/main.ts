@@ -1643,6 +1643,21 @@ document.addEventListener("keydown", (event) => {
 	if (event.key === "Escape") setOverflowOpen(false);
 });
 
+// 버전은 /api/ping이 헤더로 보고한다 — 이 라우트가 존재하는 이유가 바로
+// 그것이다(장수 데몬이 디스크의 패키지보다 오래 살 수 있어, 클라이언트가
+// 자기가 기대하는 버전과 대조하라고 pid·version을 싣는다).
+const versionValue = document.getElementById("version-value");
+if (versionValue) {
+	void fetch("/api/ping")
+		.then((res) => {
+			const v = res.headers.get("x-diffdeck-version");
+			if (v) versionValue.textContent = `v${v}`;
+		})
+		.catch(() => {
+			// 부가 정보다 — 못 읽어도 메뉴의 나머지는 그대로 동작한다.
+		});
+}
+
 findBar = createFindBar({
 	elements: {
 		bar: document.getElementById("find-bar") as HTMLElement,
