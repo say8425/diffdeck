@@ -207,6 +207,18 @@ test.describe("compare base picker", () => {
 				.locator("#ref-picker .ref-row")
 				.filter({ hasText: "Working tree" });
 			await expect(working.locator(".ref-row-tag")).toHaveText("3 file(s)");
+
+			// 개수가 **어느 행의 것인지**도 지킨다. 서버가 잰 참조로 맞추지
+			// 않고 표시명으로 맞추면(base는 origin/ 접두가 벗겨진다) 남의
+			// 숫자가 로컬 동명 브랜치에 붙는다 — 화면의 숫자와 눌렀을 때
+			// 나오는 개수가 달라진다.
+			const mainRow = page
+				.locator("#ref-picker .ref-row")
+				.filter({ hasText: /^main/ })
+				.first();
+			// 이 픽스처엔 origin/HEAD가 없어 default 태그는 안 붙는다.
+			// 귀속이 깨지면 이 행에는 아무 텍스트도 없으므로 여전히 가른다.
+			await expect(mainRow.locator(".ref-row-tag")).toHaveText(/\d+ file\(s\)/);
 		} finally {
 			await stop();
 		}

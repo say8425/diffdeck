@@ -1359,28 +1359,30 @@ const loadPickerRows = async (): Promise<void> => {
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
-		// 개수는 /api/summary가 매 로드마다 이미 계산하는 값이라 git 호출이
-		// 늘지 않는다. 브랜치마다 붙이려면 브랜치당 호출이 하나씩 더 들기
-		// 때문에, 잰 그 비교 하나에만 붙인다.
-		const summary = await fetchSummary();
-		// 이름이 아니라 **현재 선택값**으로 맞춘다 — summary는 지금 기준으로
-		// 계산되므로 그래야 잰 것과 보여주는 자리가 정확히 같다. (표시명은
-		// origin/ 접두가 벗겨져 로컬 동명 브랜치와 헷갈릴 수 있다.)
-		const measuredAgainst =
-			compareBase === "HEAD" || compareBase === "@auto"
-				? diffBase
-				: compareBase;
-		const counts: RowCounts = {
-			working: summary?.workingFiles ?? null,
-			base:
-				summary && summary.baseFiles !== null && measuredAgainst !== ""
-					? { name: measuredAgainst, files: summary.baseFiles }
-					: null,
-		};
 		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
 		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
 		// 목록에서 자기 경로를 찾아 읽는다.
 		const current = body.worktrees.find((w) => w.path === repo)?.branch ?? null;
+		// 목록을 먼저 그린다. 개수를 기다리면 목록이 /api/refs(수 ms)가 아니라
+		// /api/summary(수십 ms)의 속도로 뜨고, 더 나쁘게는 getRepoSummary가
+		// 의도적으로 single-flight 밖이라(CLAUDE.md) 거기서 매달리면 목록이
+		// Working tree 한 줄에 영구히 갇힌다.
+		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current);
+		renderPickerRows();
+
+		// 개수는 부가 정보다 — 도착하면 얹고, 못 받으면 목록을 그대로 쓴다.
+		const summary = await fetchSummary();
+		if (!summary) return;
+		const counts: RowCounts = {
+			working: summary.workingFiles,
+			// 표시명(base)이 아니라 **실제로 잰 ref**로 맞춘다. base는 origin/
+			// 접두가 벗겨져 있어, 그걸로 맞추면 origin/main으로 잰 숫자가 로컬
+			// main 행에 붙는다 — 로컬이 뒤처져 있으면 값이 실제로 갈린다.
+			base:
+				summary.ref !== null && summary.baseFiles !== null
+					? { name: summary.ref, files: summary.baseFiles }
+					: null,
+		};
 		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current, counts);
 		renderPickerRows();
 	} catch {

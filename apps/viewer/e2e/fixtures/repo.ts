@@ -214,9 +214,10 @@ export const makeFixtureRepo = (
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
 
-	if (options.clean || options.featureBranchCommit || options.branches) {
-		git(dir, ["branch", "-M", "main"]);
-	}
+	// 옵션과 무관하게 항상 고정한다. git init은 머신의 init.defaultBranch를
+	// 따르므로(개발자 로컬 main, CI 러너 master) 고정하지 않으면 브랜치명을
+	// 건드리는 스펙이 개발자 머신에서만 통과한다 — 실제로 CI에서 한 번 밟았다.
+	git(dir, ["branch", "-M", "main"]);
 	for (const branch of options.branches ?? []) {
 		git(dir, ["branch", branch]);
 	}

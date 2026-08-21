@@ -9,7 +9,14 @@ import { resolveDiffBaseRev } from "./diff.ts";
 export interface RepoSummary {
 	branch: string | null;
 	head: string;
+	/** 표시용 이름 — origin/ 접두가 벗겨져 있다. */
 	base: string | null;
+	/**
+	 * baseFiles를 **실제로 잰** 참조. `base`와 달리 접두가 살아 있어
+	 * (`origin/main` vs `main`) 목록의 어느 행이 그 숫자의 주인인지
+	 * 가릴 수 있다. 표시명으로 맞추면 로컬 동명 브랜치에 남의 숫자가 붙는다.
+	 */
+	ref: string | null;
 	workingFiles: number;
 	baseFiles: number | null;
 	untrackedFiles: number;
@@ -64,6 +71,7 @@ export const getRepoSummary = async (
 		branch: branch || null,
 		head,
 		base: opts.base,
+		ref: opts.ref ?? null,
 		workingFiles,
 		baseFiles,
 		untrackedFiles,
