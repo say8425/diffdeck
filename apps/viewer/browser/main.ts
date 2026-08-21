@@ -16,6 +16,7 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
+import type { RefsResult } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
@@ -47,9 +48,11 @@ import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { countChangedLines, isLargeFile } from "./largeFile.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
+	compareBaseKey,
 	FLATTEN_KEY,
 	FOLD_WITH_TREE_KEY,
 	readTreeWidth,
+	resolveCompareBase,
 	resolveDiffStyle,
 	resolveFlatten,
 	resolveFoldWithTree,
@@ -62,6 +65,11 @@ import {
 	type TreeSide,
 	WATCH_KEY,
 } from "./prefs.ts";
+import {
+	type BaseRow,
+	buildBaseRows,
+	filterBaseRows,
+} from "./refPicker/model.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -143,12 +151,29 @@ diffMount.addEventListener("click", (event) => {
 });
 
 const statusEl = document.getElementById("status") as HTMLElement;
-const modeSelect = document.getElementById("diff-mode") as HTMLSelectElement;
+const pickerBtn = document.getElementById(
+	"ref-picker-btn",
+) as HTMLButtonElement;
+const pickerPanel = document.getElementById("ref-picker") as HTMLElement;
+const pickerSearch = document.getElementById(
+	"ref-picker-search",
+) as HTMLInputElement;
+const pickerList = document.getElementById("ref-picker-list") as HTMLElement;
+const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
 
 let diffStyle: "unified" | "split" = resolveDiffStyle(params.get("style"));
 let includeUntracked = resolveUntracked(params.get("untracked"));
-let diffMode: "working" | "base" = "working";
+// 견줄 기준. "HEAD"는 미커밋 변경만, "@auto"는 서버가 해석한 base,
+// 그 밖은 그 참조 자체다. merge-base(HEAD, HEAD)가 HEAD라 "HEAD"가 별도
+// 분기 없이 오늘의 워킹트리 뷰가 된다.
+let compareBase = "HEAD";
+const diffModeOf = (base: string): "working" | "base" =>
+	base === "HEAD" ? "working" : "base";
+// grab 참조와 이미지 blob이 쓰는 "실제로 견주는 대상"의 이름. 사용자가
+// 고른 참조가 있으면 그것이고, 없으면 서버가 보고한 base다.
+const effectiveBaseName = (): string =>
+	compareBase === "HEAD" || compareBase === "@auto" ? diffBase : compareBase;
 let flattenDirs = resolveFlatten(params.get("flatten"), (k) =>
 	localStorage.getItem(k),
 );
@@ -489,8 +514,8 @@ const buildGrabSnapshot = (
 		path: fileId,
 		prevPath: item.fileDiff.prevName,
 		status: statusOf(fileId),
-		mode: diffMode,
-		baseName: diffBase,
+		mode: diffModeOf(compareBase),
+		baseName: effectiveBaseName(),
 		snippet,
 	};
 	return {
@@ -760,22 +785,18 @@ const enrichEmptyState = async (): Promise<void> => {
 	if (!marker) return;
 	// 모드/untracked를 fetch 시작 시점에 스냅샷 — fetch 중 사용자가 모드를
 	// 바꾸면(새 diff가 로딩 중) 새 모드 문구의 카드를 그리면 모순이므로 버린다.
-	const mode = diffMode;
+	const mode = compareBase;
 	const untrackedShown = includeUntracked;
 	const summary = await fetchSummary();
 	if (!summary) return;
 	if (diffMount.querySelector("#empty") !== marker) return;
-	if (mode !== diffMode || untrackedShown !== includeUntracked) return;
+	if (mode !== compareBase || untrackedShown !== includeUntracked) return;
 	const model = buildEmptyStateModel(summary, {
-		mode,
+		mode: diffModeOf(mode),
 		untrackedShown,
 	});
 	const card = renderEmptyState(document, model, {
-		onSwitchMode: () => {
-			if (!modeSelect) return;
-			modeSelect.value = "base";
-			modeSelect.dispatchEvent(new Event("change"));
-		},
+		onSwitchMode: () => void applySelection("@auto"),
 		onShowUntracked: () => {
 			if (!untrackedInput) return;
 			untrackedInput.checked = true;
@@ -806,7 +827,15 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	// 빈 diff 아이템(헤더 제공)에 onPostRender가 Old/New 카드를 주입.
 	imageEntryById = new Map(imageEntries(files).map((e) => [e.name, e]));
 	imageUrlFor = (path, side, version) =>
-		blobUrl({ repo, token, path, side, mode: diffMode, version });
+		blobUrl({
+			repo,
+			token,
+			path,
+			side,
+			mode: diffModeOf(compareBase),
+			base: compareBase,
+			version,
+		});
 
 	// File tree lists ALL changed files (binary included); status maps 1:1 to
 	// @diffdeck/trees GitStatus.
@@ -1024,26 +1053,20 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 	}
 };
 
-// Reflect the resolved base name on the "vs base" option, and disable it
-// (falling back to working mode) when no base could be resolved.
-const updateBaseOption = (base: string): void => {
-	const opt = modeSelect?.querySelector<HTMLOptionElement>(
-		'option[value="base"]',
-	);
-	if (!opt) return;
-	if (base) {
-		opt.textContent = `vs ${base}`;
-		opt.disabled = false;
-		if (modeSelect.value !== diffMode) modeSelect.value = diffMode;
-	} else {
-		opt.textContent = "vs base (unavailable)";
-		opt.disabled = true;
-		if (diffMode === "base") {
-			diffMode = "working";
-			modeSelect.value = "working";
-			localStorage.setItem("cc-statusline:diff-mode", "working");
-		}
-	}
+// 트리거가 "지금 무엇과 견주는 중인가"를 말한다. @auto는 서버가 이름을
+// 알려줘야 쓸 수 있으므로 매 응답마다 다시 그린다.
+const pickerLabelText = (): string =>
+	compareBase === "HEAD"
+		? "Working tree"
+		: compareBase === "@auto"
+			? `vs ${diffBase || "base"}`
+			: `vs ${compareBase}`;
+
+const syncPickerLabel = (): void => {
+	if (!pickerLabel) return;
+	const text = pickerLabelText();
+	pickerLabel.textContent = text;
+	pickerBtn?.setAttribute("title", text);
 };
 
 type FetchDiffResult =
@@ -1065,7 +1088,7 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		repo,
 		token,
 		untracked: includeUntracked ? "1" : "0",
-		mode: diffMode,
+		base: compareBase,
 	});
 	try {
 		// 조건부 요청: 서버 지문이 그대로면 304가 오고, 수십 MB payload 전송과
@@ -1118,7 +1141,7 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 let diffBase = ""; // x-diff-base — grab 인코딩의 base 표시용 (updateBaseOption은 지역 소비라 별도 보관)
 const applyFetched = (result: FetchDiffResult): void => {
 	diffBase = result.base;
-	updateBaseOption(result.base);
+	syncPickerLabel();
 	if (result.kind === "unchanged") {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
@@ -1215,25 +1238,131 @@ document
 	?.addEventListener("click", () => void load());
 window.addEventListener("focus", () => void load());
 
-modeSelect?.addEventListener("change", () => {
-	diffMode = modeSelect.value === "base" ? "base" : "working";
-	localStorage.setItem("cc-statusline:diff-mode", diffMode);
+// ── 견줄 기준 피커 ──────────────────────────────────────────────────────
+const CHECK_SVG =
+	'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+
+// 목록을 받기 전에도 Working tree 행은 항상 있다. 빈 배열로 두면 피커를
+// 열 때마다 "No match"가 한 프레임 스치고, 그건 목록이 없는 것처럼 읽힌다.
+let pickerRows: BaseRow[] = buildBaseRows([], null, null);
+let pickerLoaded = false;
+
+const renderPickerRows = (): void => {
+	if (!pickerList) return;
+	const rows = filterBaseRows(pickerRows, pickerSearch?.value ?? "");
+	pickerList.replaceChildren();
+	if (rows.length === 0) {
+		const empty = document.createElement("div");
+		empty.id = "ref-picker-empty";
+		empty.textContent = "No match";
+		pickerList.append(empty);
+		return;
+	}
+	for (const row of rows) {
+		const el = document.createElement("div");
+		el.className = "ref-row";
+		el.setAttribute("role", "option");
+		el.dataset.value = row.value;
+		const selected = row.value === compareBase;
+		el.setAttribute("aria-selected", String(selected));
+		// 사용자 입력이 섞이지 않는 상수 마크업이라 안전하다.
+		if (selected) el.insertAdjacentHTML("afterbegin", CHECK_SVG);
+		const label = document.createElement("span");
+		label.className = "ref-row-label";
+		label.textContent = row.label;
+		el.append(label);
+		if (row.tag) {
+			const tag = document.createElement("span");
+			tag.className = "ref-row-tag";
+			tag.textContent = row.tag;
+			el.append(tag);
+		}
+		el.addEventListener("click", () => void applySelection(row.value));
+		pickerList.append(el);
+	}
+};
+
+const loadPickerRows = async (): Promise<void> => {
+	if (pickerLoaded) return;
+	try {
+		const res = await fetch(
+			`/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		if (!res.ok) return;
+		const body = (await res.json()) as RefsResult;
+		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
+		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
+		// 목록에서 자기 경로를 찾아 읽는다.
+		const current = body.worktrees.find((w) => w.path === repo)?.branch ?? null;
+		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current);
+		pickerLoaded = true;
+		renderPickerRows();
+	} catch {
+		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.
+	}
+};
+
+const setPickerOpen = (open: boolean): void => {
+	if (!pickerPanel || !pickerBtn) return;
+	pickerPanel.hidden = !open;
+	pickerBtn.setAttribute("aria-expanded", open ? "true" : "false");
+	if (!open) return;
+	if (pickerSearch) pickerSearch.value = "";
+	renderPickerRows();
+	pickerSearch?.focus();
+	void loadPickerRows();
+};
+
+const applySelection = async (next: string): Promise<void> => {
+	setPickerOpen(false);
+	pickerBtn?.focus();
+	if (next === compareBase) return;
+	compareBase = next;
+	localStorage.setItem(compareBaseKey(repo), next);
+	syncPickerLabel();
 	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
 	lastEtag = null;
-	void load();
+	await load();
+};
+
+pickerBtn?.addEventListener("click", () => {
+	const opening = Boolean(pickerPanel?.hidden);
+	// 두 패널이 동시에 열려 있으면 바깥 클릭 규칙이 서로를 가린다.
+	if (opening) setOverflowOpen(false);
+	setPickerOpen(opening);
+});
+pickerSearch?.addEventListener("input", renderPickerRows);
+
+// 피커는 자기 dismiss를 갖는다 — 오버플로 메뉴의 리스너에 얹으면 한쪽을
+// 고치다 다른 쪽이 조용히 깨진다.
+document.addEventListener("mousedown", (event) => {
+	if (!pickerPanel || pickerPanel.hidden) return;
+	const target = event.target as Node;
+	if (pickerPanel.contains(target) || pickerBtn?.contains(target)) return;
+	setPickerOpen(false);
 });
 
-// URL mode (from the statusline link) wins over the persisted preference so a
-// "vs base" edit link opens directly in base mode; otherwise restore localStorage.
-const urlMode = params.get("mode");
-if (urlMode === "base" || urlMode === "working") {
-	diffMode = urlMode;
-	localStorage.setItem("cc-statusline:diff-mode", urlMode);
-	if (modeSelect) modeSelect.value = urlMode;
-} else if (localStorage.getItem("cc-statusline:diff-mode") === "base") {
-	diffMode = "base";
-	modeSelect.value = "base";
-}
+document.addEventListener("keydown", (event) => {
+	if (!pickerPanel || pickerPanel.hidden) return;
+	// 한글 등 조합 입력 중의 Escape는 조합 취소이지 팝오버 닫기가 아니다
+	// (grab 팝오버와 같은 가드).
+	if (event.isComposing || event.keyCode === 229) return;
+	if (event.key !== "Escape") return;
+	setPickerOpen(false);
+	pickerBtn?.focus();
+});
+
+// URL의 base가 저장된 선택을 이긴다. 레거시 `mode`는 여기서만 읽는다 —
+// mode=base는 "서버가 골라라"와 같은 말이므로 @auto로 옮긴다.
+const legacyMode =
+	params.get("mode") ?? localStorage.getItem("cc-statusline:diff-mode");
+compareBase =
+	resolveCompareBase(
+		params.get("base"),
+		(k) => localStorage.getItem(k),
+		repo,
+	) ?? (legacyMode === "base" ? "@auto" : "HEAD");
+syncPickerLabel();
 
 // Apply persisted file-tree side and reflect stored prefs in the overflow menu.
 appEl.dataset.treeSide = treeSide;

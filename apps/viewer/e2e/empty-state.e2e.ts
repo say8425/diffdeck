@@ -49,9 +49,9 @@ test.describe("informative empty state", () => {
 				card.locator("button.empty-action", { hasText: "untracked" }),
 			).toHaveText("1 untracked file(s) hidden — show");
 
-			// 클릭 → 드롭다운이 base로 바뀌고 커밋된 diff가 렌더된다.
+			// 클릭 → 피커가 자동 해석 base로 바뀌고 커밋된 diff가 렌더된다.
 			await switchBtn.click();
-			await expect(page.locator("#diff-mode")).toHaveValue("base");
+			await expect(page.locator("#ref-picker-label")).toHaveText("vs main");
 			await expect(page.locator("#empty")).toHaveCount(0);
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
 			await expect.poll(() => treeHasPath(page, "src/hello.ts")).toBe(true);
@@ -93,10 +93,15 @@ test.describe("informative empty state", () => {
 			await expect(card.locator(".empty-context")).toHaveText("on main");
 			await expect(card.locator("button.empty-action")).toHaveCount(0);
 
-			// 회귀: 양쪽 모드가 다 빈 상태에서 모드를 전환해도 카드가 새 모드
-			// 문구로 갱신되어야 한다 — 빈 payload의 etag가 모드와 무관하게 같아
-			// 304로 이전 카드에 고착되던 버그의 가드 (모드 전환 시 lastEtag 리셋).
-			await page.selectOption("#diff-mode", "base");
+			// 회귀: 양쪽이 다 빈 상태에서 기준을 바꿔도 카드가 새 문구로
+			// 갱신되어야 한다 — 빈 payload의 etag가 기준과 무관하게 같아 304로
+			// 이전 카드에 고착되던 버그의 가드 (선택 변경 시 lastEtag 리셋).
+			await page.locator("#ref-picker-btn").click();
+			await page
+				.locator("#ref-picker .ref-row")
+				.filter({ hasText: /^main/ })
+				.first()
+				.click();
 			await expect(
 				page.locator("#empty.empty-card .empty-headline"),
 			).toHaveText("No changes vs main");

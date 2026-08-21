@@ -54,8 +54,7 @@
 			}
 			/* One control height for every toolbar widget — without it, line-height:
      normal + differing paddings yield 25/26/26.5/27px mismatches. */
-			#toolbar button,
-			#toolbar select {
+			#toolbar button {
 				box-sizing: border-box;
 				height: 26px;
 				background: var(--vd-inset);
@@ -70,17 +69,8 @@
 				display: inline-flex;
 				align-items: center;
 			}
-			#toolbar button:hover,
-			#toolbar select:hover {
+			#toolbar button:hover {
 				background: var(--vd-hover);
-			}
-			#toolbar select {
-				appearance: none;
-				-webkit-appearance: none;
-				padding-right: 26px;
-				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%2384848a' stroke-width='1.5' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
-				background-repeat: no-repeat;
-				background-position: right 8px center;
 			}
 			/* Segmented control (Pierre-style): inset pill, active segment raised.
      fieldset 기본 스타일(margin/min-inline-size)을 리셋해 div 시절과 동일하게 유지. */
@@ -326,6 +316,96 @@
 			}
 			#overflow-menu input[type="checkbox"] {
 				order: 1;
+			}
+			/* 견줄 기준 피커. 오버플로 메뉴와 같은 종(種)이다 — 툴바 컨트롤에
+			   앵커된 절대 위치 패널이라 grab 팝오버의 좌표 계산이 필요 없다. */
+			.tb-picker {
+				position: relative;
+			}
+			#toolbar #ref-picker-btn {
+				gap: 8px;
+				max-width: 260px;
+			}
+			#ref-picker-label {
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+			#ref-picker {
+				position: absolute;
+				top: calc(100% + 6px);
+				left: 0;
+				z-index: 10;
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				min-width: 260px;
+				max-width: min(420px, 90vw);
+				padding: 6px;
+				background: var(--vd-bg);
+				border: 1px solid var(--vd-border);
+				border-radius: var(--vd-radius);
+				box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+			}
+			/* author가 display를 선언했으면 [hidden] 짝을 반드시 함께 둔다 —
+			   없으면 author origin이 UA 규칙을 이겨 패널이 영구히 열린 채 남는다.
+			   happy-dom은 textContent만 보므로 유닛이 못 잡고 실브라우저에서만
+			   드러난다(#grab-popover에서 이미 한 번, .grab-hint에서 두 번 밟았다). */
+			#ref-picker[hidden] {
+				display: none;
+			}
+			#ref-picker-search {
+				box-sizing: border-box;
+				height: 26px;
+				padding: 0 8px;
+				background: var(--vd-inset);
+				border: 1px solid var(--vd-border);
+				border-radius: var(--vd-radius);
+				color: var(--vd-fg);
+				font: inherit;
+				outline: none;
+			}
+			#ref-picker-list {
+				display: flex;
+				flex-direction: column;
+				max-height: 260px;
+				overflow-y: auto;
+			}
+			#ref-picker .ref-row {
+				box-sizing: border-box;
+				position: relative;
+				min-height: 26px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 0 8px 0 26px;
+				border-radius: 4px;
+				color: var(--vd-fg);
+				cursor: pointer;
+				white-space: nowrap;
+			}
+			#ref-picker .ref-row:hover,
+			#ref-picker .ref-row[data-active="true"] {
+				background: var(--vd-hover);
+			}
+			#ref-picker .ref-row svg {
+				position: absolute;
+				left: 8px;
+				color: var(--vd-accent);
+			}
+			#ref-picker .ref-row-label {
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			#ref-picker .ref-row-tag {
+				margin-left: auto;
+				padding-left: 10px;
+				font-size: 11px;
+				color: var(--vd-fg-muted);
+			}
+			#ref-picker-empty {
+				padding: 4px 8px;
+				color: var(--vd-fg-muted);
 			}
 			#tree {
 				grid-row: 2;
@@ -608,10 +688,49 @@
 		<div id="app">
 			<div id="toolbar">
 				<div class="tb-left">
-					<select id="diff-mode">
-						<option value="working">Working tree</option>
-						<option value="base" disabled>vs base</option>
-					</select>
+					<div class="tb-picker">
+						<button
+							id="ref-picker-btn"
+							type="button"
+							aria-haspopup="listbox"
+							aria-expanded="false"
+							aria-controls="ref-picker"
+						>
+							<span id="ref-picker-label">Working tree</span>
+							<svg
+								width="12"
+								height="12"
+								viewBox="0 0 12 12"
+								fill="none"
+								aria-hidden="true"
+							>
+								<path
+									d="M3 4.5 6 7.5 9 4.5"
+									stroke="currentColor"
+									stroke-width="1.5"
+								/>
+							</svg>
+						</button>
+						<div id="ref-picker" hidden>
+							<input
+								id="ref-picker-search"
+								type="text"
+								placeholder="Filter branches"
+								aria-label="Filter branches"
+								role="combobox"
+								aria-expanded="true"
+								aria-controls="ref-picker-list"
+								aria-autocomplete="list"
+								autocomplete="off"
+								spellcheck="false"
+							/>
+							<div
+								id="ref-picker-list"
+								role="listbox"
+								aria-label="Compare against"
+							></div>
+						</div>
+					</div>
 					<fieldset
 						class="tb-seg"
 						id="diff-style-group"
