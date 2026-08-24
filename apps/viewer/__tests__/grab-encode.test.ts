@@ -3,6 +3,7 @@ import {
 	encodeGrab,
 	grabLabel,
 	grabLabelParts,
+	plainSnippet,
 } from "../browser/grab/encode.ts";
 import type { Snippet } from "../browser/grab/snippet.ts";
 
@@ -109,6 +110,32 @@ describe("encodeGrab", () => {
 	});
 	test("공백뿐인 프롬프트는 생략", () => {
 		expect(encodeGrab({ ...base, prompt: "   " }).endsWith("```")).toBe(true);
+	});
+});
+
+describe("plainSnippet", () => {
+	// ⌥⏎ 단순 복사 — 편집기에 바로 붙여넣을 수 있어야 하므로 펜스·헤더가
+	// 없고, 문자 슬라이스가 이미 적용된 lines가 그대로 나간다.
+	test("side: 코드 줄만, 펜스·헤더 없음", () => {
+		expect(plainSnippet(sideSnip)).toBe("if (a) return;\nconst b = 1;");
+	});
+
+	// mixed의 +/- 마커도 제외 — 맥락(헤더)이 빠진 텍스트에 마커는 노이즈다.
+	test("mixed: 마커 없이 텍스트만", () => {
+		expect(
+			plainSnippet({
+				kind: "mixed",
+				oldStart: 2,
+				oldEnd: 2,
+				newStart: 2,
+				newEnd: 3,
+				rows: [
+					{ marker: "-", text: "l2-old", oldNo: 2, newNo: null },
+					{ marker: "+", text: "l2-new", oldNo: null, newNo: 2 },
+					{ marker: " ", text: "l3", oldNo: 3, newNo: 3 },
+				],
+			}),
+		).toBe("l2-old\nl2-new\nl3");
 	});
 });
 

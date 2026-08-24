@@ -1,4 +1,4 @@
-// diff-grab e2e 15종: 거터/텍스트 두 경로 모두에서 실제 브라우저 제스처로
+// diff-grab e2e 17종: 거터/텍스트 두 경로 모두에서 실제 브라우저 제스처로
 // 선택을 만들고(드래그·더블/트리플클릭), 팝오버·클립보드 인코딩까지 실
 // Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
@@ -695,4 +695,96 @@ test("⑮ 파일 헤더(파일명) 더블클릭은 팝오버를 열지 않는다
 	await expect(container.locator("[data-line]").first()).toBeVisible();
 	await page.waitForTimeout(80);
 	await expect(page.locator("#grab-popover")).toBeHidden();
+});
+
+test("⑯ 라인넘버 드래그는 아무 줄도 선택하지 않는다 — 클릭 한 줄 선택은 유지", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// README.md는 순수 addition이라 unified 거터가 한 줄로 이어진다 — 세로
+	// 드래그로 여러 라인넘버 셀을 가로지를 수 있다(hello.ts는 셀이 딱 2개라
+	// 다른 side라 드래그 판별이 흐려진다).
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const selectedCount = (): Promise<number> =>
+		container.evaluate(
+			(el) =>
+				el.shadowRoot?.querySelectorAll("[data-selected-line]").length ?? 0,
+		);
+
+	const cells = container.locator("[data-column-number]");
+	const a = await cells.first().boundingBox();
+	const b = await cells.nth(2).boundingBox();
+	if (!a || !b) throw new Error("gutter cells not visible");
+
+	// 드래그: 다른 행으로 건너가는 순간 엔진 pendingLineSelect가 취소된다 —
+	// 예전 GitHub식 드래그 선택(data-selected-line 스탬프)이 생기지 않는다.
+	await dragSelect(
+		page,
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+		{ x: b.x + b.width / 2, y: b.y + b.height / 2 },
+	);
+	await page.waitForTimeout(80);
+	expect(await selectedCount()).toBe(0);
+
+	// 클릭(같은 셀에서 시작·끝)은 여전히 그 한 줄을 선택한다 — 드래그만 끊고
+	// 클릭 선택·"+" 경로는 그대로라는 계약의 절반. rAF로 칠해지므로 poll로 기다린다.
+	await dragSelect(
+		page,
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+		{ x: a.x + a.width / 2, y: a.y + a.height / 2 },
+	);
+	await expect.poll(selectedCount).toBeGreaterThan(0);
+});
+
+test("⑰ ⌥+Enter는 프롬프트·머리말 없이 잡은 코드만 클립보드로", async ({
+	page,
+	viewerUrl,
+	context,
+}) => {
+	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// ②와 같은 README.md 텍스트 드래그로 팝오버를 연다. 프롬프트를 채워 둔
+	// 채 ⌥+Enter를 치면 그 프롬프트가 무시되고 잡은 코드 텍스트만 나가야
+	// 한다 — 편집기에 바로 붙여넣기 위한 형식이다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="README.md"]') });
+	await expect(container).toBeVisible();
+	await waitForHighlighted(container);
+
+	const rows = container.locator("[data-line]");
+	const a = await rows.first().boundingBox();
+	const b = await rows.nth(2).boundingBox();
+	if (!a || !b) throw new Error("text rows not visible");
+	await dragSelect(
+		page,
+		{ x: a.x + 40, y: a.y + a.height / 2 },
+		{ x: b.x + b.width - 5, y: b.y + b.height / 2 },
+	);
+	const popover = page.locator("#grab-popover");
+	const input = page.locator("#grab-popover textarea");
+	await expect(popover).toBeVisible();
+	// 하단 단축키 각주가 ⌥⏎를 고지한다 — 발견 가능성 채널.
+	await expect(popover.locator(".grab-keys")).toHaveText("⌥⏎ Copy code only");
+
+	await input.fill("이 프롬프트는 무시된다");
+	await input.press("Alt+Enter");
+	const out = await readClipboard(page);
+	// 머리말·펜스·프롬프트 전부 없이 순수 코드 텍스트만.
+	expect(out).not.toContain("diffdeck selection");
+	expect(out).not.toContain("```");
+	expect(out).not.toContain("이 프롬프트는 무시된다");
+	expect(out).toContain("Base line.");
+	// 단순 복사도 성공 상태(Copied) 후 같은 타이머(400ms)로 자동 닫힌다.
+	await expect(popover).toBeHidden();
 });
