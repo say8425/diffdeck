@@ -191,6 +191,7 @@ interface SessionGutterSelecting {
 type PointerSession =
   | SessionIdle
   | SessionSelecting
+  // [diffdeck] see enableLineSelectionDrag below.
   | SessionPendingLineSelect
   | SessionPendingSingleLineUnselect
   | SessionGutterSelecting;
@@ -688,6 +689,7 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     const hasActiveLineSelectionSession =
       this.pointerSession.mode === 'selecting' ||
       this.pointerSession.mode === 'pendingSingleLineUnselect' ||
+      // [diffdeck] see enableLineSelectionDrag above.
       this.pointerSession.mode === 'pendingLineSelect';
     const hasActiveGutterSelectionSession =
       this.pointerSession.mode === 'gutterSelecting';
@@ -896,6 +898,15 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
   // branches of the drag-enabled mode — plain click, shift-click extension
   // and re-click-to-unselect — then runs the same commit sequence as the
   // 'selecting' pointerup.
+  //
+  // One deliberate divergence: when extendSelectionFromShiftClick returns
+  // false (the pre is gone, or the existing selection's rows fall outside
+  // the render window) the drag-enabled pointerdown path bails out entirely
+  // — no session, no notifications. Here the shared tail still runs, so
+  // notifySelectionEnd/Committed fire for a selection that did not change.
+  // Harmless for this repo's viewer (it wires none of the selection
+  // callbacks) and it keeps the commit tail single-exit; a library consumer
+  // that listens to those callbacks would see one extra no-op pair.
   private commitPendingLineSelect(): void {
     const session = this.pointerSession;
     if (session.mode !== 'pendingLineSelect') {
@@ -991,8 +1002,11 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
           requireNumberColumn: false,
         });
         // [diffdeck] see enableLineSelectionDrag above.
-        // An unresolvable pointer (off the diff, unrendered row) keeps the
-        // session pending — releasing back on the anchor row still commits.
+        // An unresolvable pointer (off the diff, an unrendered row, or a
+        // sideways drag right out of the diff) keeps the session pending, so
+        // a release back on the anchor row still commits — and a release
+        // anywhere else commits the anchor row too, exactly as the
+        // drag-enabled path would.
         if (pointerInfo == null) {
           return;
         }
@@ -1007,9 +1021,14 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         ) {
           return;
         }
-        // Crossing into another row makes the gesture a drag — and a drag
-        // selects nothing in this mode. No preventDefault: the interaction
-        // is opted out entirely, so native behavior may proceed.
+        // The gesture left the pressed line number, so it is a drag — and a
+        // drag selects nothing in this mode. Note the key is (lineNumber,
+        // side), not the row index: in unified a row can expose an old and a
+        // new number cell, so a horizontal jitter across that boundary also
+        // cancels. Recoverable (the user clicks again) and it keeps the
+        // comparison identical to the one the drag-enabled path anchors on.
+        // No preventDefault: the interaction is opted out entirely, so
+        // native behavior may proceed.
         this.clearPointerSession();
         this.detachDocumentPointerListeners();
         return;
@@ -1099,6 +1118,8 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         this.detachDocumentPointerListeners();
         return;
       }
+      // [diffdeck] see enableLineSelectionDrag above — this is where the
+      // drag-less selection actually commits.
       case 'pendingLineSelect': {
         if (event.pointerId !== this.pointerSession.pointerId) {
           return;
@@ -1142,6 +1163,7 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         return;
       case 'gutterSelecting':
       case 'selecting':
+      // [diffdeck] see enableLineSelectionDrag above.
       case 'pendingLineSelect':
       case 'pendingSingleLineUnselect': {
         if ('pointerId' in this.pointerSession) {
@@ -2116,6 +2138,7 @@ export function pluckInteractionOptions<TMode extends InteractionManagerMode>(
     renderGutterUtility,
     __debugPointerEvents,
     enableLineSelection,
+    // [diffdeck] see enableLineSelectionDrag above.
     enableLineSelectionDrag,
     controlledSelection,
     onLineSelected,
@@ -2154,6 +2177,7 @@ export function pluckInteractionOptions<TMode extends InteractionManagerMode>(
     __debugPointerEvents,
 
     enableLineSelection,
+    // [diffdeck] see enableLineSelectionDrag above.
     enableLineSelectionDrag,
     controlledSelection,
     onLineSelected,

@@ -392,7 +392,7 @@ const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용�
 // 없어 content-box라 실제 렌더 폭은 340 + 패딩 16 + 테두리 2다. 340으로 두면
 // 우측 클램프(viewport.width - size.width - MARGIN)가 18px 관대해져 화면
 // 오른쪽 끝에서 드래그할 때 팝오버가 그만큼 잘린다(실측 358×69).
-// height는 입력창이 max-height(96px)까지 자라고 하단 단축키 각주(.grab-keys,
+// height는 입력창이 max-height(90px)까지 자라고 하단 단축키 각주(.grab-keys,
 // 15px + gap 6px)까지 뜬 최대 상태를 기준으로 잡는다 — 배치는 open() 때 한 번만
 // 계산되므로, 자란 뒤 재배치가 없어서 과소 선언하면 화면 아래쪽에서 카드가
 // 뷰포트를 벗어난다.
