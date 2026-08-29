@@ -16,7 +16,7 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
-import type { RefsResult } from "../server/refs.ts";
+import type { RefsResult, WorktreeRecord } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
@@ -72,6 +72,7 @@ import {
 	filterBaseRows,
 	type RowCounts,
 } from "./refPicker/model.ts";
+import { findWorktree, repoLabelView } from "./repoLabel.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -163,6 +164,53 @@ const pickerSearch = document.getElementById(
 const pickerList = document.getElementById("ref-picker-list") as HTMLElement;
 const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
+
+const repoLabelEl = document.getElementById("repo-label") as HTMLElement;
+const repoNameEl = document.getElementById("repo-name") as HTMLElement;
+const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
+
+/**
+ * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
+ * 화면 두 곳이 다르게 말하게 되므로 문자열 조립은 전부 repoLabel.ts가 한다.
+ */
+const applyRepoLabel = (worktrees: readonly WorktreeRecord[]): void => {
+	const view = repoLabelView(repo, worktrees);
+	repoNameEl.textContent = view.name;
+	repoBranchEl.textContent = view.branch;
+	repoLabelEl.setAttribute("title", view.title);
+	document.title = view.documentTitle;
+};
+
+// 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
+// /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
+// hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
+applyRepoLabel([]);
+
+/**
+ * 브랜치를 /api/refs로 최신화한다.
+ *
+ * **갱신 시점을 load()(부트스트랩·focus·refresh·토글)와 피커 열림으로 한정하는
+ * 것이 계약이다.** watch의 poll()은 fetchDiff만 부르고 load()를 거치지 않으므로
+ * (그게 이 배선이 성립하는 이유다) 2초 폴링이 git 서브프로세스를 상시로 늘리지
+ * 않는다. poll()에 옮겨 달면 /api/refs의 5초 TTL이 다 흡수하지 못한다.
+ *
+ * 신선도는 피커와 **같다**: /api/refs의 5초 TTL 캐시를 그대로 타므로 브랜치를
+ * 갈아탄 직후의 첫 갱신은 캐시를 읽을 수 있고, 라벨은 늦어도 그 다음 load()에
+ * 수렴한다. 캐시를 우회하지 않는 이유는 같은 데이터를 보는 두 UI(라벨과 피커)가
+ * 서로 다른 신선도를 주장하면 안 되기 때문이다.
+ */
+const refreshRepoLabel = async (): Promise<void> => {
+	try {
+		const res = await fetch(
+			`/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		if (!res.ok) return;
+		const body = (await res.json()) as RefsResult;
+		applyRepoLabel(body.worktrees);
+	} catch {
+		// 부가 정보다 — 못 받아도 이름은 이미 떠 있고 diff는 그대로 동작한다.
+	}
+};
 
 let diffStyle: "unified" | "split" = resolveDiffStyle(params.get("style"));
 let includeUntracked = resolveUntracked(params.get("untracked"));
@@ -1204,6 +1252,9 @@ const applyFetched = (result: FetchDiffResult): void => {
 };
 
 const load = async (): Promise<void> => {
+	// 정체성 갱신은 diff와 독립이다 — 기다리지 않는다. 브랜치를 갈아탄 뒤
+	// 창으로 돌아오면(focus → load) 라벨이 따라온다.
+	void refreshRepoLabel();
 	statusEl.textContent = "Loading…";
 	// 첫 로드(아직 아무것도 렌더된 적 없음)에만 로딩 인디케이터를 띄운다 —
 	// 이후 갱신은 기존 내용을 유지한 채 백그라운드로 교체되므로 비워지지
@@ -1368,7 +1419,13 @@ const loadPickerRows = async (): Promise<void> => {
 		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
 		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
 		// 목록에서 자기 경로를 찾아 읽는다.
-		const current = body.worktrees.find((w) => w.path === repo)?.branch ?? null;
+		// 정확 일치가 아니라 findWorktree를 쓴다 — repo는 CLI 기동 시점의
+		// process.cwd()라 리포 루트라는 보장이 없어, 하위 디렉토리에서 켜면
+		// 정확 일치가 실패해 HEAD 태그가 조용히 사라진다. 툴바 라벨과 같은
+		// 판정을 공유해야 "내가 어느 워크트리에 있는가"의 답이 하나로 남는다.
+		const current = findWorktree(body.worktrees, repo)?.branch ?? null;
+		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
+		applyRepoLabel(body.worktrees);
 		// 목록을 먼저 그린다. 개수를 기다리면 목록이 /api/refs(수 ms)가 아니라
 		// /api/summary(수십 ms)의 속도로 뜨고, 더 나쁘게는 getRepoSummary가
 		// 의도적으로 single-flight 밖이라(CLAUDE.md) 거기서 매달리면 목록이
