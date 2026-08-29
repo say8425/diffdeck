@@ -478,24 +478,45 @@ test("⑨ 복사해도 창 높이가 변하지 않는다 — 상태는 버튼 �
 	const popover = page.locator("#grab-popover");
 	await expect(popover).toBeVisible();
 
-	// ?? 0으로 뭉개지 않는다 — 복사 성공은 1.2초 뒤 자동 닫힘을 예약하므로,
-	// 느린 러너에서 그 사이에 닫히면 boundingBox()가 null이 된다. 0으로
-	// 떨어뜨리면 "높이가 69 → 0으로 변했다"는 엉뚱한 실패 메시지가 나와
-	// 다음 사람이 레이아웃 유령을 쫓게 된다. 닫혔으면 닫혔다고 말한다.
-	const heightOf = async (): Promise<number> => {
-		const box = await popover.boundingBox();
-		if (!box) throw new Error("팝오버가 사라졌다 — 자동 닫힘이 먼저 발화했다");
-		return box.height;
-	};
-	const before = await heightOf();
-	expect(before).toBeGreaterThan(0);
+	// 자동 닫힘(AUTO_CLOSE_MS=400ms)이 이 단언과 경합한다. 예전 1200ms 시절엔
+	// press 뒤에 상태 폴 한 번 + boundingBox 한 번, 왕복 두 번을 넉넉히 넣을 수
+	// 있었지만 400ms에선 느린 러너가 그 사이에 닫아버린다. 그래서 상태와 높이를
+	// **한 번의 evaluate로 같은 순간에** 함께 읽는다 — 폴이 "ok"를 본 시점의
+	// 높이가 곧 비교 대상이라 경합이 원리적으로 사라진다.
+	//
+	// close()는 data-state를 되돌리지 않으므로(계속 "ok") 닫힌 뒤에도 폴은
+	// 통과한다 — 그때 hidden이 켜져 height만 0이 되어 "69 → 0" 같은 엉뚱한
+	// 실패 메시지가 나온다. hidden을 따로 실어 닫혔으면 닫혔다고 말한다.
+	const snapshot = (): Promise<{
+		state: string;
+		height: number;
+		hidden: boolean;
+	}> =>
+		popover.evaluate((el) => ({
+			state:
+				(el.querySelector(".grab-send") as HTMLElement | null)?.dataset.state ??
+				"",
+			height: el.getBoundingClientRect().height,
+			// hidden은 최신 DOM 타입에서 boolean | "until-found"라 불리언으로 좁힌다.
+			hidden: Boolean((el as HTMLElement).hidden),
+		}));
+
+	const before = await snapshot();
+	expect(before.hidden).toBe(false);
+	expect(before.height).toBeGreaterThan(0);
 
 	await page.locator("#grab-popover textarea").press("Enter");
 	// 버튼이 성공 상태로 넘어갔는지 먼저 확인 — 그래야 "아직 아무 일도 안
 	// 일어나서 높이가 같다"는 공허한 통과를 배제한다.
-	await expect(page.locator("#grab-popover .grab-send")).toHaveAttribute(
-		"data-state",
-		"ok",
-	);
-	expect(await heightOf()).toBe(before);
+	let after = before;
+	await expect
+		.poll(async () => {
+			after = await snapshot();
+			return after.state;
+		})
+		.toBe("ok");
+	if (after.hidden) {
+		throw new Error("팝오버가 사라졌다 — 자동 닫힘(400ms)이 먼저 발화했다");
+	}
+	expect(after.height).toBe(before.height);
 });

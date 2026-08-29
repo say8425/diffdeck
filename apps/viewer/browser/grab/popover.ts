@@ -3,13 +3,15 @@
 // findBar.ts와 동일하게 리스너는 생성 시 등록, destroy()에서 해제(happy-dom
 // 전역 window 누적 방지).
 //
-// 구조는 라벨 한 줄 + 입력 영역 둘뿐이고, 보내기 버튼은 입력 영역 **안**에 산다:
+// 구조는 라벨 한 줄 + 입력 영역 + 단축키 각주 한 줄 뿐이고, 보내기 버튼은
+// 입력 영역 **안**에 산다:
 //
 //   ┌ #grab-popover ────────────────┐  8px  ← 떠 있는 패널(앱에서 유일)
 //   │ popover.ts:53 · new side      │
 //   │ ┌ .grab-field ──────────────┐ │  6px  ← --vd-radius, 표준 컨트롤
 //   │ │ textarea        [.grab-send]│ │  4px  ← 컨테이너 안쪽 버튼
 //   │ └───────────────────────────┘ │
+//   │ ⌥⏎ Copy code only             │  6px  ← .grab-keys 각주(--vd-fg-muted)
 //   └───────────────────────────────┘
 //
 // radius 8/6/4는 임의값이 아니라 앱에 이미 있는 세 값이다(툴바 세그먼트
@@ -33,6 +35,8 @@ export interface GrabOpenOptions {
 	label: GrabLabelPart[];
 	labelTitle: string; // 전체 경로 — 라벨은 basename만 보여주고 ellipsis로 잘린다
 	buildOutput(prompt: string): string;
+	// ⌥⏎가 복사할 "단순 코드" 출력 — 프롬프트·머리말 없이 잡은 코드만.
+	buildPlainOutput(): string;
 	placement: Placement;
 }
 
@@ -47,8 +51,13 @@ export interface GrabPopover {
 const HINT_COPIED = "Copied";
 const HINT_FAILED = "Copy failed";
 const SEND_LABEL = "Copy to clipboard";
-const SEND_TITLE = "Copy (⏎) · Shift+⏎ for new line";
-const AUTO_CLOSE_MS = 1200;
+const SEND_TITLE = "Copy (⏎) · Shift+⏎ for new line · ⌥⏎ for plain code";
+const KEYS_KEY = "⌥⏎";
+const KEYS_TEXT = "Copy code only";
+// 복사 성공 확인("Copied" + 초록 체크)의 체류 시간. 예전엔 copyButton의
+// RESET_MS(1200)와 맞췄지만, 제출 후 팝오버가 빨리 사라지는 게 요청돼서
+// 확인으로서의 최소한만 남긴다.
+const AUTO_CLOSE_MS = 400;
 
 // 버튼 아이콘 셋. 세 개를 전부 DOM에 두고 data-state로 CSS가 하나만 보여준다 —
 // 상태마다 innerHTML을 갈아끼우면 매번 파서를 태우고 재측정을 유발한다.
@@ -90,11 +99,11 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.className = "grab-input";
 	// placeholder는 한 마디만 한다. 예전엔 여기에 "(⏎ copy · shift + ⏎ new
 	// line)"까지 실어 입력창을 꽉 채웠는데, 그게 창에서 가장 눈에 띄는 요소라
-	// 다른 걸 아무리 고쳐도 "안 바뀐 것처럼" 보였다. 단축키 고지는 이제 화면을
-	// 차지하지 않는 두 채널이 맡는다 — 버튼 hover(title)와 aria-keyshortcuts.
+	// 다른 걸 아무리 고쳐도 "안 바뀐 것처럼" 보였다. 단축키 고지는 하단
+	// .grab-keys 각주(⌥⏎만)와 버튼 hover(title), aria-keyshortcuts가 맡는다.
 	input.placeholder = "Prompt…";
 	input.setAttribute("aria-label", "Grab prompt");
-	input.setAttribute("aria-keyshortcuts", "Enter Shift+Enter Escape");
+	input.setAttribute("aria-keyshortcuts", "Enter Shift+Enter Alt+Enter Escape");
 
 	// 보내기 버튼. 배경색이 없는 게 계약이다 — 색만 바뀐다(회색 → 액센트 →
 	// 초록/빨강). 그래서 어느 상태에서도 창 크기가 변하지 않는다.
@@ -111,6 +120,15 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	send.innerHTML = ICONS;
 
 	field.append(input, send);
+
+	// 하단 단축키 각주 — ⌥⏎의 발견 가능성 채널. 항상 보이는 고정 텍스트라
+	// 상태를 알리는 sr-only 라이브 리전(.grab-hint)과 역할이 다르다.
+	const keys = doc.createElement("div");
+	keys.className = "grab-keys";
+	const keysKey = doc.createElement("span");
+	keysKey.className = "grab-keys-k";
+	keysKey.textContent = KEYS_KEY;
+	keys.append(keysKey, ` ${KEYS_TEXT}`);
 
 	// 상태 전용 라이브 리전. **시각적으로는 버튼이 상태를 지므로** 이 노드는
 	// 스크린리더 전용(sr-only)이다. 예전처럼 눈에 보이는 줄로 두면 복사할
@@ -133,10 +151,11 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		hint.textContent = "";
 	};
 
-	element.append(label, field, hint);
+	element.append(label, field, keys, hint);
 
 	let opened = false;
 	let buildOutput: ((prompt: string) => string) | null = null;
+	let buildPlainOutput: (() => string) | null = null;
 	let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const clearAutoCloseTimer = (): void => {
@@ -167,6 +186,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		// options.buildOutput을 그대로 tear-off하지 않고 래핑 호출한다
 		// (oxlint unbound-method — 인터페이스 메서드 시그니처의 this 바인딩 경고).
 		buildOutput = (prompt) => options.buildOutput(prompt);
+		buildPlainOutput = () => options.buildPlainOutput();
 		element.style.left = `${options.placement.left}px`;
 		element.style.top = `${options.placement.top}px`;
 		input.value = "";
@@ -195,9 +215,18 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		console.warn(err);
 	};
 
-	const submit = (): void => {
-		const output = buildOutput?.(input.value) ?? "";
+	const writeOutput = (output: string): void => {
 		deps.writeText(output).then(onCopySuccess, onCopyFailure);
+	};
+
+	const submit = (): void => {
+		writeOutput(buildOutput?.(input.value) ?? "");
+	};
+
+	// ⌥⏎ — 프롬프트·머리말 없이 잡은 코드 텍스트만 복사한다. 성공/실패와
+	// 자동 닫힘은 제출과 같은 경로를 쓴다.
+	const submitPlain = (): void => {
+		writeOutput(buildPlainOutput?.() ?? "");
 	};
 
 	// 프롬프트가 비었는지에 따라 버튼 강조만 바뀐다. 비활성화하지는 않는다 —
@@ -209,6 +238,13 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") {
 			if (event.isComposing || event.keyCode === 229) return;
+			// ⌥⏎는 단순 복사 — Enter 계열은 전부 개행 기본 동작이 있으므로 여기서
+			// 막는다(Shift+Enter만 예외로 살려 둔다).
+			if (event.altKey) {
+				event.preventDefault();
+				submitPlain();
+				return;
+			}
 			// Shift+Enter는 개행 — preventDefault를 부르지 않고 그냥 빠져나가
 			// textarea의 기본 동작에 맡긴다. 새 키 분기를 만들지 않는다.
 			if (event.shiftKey) return;

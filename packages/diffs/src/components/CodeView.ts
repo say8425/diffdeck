@@ -254,6 +254,8 @@ const CODE_VIEW_DIFF_OPTION_KEYS = [
   'enableGutterUtility',
   '__debugPointerEvents',
   'enableLineSelection',
+  // [diffdeck] see InteractionManager's enableLineSelectionDrag.
+  'enableLineSelectionDrag',
   'controlledSelection',
   'disableErrorHandling',
 ] as const;
@@ -278,6 +280,8 @@ const CODE_VIEW_FILE_OPTION_KEYS = [
   'enableGutterUtility',
   '__debugPointerEvents',
   'enableLineSelection',
+  // [diffdeck] see InteractionManager's enableLineSelectionDrag.
+  'enableLineSelectionDrag',
   'controlledSelection',
   'disableErrorHandling',
 ] as const;

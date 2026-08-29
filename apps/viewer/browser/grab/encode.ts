@@ -80,6 +80,14 @@ export const grabLabel = (path: string, snippet: Snippet): string =>
 		.map((part) => part.text)
 		.join("");
 
+// ⌥⏎ 단순 복사용 — 잡은 줄의 코드 텍스트만 나간다. 펜스·File:/Lines: 머리말·
+// 프롬프트 전부 없이 편집기에 바로 붙여넣을 수 있는 형태. mixed의 +/- 마커도
+// 싣지 않는다 — 맥락(헤더)이 빠진 텍스트에 마커만 남으면 노이즈다.
+export const plainSnippet = (snippet: Snippet): string =>
+	snippet.kind === "side"
+		? snippet.lines.join("\n")
+		: snippet.rows.map((r) => r.text).join("\n");
+
 export const encodeGrab = (input: EncodeInput): string => {
 	const { snippet } = input;
 	const fileLine = input.prevPath

@@ -704,6 +704,20 @@
 			#grab-popover .grab-send[data-state="fail"] .i-fail {
 				display: block;
 			}
+			/* 하단 단축키 각주 — .grab-label과 같은 어휘(11px, 정수 행고,
+			   --vd-fg-muted)로 입력창보다 한 단계 낮게 말한다. 키 글리프만
+			   라벨의 파일명 톤(#c2c2ca)으로 밝혀 단축키와 설명을 가른다. */
+			#grab-popover .grab-keys {
+				font-size: 11px;
+				/* 정수 행고 — 팝오버 전체 높이가 소수가 되지 않게 하는 축.
+				   .grab-label과 같은 이유다. */
+				line-height: 15px;
+				color: var(--vd-fg-muted);
+				white-space: nowrap;
+			}
+			#grab-popover .grab-keys-k {
+				color: #c2c2ca;
+			}
 			/* 상태는 버튼이 눈으로 말하므로 이 노드는 스크린리더 전용이다.
 			   예전처럼 보이는 줄로 두면 복사할 때마다 창이 18px 자라(실측: 66 → 84)
 			   커서 아래 코드가 밀렸다. hidden을 토글하지 않는 이유이기도 하다 —

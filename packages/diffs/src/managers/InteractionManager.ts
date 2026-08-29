@@ -163,6 +163,17 @@ interface SessionSelecting {
   pointerId: number;
 }
 
+// [diffdeck] Deviation from upstream @pierre/diffs: drag-less line selection
+// (enableLineSelectionDrag: false). The press selects nothing until release;
+// a move into another row cancels the session — that gesture is a drag, and
+// drags must not select. Upstream has no equivalent session.
+interface SessionPendingLineSelect {
+  mode: 'pendingLineSelect';
+  pointerId: number;
+  info: SelectionInfo;
+  shiftKey: boolean;
+}
+
 interface SessionPendingSingleLineUnselect {
   mode: 'pendingSingleLineUnselect';
   pointerId: number;
@@ -180,6 +191,8 @@ interface SessionGutterSelecting {
 type PointerSession =
   | SessionIdle
   | SessionSelecting
+  // [diffdeck] see enableLineSelectionDrag below.
+  | SessionPendingLineSelect
   | SessionPendingSingleLineUnselect
   | SessionGutterSelecting;
 
@@ -199,6 +212,14 @@ export interface InteractionManagerBaseOptions<
   onTokenLeave?(props: OnTokenEventProps<TMode>, event: PointerEvent): unknown;
   __debugPointerEvents?: LogTypes;
   enableLineSelection?: boolean;
+  // [diffdeck] Deviation from upstream @pierre/diffs: new option.
+  // When false, a press on a line number no longer selects on pointerdown
+  // and dragging never extends the selection: the session stays pending and
+  // commits only when the pointer is released on the same row (plain click,
+  // shift-click extension, re-click-to-unselect all keep working). The
+  // gutter utility drag (pressing "+") is unaffected. Defaults to true
+  // (GitHub-style drag selection).
+  enableLineSelectionDrag?: boolean;
   controlledSelection?: boolean;
   onLineSelected?: (range: SelectedLineRange | null) => void;
   onLineSelectionStart?: (range: SelectedLineRange | null) => void;
@@ -667,7 +688,9 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
 
     const hasActiveLineSelectionSession =
       this.pointerSession.mode === 'selecting' ||
-      this.pointerSession.mode === 'pendingSingleLineUnselect';
+      this.pointerSession.mode === 'pendingSingleLineUnselect' ||
+      // [diffdeck] see enableLineSelectionDrag above.
+      this.pointerSession.mode === 'pendingLineSelect';
     const hasActiveGutterSelectionSession =
       this.pointerSession.mode === 'gutterSelecting';
     if (
@@ -740,7 +763,10 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
   };
 
   private startLineSelectionFromPointerDown(event: PointerEvent): void {
-    const { enableLineSelection = false } = this.options;
+    const {
+      enableLineSelection = false,
+      enableLineSelectionDrag = true,
+    } = this.options;
     if (!enableLineSelection) {
       return;
     }
@@ -763,32 +789,30 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     // text selection. Calling preventDefault would also cancel the browser's
     // native focus change, which stops a focusable host wrapper from receiving
     // focus (and the keyboard events it needs) when a line number is clicked.
-    const { lineNumber, eventSide, lineIndex } = pointerInfo;
+    const { lineNumber, eventSide } = pointerInfo;
+
+    // [diffdeck] see enableLineSelectionDrag above.
+    // Drag-less mode parks the whole decision on release: selecting here
+    // would make any drag off the row select its first row. Jitter inside
+    // the anchor row is tolerated by the move handler, and release on the
+    // same row commits through commitPendingLineSelect with the same
+    // click / shift-click / unselect branches as below.
+    if (!enableLineSelectionDrag) {
+      this.pointerSession = {
+        mode: 'pendingLineSelect',
+        pointerId: event.pointerId,
+        info: pointerInfo,
+        shiftKey: event.shiftKey,
+      };
+      this.attachDocumentPointerListeners();
+      return;
+    }
 
     if (event.shiftKey && this.selectedRange != null) {
-      const rowRange = this.getIndexesFromSelection(
-        this.selectedRange,
-        pre.getAttribute('data-diff-type') === 'split'
-      );
-      if (rowRange == null) {
-        return;
+      if (this.extendSelectionFromShiftClick(pointerInfo)) {
+        this.pointerSession = { mode: 'selecting', pointerId: event.pointerId };
+        this.attachDocumentPointerListeners();
       }
-      const useStart =
-        rowRange.start <= rowRange.end
-          ? lineIndex >= rowRange.start
-          : lineIndex <= rowRange.end;
-      this.selectionAnchor = {
-        lineNumber: useStart
-          ? this.selectedRange.start
-          : this.selectedRange.end,
-        side: useStart
-          ? this.selectedRange.side
-          : (this.selectedRange.endSide ?? this.selectedRange.side),
-      };
-      this.updateSelection(lineNumber, eventSide, false);
-      this.notifySelectionStart(this.getCurrentSelectionRange());
-      this.pointerSession = { mode: 'selecting', pointerId: event.pointerId };
-      this.attachDocumentPointerListeners();
       return;
     }
 
@@ -808,6 +832,56 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
       return;
     }
 
+    this.selectSingleLineFromPoint(pointerInfo);
+    this.pointerSession = { mode: 'selecting', pointerId: event.pointerId };
+    this.attachDocumentPointerListeners();
+  }
+
+  // [diffdeck] Extracted from the pointerdown path (upstream inlines this
+  // body) so the drag-less commit can reuse it verbatim.
+  // Shift+click extension of an existing selection. Shared by the
+  // drag-enabled pointerdown path and the drag-less pendingLineSelect
+  // commit so both produce the same selection for the same press. Returns
+  // false when the existing selection's rows cannot be resolved, in which
+  // case selection state is left untouched.
+  private extendSelectionFromShiftClick(
+    pointerInfo: SelectionInfo
+  ): boolean {
+    const { pre } = this;
+    if (pre == null || this.selectedRange == null) {
+      return false;
+    }
+    const { lineNumber, eventSide, lineIndex } = pointerInfo;
+    const rowRange = this.getIndexesFromSelection(
+      this.selectedRange,
+      pre.getAttribute('data-diff-type') === 'split'
+    );
+    if (rowRange == null) {
+      return false;
+    }
+    const useStart =
+      rowRange.start <= rowRange.end
+        ? lineIndex >= rowRange.start
+        : lineIndex <= rowRange.end;
+    this.selectionAnchor = {
+      lineNumber: useStart
+        ? this.selectedRange.start
+        : this.selectedRange.end,
+      side: useStart
+        ? this.selectedRange.side
+        : (this.selectedRange.endSide ?? this.selectedRange.side),
+    };
+    this.updateSelection(lineNumber, eventSide, false);
+    this.notifySelectionStart(this.getCurrentSelectionRange());
+    return true;
+  }
+
+  // [diffdeck] Extracted alongside extendSelectionFromShiftClick — same reason.
+  // Plain click-select of one row. Shared by the drag-enabled pointerdown
+  // path and the drag-less pendingLineSelect commit (same reasoning as
+  // extendSelectionFromShiftClick).
+  private selectSingleLineFromPoint(pointerInfo: SelectionInfo): void {
+    const { lineNumber, eventSide } = pointerInfo;
     if (this.options.controlledSelection === true) {
       this.proposedSelectedRange = null;
     } else {
@@ -817,8 +891,46 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     this.selectionAnchor = { lineNumber, side: eventSide };
     this.updateSelection(lineNumber, eventSide, false);
     this.notifySelectionStart(this.getCurrentSelectionRange());
-    this.pointerSession = { mode: 'selecting', pointerId: event.pointerId };
-    this.attachDocumentPointerListeners();
+  }
+
+  // [diffdeck] see enableLineSelectionDrag above.
+  // Drag-less line selection commits on release. Mirrors the pointerdown
+  // branches of the drag-enabled mode — plain click, shift-click extension
+  // and re-click-to-unselect — then runs the same commit sequence as the
+  // 'selecting' pointerup.
+  //
+  // One deliberate divergence: when extendSelectionFromShiftClick returns
+  // false (the pre is gone, or the existing selection's rows fall outside
+  // the render window) the drag-enabled pointerdown path bails out entirely
+  // — no session, no notifications. Here the shared tail still runs, so
+  // notifySelectionEnd/Committed fire for a selection that did not change.
+  // Harmless for this repo's viewer (it wires none of the selection
+  // callbacks) and it keeps the commit tail single-exit; a library consumer
+  // that listens to those callbacks would see one extra no-op pair.
+  private commitPendingLineSelect(): void {
+    const session = this.pointerSession;
+    if (session.mode !== 'pendingLineSelect') {
+      return;
+    }
+    const { info, shiftKey } = session;
+    if (shiftKey && this.selectedRange != null) {
+      this.extendSelectionFromShiftClick(info);
+    } else if (
+      this.selectedRange?.start === info.lineNumber &&
+      this.selectedRange?.end === info.lineNumber
+    ) {
+      // Re-clicking the sole selected row clears it — the drag-enabled mode
+      // reaches the same outcome via pendingSingleLineUnselect.
+      this.updateSelection(null, undefined, false);
+    } else {
+      this.selectSingleLineFromPoint(info);
+    }
+    this.selectionAnchor = undefined;
+    this.detachDocumentPointerListeners();
+    this.clearPointerSession();
+    this.notifySelectionEnd(this.getCurrentSelectionRange());
+    this.notifySelectionCommitted();
+    this.clearProposedSelection();
   }
 
   private startGutterSelectionFromPointerDown(event: PointerEvent): void {
@@ -879,6 +991,46 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         if (enableLineSelection === true) {
           this.updateSelection(point.lineNumber, point.side);
         }
+        return;
+      }
+      case 'pendingLineSelect': {
+        if (event.pointerId !== this.pointerSession.pointerId) {
+          return;
+        }
+        const pointerInfo = this.resolveSelectionInfo(event, {
+          source: 'coordinates-first',
+          requireNumberColumn: false,
+        });
+        // [diffdeck] see enableLineSelectionDrag above.
+        // An unresolvable pointer (off the diff, an unrendered row, or a
+        // sideways drag right out of the diff) keeps the session pending, so
+        // a release back on the anchor row still commits — and a release
+        // anywhere else commits the anchor row too, exactly as the
+        // drag-enabled path would.
+        if (pointerInfo == null) {
+          return;
+        }
+        if (
+          areSelectionPointsEqual(
+            { lineNumber: pointerInfo.lineNumber, side: pointerInfo.eventSide },
+            {
+              lineNumber: this.pointerSession.info.lineNumber,
+              side: this.pointerSession.info.eventSide,
+            },
+          )
+        ) {
+          return;
+        }
+        // The gesture left the pressed line number, so it is a drag — and a
+        // drag selects nothing in this mode. Note the key is (lineNumber,
+        // side), not the row index: in unified a row can expose an old and a
+        // new number cell, so a horizontal jitter across that boundary also
+        // cancels. Recoverable (the user clicks again) and it keeps the
+        // comparison identical to the one the drag-enabled path anchors on.
+        // No preventDefault: the interaction is opted out entirely, so
+        // native behavior may proceed.
+        this.clearPointerSession();
+        this.detachDocumentPointerListeners();
         return;
       }
       case 'selecting': {
@@ -966,6 +1118,16 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         this.detachDocumentPointerListeners();
         return;
       }
+      // [diffdeck] see enableLineSelectionDrag above — this is where the
+      // drag-less selection actually commits.
+      case 'pendingLineSelect': {
+        if (event.pointerId !== this.pointerSession.pointerId) {
+          return;
+        }
+        event.preventDefault();
+        this.commitPendingLineSelect();
+        return;
+      }
       case 'pendingSingleLineUnselect': {
         if (event.pointerId !== this.pointerSession.pointerId) {
           return;
@@ -1001,6 +1163,8 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         return;
       case 'gutterSelecting':
       case 'selecting':
+      // [diffdeck] see enableLineSelectionDrag above.
+      case 'pendingLineSelect':
       case 'pendingSingleLineUnselect': {
         if ('pointerId' in this.pointerSession) {
           if (event.pointerId !== this.pointerSession.pointerId) {
@@ -1974,6 +2138,8 @@ export function pluckInteractionOptions<TMode extends InteractionManagerMode>(
     renderGutterUtility,
     __debugPointerEvents,
     enableLineSelection,
+    // [diffdeck] see enableLineSelectionDrag above.
+    enableLineSelectionDrag,
     controlledSelection,
     onLineSelected,
     onLineSelectionStart,
@@ -2011,6 +2177,8 @@ export function pluckInteractionOptions<TMode extends InteractionManagerMode>(
     __debugPointerEvents,
 
     enableLineSelection,
+    // [diffdeck] see enableLineSelectionDrag above.
+    enableLineSelectionDrag,
     controlledSelection,
     onLineSelected,
     onLineSelectionStart,

@@ -25,6 +25,7 @@ import {
 	encodeGrab,
 	type GrabFileStatus,
 	grabLabelParts,
+	plainSnippet,
 } from "./grab/encode.ts";
 import {
 	createGrabHighlighter,
@@ -391,10 +392,11 @@ const autoExpandedIds = new Set<string>(); // 검색이 임시로 펼친 대용�
 // 없어 content-box라 실제 렌더 폭은 340 + 패딩 16 + 테두리 2다. 340으로 두면
 // 우측 클램프(viewport.width - size.width - MARGIN)가 18px 관대해져 화면
 // 오른쪽 끝에서 드래그할 때 팝오버가 그만큼 잘린다(실측 358×69).
-// height는 입력창이 max-height(96px)까지 자라고 상태 줄까지 뜬 최대 상태를
-// 기준으로 잡는다 — 배치는 open() 때 한 번만 계산되므로, 자란 뒤 재배치가
-// 없어서 과소 선언하면 화면 아래쪽에서 카드가 뷰포트를 벗어난다.
-const POPOVER_SIZE = { width: 358, height: 190 };
+// height는 입력창이 max-height(90px)까지 자라고 하단 단축키 각주(.grab-keys,
+// 15px + gap 6px)까지 뜬 최대 상태를 기준으로 잡는다 — 배치는 open() 때 한 번만
+// 계산되므로, 자란 뒤 재배치가 없어서 과소 선언하면 화면 아래쪽에서 카드가
+// 뷰포트를 벗어난다.
+const POPOVER_SIZE = { width: 358, height: 211 };
 const viewport = (): { width: number; height: number } => ({
 	width: window.innerWidth,
 	height: window.innerHeight,
@@ -523,6 +525,7 @@ const buildGrabSnapshot = (
 		label: grabLabelParts(fileId, snippet),
 		labelTitle: fileId,
 		buildOutput: (prompt) => encodeGrab({ ...input, prompt }),
+		buildPlainOutput: () => plainSnippet(snippet),
 	};
 };
 
@@ -627,6 +630,9 @@ const codeViewOptions = (): ConstructorParameters<
 	// diff-grab: GitHub식 거터 라인 선택 + "+" 버튼 (스펙 §경로 A).
 	// renderGutterUtility는 금지 — onGutterUtilityClick과 병용 시 엔진 throw.
 	enableLineSelection: true,
+	// 라인넘버 드래그는 끈다 — 드래그는 코드 텍스트 선택(그랩)의 제스처다.
+	// 클릭 한 줄 선택·shift클릭 확장·"+" 클릭은 그대로(엔진 pendingLineSelect).
+	enableLineSelectionDrag: false,
 	enableGutterUtility: true,
 	onGutterUtilityClick: (range: SelectedLineRange, context) => {
 		const snap = buildGrabSnapshot(context.item.id, normalizeRange(range));

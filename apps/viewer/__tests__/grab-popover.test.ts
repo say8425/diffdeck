@@ -29,6 +29,7 @@ const openDefault = () =>
 		label: labelParts("main.ts", ":84-98"),
 		labelTitle: "apps/viewer/browser/main.ts",
 		buildOutput: (prompt) => `OUT[${prompt}]`,
+		buildPlainOutput: () => "PLAIN",
 		placement: { left: 10, top: 20 },
 	});
 const input = () =>
@@ -157,10 +158,40 @@ describe("createGrabPopover", () => {
 		expect(writes).toEqual(["OUT[정리해줘]"]);
 		expect(copied).toBe(1);
 		expect(popover.element.textContent).toContain("Copied");
-		jest.advanceTimersByTime(1200);
+		jest.advanceTimersByTime(400);
 		expect(popover.isOpen()).toBe(false);
 		jest.useRealTimers();
 	});
+	// ⌥⏎ 단순 복사 — 프롬프트가 차 있어도 무시하고 잡은 코드 텍스트만 나간다.
+	// Enter 계열은 개행 기본 동작이 있으므로 취소도 확인한다(Shift+Enter만 예외).
+	test("Alt+Enter는 buildPlainOutput을 복사하고 기본 개행을 막는다", async () => {
+		openDefault();
+		input().value = "무시될 프롬프트";
+		const notCancelled = pressEnter({ altKey: true });
+		await flush();
+		expect(notCancelled).toBe(false);
+		expect(writes).toEqual(["PLAIN"]);
+		expect(copied).toBe(1);
+	});
+
+	test("Alt+Enter도 Copied 상태 후 400ms 자동 닫힘", async () => {
+		jest.useFakeTimers();
+		openDefault();
+		pressEnter({ altKey: true });
+		await flush();
+		expect(popover.element.textContent).toContain("Copied");
+		jest.advanceTimersByTime(400);
+		expect(popover.isOpen()).toBe(false);
+		jest.useRealTimers();
+	});
+
+	test("IME 조합 중 Alt+Enter는 무시", () => {
+		openDefault();
+		pressEnter({ altKey: true, isComposing: true });
+		expect(writes).toEqual([]);
+		expect(popover.isOpen()).toBe(true);
+	});
+
 	test("IME 조합 중 Enter(isComposing)는 무시", () => {
 		openDefault();
 		input().value = "한글";
@@ -254,7 +285,7 @@ describe("createGrabPopover", () => {
 		// 복사 성공 직후엔 아직 열려 있다 — onCopied만 발화하고 onClosed는 아직.
 		expect(copied).toBe(1);
 		expect(closed).toBe(0);
-		jest.advanceTimersByTime(1200);
+		jest.advanceTimersByTime(400);
 		expect(closed).toBe(1);
 		jest.useRealTimers();
 	});
@@ -273,6 +304,7 @@ describe("createGrabPopover", () => {
 			label: labelParts("x", ""),
 			labelTitle: "src/x.ts",
 			buildOutput: () => "y",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		});
 		expect(() => p.close()).not.toThrow();
@@ -289,6 +321,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		});
 		const hint = pop.element.querySelector(".grab-hint") as HTMLElement;
@@ -297,21 +330,39 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(send.dataset.state).toBe("idle");
 	});
 
-	// 단축키 고지는 **화면을 차지하지 않는** 두 채널이 맡는다: 버튼 hover(title)와
-	// aria-keyshortcuts. placeholder는 한 마디만 해야 한다 — 여기에 안내를 실으면
-	// 입력창을 꽉 채워 창에서 가장 눈에 띄는 요소가 되어버린다.
-	test("placeholder는 한 마디만 하고, 단축키는 title·aria가 고지한다", () => {
+	// 단축키 고지는 세 채널이 맡는다: 하단 .grab-keys 각주(⌥⏎만), 버튼
+	// hover(title), aria-keyshortcuts. placeholder는 한 마디만 해야 한다 —
+	// 여기에 안내를 실으면 입력창을 꽉 채워 창에서 가장 눈에 띄는 요소가 된다.
+	test("placeholder는 한 마디만 하고, 단축키는 각주·title·aria가 고지한다", () => {
 		const { popover: pop } = makePopover();
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
 		expect(box.placeholder).toBe("Prompt…");
 		expect(box.getAttribute("aria-keyshortcuts")).toBe(
-			"Enter Shift+Enter Escape",
+			"Enter Shift+Enter Alt+Enter Escape",
 		);
-		// 표기(글자/글리프)가 아니라 **두 동작이 다 고지되는가**를 본다 —
+		// 표기(글자/글리프)가 아니라 **동작이 다 고지되는가**를 본다 —
 		// 문구를 다듬어도 안내가 통째로 빠지는 회귀만 잡히면 된다.
 		const send = pop.element.querySelector(".grab-send") as HTMLElement;
 		expect(send.title).toContain("⏎");
 		expect(send.title).toContain("new line");
+		expect(send.title).toContain("plain code");
+	});
+
+	// 하단 각주는 ⌥⏎의 발견 가능성 채널 — 상태 라이브 리전과 달리 항상 보인다.
+	test("하단에 ⌥⏎ 단축키 각주가 렌더된다", () => {
+		const { popover: pop } = makePopover();
+		pop.open({
+			label: labelParts(),
+			labelTitle: "src/a.ts",
+			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
+			placement: { left: 0, top: 0 },
+		});
+		const keys = pop.element.querySelector(".grab-keys") as HTMLElement;
+		expect(keys.textContent).toBe("⌥⏎ Copy code only");
+		// 키 글리프와 설명이 갈라져 있다 — 키 쪽만 밝은 톤으로 칠한다.
+		const key = keys.querySelector(".grab-keys-k") as HTMLElement;
+		expect(key.textContent).toBe("⌥⏎");
 	});
 
 	test("복사 실패는 힌트에 표시되고 팝오버는 열린 채 남는다", async () => {
@@ -320,6 +371,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		});
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
@@ -339,6 +391,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			label: labelParts(),
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		};
 		pop.open(opts);
@@ -369,6 +422,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			],
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		});
 		const label = pop.element.querySelector(".grab-label") as HTMLElement;
@@ -389,6 +443,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		const base = {
 			labelTitle: "src/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		};
 		pop.open({ ...base, label: labelParts("a.ts", ":1-2") });
@@ -404,6 +459,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			label: labelParts(),
 			labelTitle: "src/deep/a.ts",
 			buildOutput: () => "out",
+			buildPlainOutput: () => "plain",
 			placement: { left: 0, top: 0 },
 		});
 		const label = pop.element.querySelector(".grab-label");
@@ -434,6 +490,7 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 		label: labelParts(),
 		labelTitle: "src/a.ts",
 		buildOutput: (p: string) => `out:${p}`,
+		buildPlainOutput: () => "plain",
 		placement: { left: 0, top: 0 },
 	};
 
