@@ -45,7 +45,7 @@ Al elegir una rama, la comparación es contra la **merge base**: el commit del q
 
 ### Grab — envía una selección del diff a tu agente de código
 
-Selecciona código en el diff y se abre un cuadro de prompt justo donde soltaste el arrastre. Pulsa <kbd>Enter</kbd> y diffdeck copia **un solo bloque** al portapapeles — la referencia del archivo, las líneas exactas que elegiste y tu prompt — listo para pegar en Claude Code, Codex o cualquier chat.
+Selecciona código en el diff y se abre un cuadro de prompt justo donde soltaste el arrastre. Pulsa <kbd>Enter</kbd> y diffdeck copia **un solo bloque** al portapapeles — la referencia del archivo, las líneas exactas que elegiste y tu prompt — listo para pegar en Claude Code, Codex o cualquier chat. ¿Solo quieres el código? Pulsa <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> en Windows/Linux) y diffdeck copia únicamente las líneas elegidas — sin prompt, sin delimitadores de código ni encabezado de archivo — para pegarlas directamente en un editor. Eso sí, una selección que abarque ambos lados del diff llega sin sus marcadores `+`/`-`, de modo que las versiones antigua y nueva de una misma línea quedan una tras otra.
 
 ![Grab — líneas resaltadas en el diff con el cuadro de prompt abierto al lado](grab.png)
 

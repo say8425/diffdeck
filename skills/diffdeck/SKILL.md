@@ -56,7 +56,8 @@ press Enter — that copies one block for them to paste back to you.
 
 ## When the human pastes a "diffdeck selection"
 
-Grab copies a single fenced block plus the human's prompt on the line after it:
+Pressing Enter copies a single fenced block plus the human's prompt on the line
+after it:
 
 ````text
 ```
@@ -88,6 +89,14 @@ to assume, though — **`old side` numbers index the pre-change file**, so they
 need not match the working tree (and with `, deleted` the path may be gone); and
 the prompt is **optional**, so a block with nothing after the fence means the
 human hasn't said what they want yet. Ask rather than inventing a task.
+
+The human can also press ⌥⏎ (Alt+Enter) to copy the picked code **alone** — no
+fence, no `diffdeck selection`/`File:`/`Lines:` lines, and no `-`/`+`/space
+prefix even when the selection spans both sides. Such a paste is bare code: it
+says nothing about where it came from, and a both-sides selection arrives with
+the old and new versions of the same lines one after another — so the
+strip-the-first-character rule above does not apply to it. Ask which file, and
+which side, before acting on it.
 
 ## Options
 
