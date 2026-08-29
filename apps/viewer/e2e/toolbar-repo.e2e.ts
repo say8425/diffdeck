@@ -42,7 +42,11 @@ test.describe("toolbar repo label", () => {
 			// 조각 사이에 공백 텍스트 노드가 끼면 `name  · main`이 된다.
 			// #repo-branch가 구분자를 품고 오므로 마크업은 붙여 써야 하는데,
 			// 그건 포매터가 되돌릴 수 있는 종류의 계약이라 여기서 못박는다.
-			await expect(page.locator("#repo-label")).toHaveText(`${name} · main`);
+			// **toHaveText로는 못 잡는다** — Playwright가 공백을 정규화해서
+			// 이중 공백도 통과시킨다. textContent를 그대로 봐야 한다.
+			expect(
+				await page.locator("#repo-label").evaluate((el) => el.textContent),
+			).toBe(`${name} · main`);
 
 			// 말줄임을 hover로 펴는 보상 패턴(#ref-picker-btn과 같다).
 			await expect(page.locator("#repo-label")).toHaveAttribute(
@@ -123,6 +127,34 @@ test.describe("toolbar repo label", () => {
 		}
 	});
 
+	// watch는 창을 **안 보고 있을 때** 쓰는 기능이라 focus가 발화하지 않는다.
+	// 갱신이 load()에만 걸려 있으면 diff는 2초마다 새 브랜치 것으로 갈리는데
+	// 툴바·탭 제목만 옛 브랜치에 무기한 굳고, 같은 화면의 빈 상태 카드는
+	// /api/summary로 살아 있는 브랜치를 말해 한 화면이 두 브랜치를 동시에
+	// 주장하게 된다. 그래서 이 스펙은 focus를 **한 번도 보내지 않는다** —
+	// 그게 위 ④와 갈라지는 지점이고, poll()의 갱신을 지우면 여기만 빨개진다.
+	test("keeps the label live under --watch without any focus event", async ({
+		page,
+	}) => {
+		const { url, repoDir, stop } = await launchViewer(["--watch"]);
+		try {
+			await page.goto(url);
+			await expect(page.locator("#repo-branch")).toHaveText("· main");
+
+			run(repoDir, ["checkout", "-qb", "watched"]);
+
+			// 폴 주기 + /api/refs의 5초 TTL만큼 수렴을 기다린다.
+			await expect(page.locator("#repo-branch")).toHaveText("· watched", {
+				timeout: 20_000,
+			});
+			await expect(page).toHaveTitle(
+				`${basename(repoDir)} · watched — diffdeck`,
+			);
+		} finally {
+			await stop();
+		}
+	});
+
 	// 유닛이 원리적으로 못 보는 계약: happy-dom에는 레이아웃이 없다.
 	// 툴바에는 flex-wrap도 @media도 없어서, max-width + ellipsis가 빠지면
 	// 긴 이름 하나로 .tb-right(찾기·트리토글·⋯)가 화면 밖으로 나간다.
@@ -156,6 +188,30 @@ test.describe("toolbar repo label", () => {
 				.locator("#toolbar")
 				.evaluate((el) => el.getBoundingClientRect().height);
 			expect(toolbarHeight).toBeLessThan(60);
+
+			// 좁은 창 — 라벨이 줄어드는 몫을 **전담**해야 한다. 실측 근거:
+			// `.tb-left { min-width: 0 }`이 없으면 여기서 .tb-right가 화면 밖으로
+			// 나가고(라벨 없던 시절엔 460px에서도 멀쩡했다), `.tb-left > *`의
+			// flex:none이 없으면 #status가 두 줄로 접혀 툴바가 43 → 49px로 뛴다.
+			await page.setViewportSize({ width: 560, height: 720 });
+			await page.waitForTimeout(200);
+			const narrow = await page.evaluate(() => {
+				const label = document.getElementById("repo-label");
+				const rightGroup = document.querySelector(".tb-right");
+				const toolbar = document.getElementById("toolbar");
+				if (!label || !rightGroup || !toolbar) {
+					throw new Error("toolbar nodes missing");
+				}
+				return {
+					rightEdge: rightGroup.getBoundingClientRect().right,
+					height: toolbar.getBoundingClientRect().height,
+					// overflow:hidden / text-overflow:ellipsis를 지우면 사라진다.
+					clipped: label.scrollWidth > label.clientWidth,
+				};
+			});
+			expect(narrow.rightEdge).toBeLessThanOrEqual(560);
+			expect(narrow.height).toBeLessThan(48);
+			expect(narrow.clipped).toBe(true);
 		} finally {
 			await stop();
 		}

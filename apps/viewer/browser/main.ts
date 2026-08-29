@@ -189,15 +189,24 @@ applyRepoLabel([]);
 /**
  * 브랜치를 /api/refs로 최신화한다.
  *
- * **갱신 시점을 load()(부트스트랩·focus·refresh·토글)와 피커 열림으로 한정하는
- * 것이 계약이다.** watch의 poll()은 fetchDiff만 부르고 load()를 거치지 않으므로
- * (그게 이 배선이 성립하는 이유다) 2초 폴링이 git 서브프로세스를 상시로 늘리지
- * 않는다. poll()에 옮겨 달면 /api/refs의 5초 TTL이 다 흡수하지 못한다.
+ * 부르는 곳은 셋이다: load()(부트스트랩·focus·refresh·토글), 피커 열림,
+ * 그리고 watch의 poll(). **poll()이 빠지면 안 된다** — watch는 창을 안 보고
+ * 있을 때 쓰는 기능이라 focus가 발화하지 않아서, diff만 새 브랜치 것으로
+ * 갈리고 툴바·탭 제목은 옛 브랜치에 무기한 굳는다. 게다가 같은 화면의 빈 상태
+ * 카드는 /api/summary(캐시 없음)로 **살아 있는** 브랜치를 말하므로, 한 화면이
+ * 서로 다른 두 브랜치를 동시에 주장하게 된다 — 이 기능이 없애려던 오진을
+ * 새로 만드는 셈이다.
  *
- * 신선도는 피커와 **같다**: /api/refs의 5초 TTL 캐시를 그대로 타므로 브랜치를
- * 갈아탄 직후의 첫 갱신은 캐시를 읽을 수 있고, 라벨은 늦어도 그 다음 load()에
- * 수렴한다. 캐시를 우회하지 않는 이유는 같은 데이터를 보는 두 UI(라벨과 피커)가
- * 서로 다른 신선도를 주장하면 안 되기 때문이다.
+ * 비용은 /api/refs의 5초 TTL이 흡수한다: 폴이 2초여도 실제 git 호출은 5초에
+ * 두 번(worktree list + for-each-ref)이 상한이고, 폴이 매번 태우는 diff 빌드에
+ * 비하면 무시할 수준이다. "내용이 바뀐 폴에서만" 같은 조건은 쓸 수 없다 —
+ * 워킹트리가 깨끗한 채로 브랜치만 갈아타면 diff 지문이 그대로라 304로 흘러
+ * 한 번도 안 돌기 때문이다(그게 정확히 고쳐야 할 경우다).
+ *
+ * 신선도는 피커와 **같다**: 같은 TTL 캐시를 그대로 타므로 브랜치를 갈아탄
+ * 직후의 첫 갱신은 캐시를 읽을 수 있고 늦어도 5초 안에 수렴한다. 캐시를
+ * 우회하지 않는 이유는 같은 데이터를 보는 두 UI가 서로 다른 신선도를 주장하면
+ * 안 되기 때문이다.
  */
 const refreshRepoLabel = async (): Promise<void> => {
 	try {
@@ -1798,6 +1807,10 @@ let pollInFlight = false;
 const poll = async (): Promise<void> => {
 	if (pollInFlight) return;
 	pollInFlight = true;
+	// watch 중에는 focus가 발화하지 않으므로 여기서도 정체성을 갱신한다.
+	// 빠지면 diff만 새 브랜치 것으로 갈리고 라벨·탭 제목은 옛 브랜치에 굳는다
+	// (refreshRepoLabel의 주석에 근거와 비용 계산이 있다).
+	void refreshRepoLabel();
 	try {
 		const result = await fetchDiff();
 		if (result === null) return;

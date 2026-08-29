@@ -7,12 +7,15 @@
  * 같아 보여서("피커를 바꿔도 화면이 안 변한다") 고장으로 오인하기 쉽다.
  * 정체성을 상시로 말해 두면 그 오진이 애초에 생기지 않는다.
  *
- * 왜 `main.ts`가 아니라 별도 모듈인가: `main.ts`는 커버리지 게이트 밖이고
- * (bunfig.toml의 `coveragePathIgnorePatterns`) `apps/viewer/tsconfig.json`의
- * include에도 없어 루트 typecheck조차 그 파일을 안 본다. 거기 문자열 조립을
- * 두면 유닛·커버리지·타입체크 셋 다 통과하는 채로 버그가 산다 —
- * `isLargeFile`/`countChangedLines` 사건과 정확히 같은 구조다(CLAUDE.md).
- * 그래서 **DOM에 닿는 문자열 전부**를 여기서 만들고 main.ts는 배선만 한다.
+ * 왜 `main.ts`가 아니라 별도 모듈인가: `main.ts`는 커버리지 게이트 밖이라
+ * (bunfig.toml의 `coveragePathIgnorePatterns`) 거기 문자열 조립을 두면 게이트가
+ * 100% 초록인 채로 버그가 산다 — `isLargeFile`/`countChangedLines` 사건과
+ * 정확히 같은 구조다(CLAUDE.md). 이 파일은 게이트 **안**이라 분기마다 유닛이
+ * 붙는다. 그래서 **DOM에 닿는 문자열 전부**를 여기서 만들고 main.ts는 배선만 한다.
+ *
+ * 타입체크는 어느 쪽도 못 본다 — `apps/viewer/tsconfig.json`의 include는
+ * `server/**`·`cli.ts`·`cli/**`·`build.ts`뿐이라 `browser/**` 전체가 루프 밖이고
+ * 이 파일도 예외가 아니다. 방어는 유닛과 e2e뿐이라고 읽어야 한다.
  */
 import type { WorktreeRecord } from "../server/refs.ts";
 
@@ -22,7 +25,17 @@ const APP_NAME = "diffdeck";
 /** 조각 구분자. `emptyState.ts`의 `contextParts.join(" · ")`와 같은 어휘다. */
 const SEPARATOR = " · ";
 
-/** detached HEAD에서 보여줄 OID 길이 — `git rev-parse --short`의 기본과 같다. */
+/**
+ * detached HEAD에서 보여줄 OID 길이. git이 오래 써 온 고전적 짧은 길이다.
+ *
+ * `git rev-parse --short`의 기본값과 **같지 않다** — 그쪽은 `core.abbrev`(기본
+ * auto)를 따라 객체 수에 비례해 길어진다(실측: 3.5k 객체 리포는 7자, 37k 객체
+ * 리포는 8자). 빈 상태 카드는 서버가 `--short`로 줄인 값을 그대로 쓰므로
+ * (`summary.ts` → `emptyState.ts`) 큰 리포에서 두 표시가 한 글자 갈릴 수 있다.
+ * 그걸 맞추자고 카드 쪽을 7자로 자르지는 않는다 — auto abbrev는 git이 **모호하지
+ * 않은 길이**를 고른 결과라, 잘라내면 화면이 모호한 OID를 말하게 된다. 둘 다
+ * 같은 커밋의 옳은 접두사이므로 이 차이는 받아들인다.
+ */
 const SHORT_OID_LENGTH = 7;
 
 /** 화면 각 자리에 그대로 들어가는 문자열들. 조립은 전부 이 모듈이 끝낸다. */
