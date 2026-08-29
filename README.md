@@ -45,7 +45,7 @@ Picking a branch compares against the **merge base** — the commit your work fo
 
 ### Grab — hand a diff selection to your coding agent
 
-Select code in the diff and a prompt box opens right where you released the drag. Press <kbd>Enter</kbd> and diffdeck copies **one block** to your clipboard — the file reference, the exact lines you picked, and your prompt — ready to paste into Claude Code, Codex, or any chat. Need only the code? Press <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> on Windows/Linux) and diffdeck copies the picked lines by themselves — no prompt, no fence, no file header — to paste straight into an editor.
+Select code in the diff and a prompt box opens right where you released the drag. Press <kbd>Enter</kbd> and diffdeck copies **one block** to your clipboard — the file reference, the exact lines you picked, and your prompt — ready to paste into Claude Code, Codex, or any chat. Need only the code? Press <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> on Windows/Linux) and diffdeck copies the picked lines by themselves — no prompt, no fence, no file header — to paste straight into an editor. A selection spanning both sides of the diff comes across without its `+`/`-` markers, so the old and new versions of a line sit one after another.
 
 ![Grab — lines highlighted in the diff with the prompt box open beside them](docs/grab.png)
 

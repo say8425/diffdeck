@@ -45,7 +45,7 @@ diff 渲染引擎提供的功能：
 
 ### Grab — 把 diff 选区交给编码智能体
 
-在 diff 中拖选代码并松开，提示输入框会就地打开。按 <kbd>Enter</kbd>，diffdeck 会把文件引用、你选中的确切行以及你的提示**合成一段**复制到剪贴板，可直接粘贴到 Claude Code、Codex 或任意对话中。 只想要代码？按 <kbd>⌥</kbd><kbd>Enter</kbd>（Windows/Linux 为 <kbd>Alt</kbd><kbd>Enter</kbd>），diffdeck 只复制你选中的行 —— 不带提示词、代码围栏和文件标题 —— 即可直接粘贴进编辑器。
+在 diff 中拖选代码并松开，提示输入框会就地打开。按 <kbd>Enter</kbd>，diffdeck 会把文件引用、你选中的确切行以及你的提示**合成一段**复制到剪贴板，可直接粘贴到 Claude Code、Codex 或任意对话中。只想要代码？按 <kbd>⌥</kbd><kbd>Enter</kbd>（Windows/Linux 为 <kbd>Alt</kbd><kbd>Enter</kbd>），diffdeck 只复制你选中的行 —— 不带提示、代码围栏和文件头 —— 可直接粘贴进编辑器。不过跨越 diff 两侧的选区不会带上 `+`/`-` 标记，因此同一行的旧版本与新版本会前后相邻。
 
 ![Grab — diff 中高亮的行，以及旁边打开的提示输入框](grab.png)
 
