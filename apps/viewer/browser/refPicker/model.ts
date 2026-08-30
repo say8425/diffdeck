@@ -89,10 +89,26 @@ export const buildBaseRows = (
 		};
 	};
 
+	// 지금 체크아웃한 브랜치를 브랜치 구역의 맨 위로 올린다. 브랜치가 수백 개인
+	// 리포에서 "나는 어디 있나"를 확인하려고 목록을 훑거나 검색어를 치지 않아도
+	// 되게 하는 것이 이 자리의 몫이다.
+	//
+	// 판단 근거는 태그가 아니라 **위치**다 — 자기 브랜치가 기본 브랜치이기도
+	// 하면 `toRow`의 태그는 `default`로 남지만, 지금 있는 곳이라는 사실은
+	// 그대로이므로 여전히 올린다.
+	//
+	// 올림은 로컬 안에서만 한다. 체크아웃된 브랜치는 언제나 로컬이고(원격
+	// 레코드의 이름은 `origin/main` 꼴이라 짧은 현재 브랜치명과 애초에 안
+	// 맞는다), 로컬이 원격보다 앞이므로 이것으로 구역 맨 위가 된다.
+	const isCurrent = (r: RefRecord): boolean =>
+		currentBranch !== null && r.name === currentBranch;
+	const locals = refs.filter((r) => r.kind === "local");
+
 	// 로컬을 먼저, 원격을 뒤로. 각 무리 안에서는 받은 순서를 그대로 둔다.
 	return [
 		workingRow,
-		...refs.filter((r) => r.kind === "local").map(toRow),
+		...locals.filter(isCurrent).map(toRow),
+		...locals.filter((r) => !isCurrent(r)).map(toRow),
 		...refs.filter((r) => r.kind === "remote").map(toRow),
 	];
 };

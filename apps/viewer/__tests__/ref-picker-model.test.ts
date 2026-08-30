@@ -39,6 +39,49 @@ describe("buildBaseRows", () => {
 		]);
 	});
 
+	// 브랜치가 수백 개인 리포에서 "나는 어디 있나"를 찾으려고 목록을 훑거나
+	// 검색어를 치지 않아도 되게 한다. 맨 위 자리는 그 답의 몫이다.
+	test("puts the checked-out branch first among the branches", () => {
+		const rows = buildBaseRows(
+			[ref("aaa"), ref("develop"), ref("main"), ref("origin/main", "remote")],
+			"main",
+			"develop",
+		);
+		expect(rows.slice(1).map((r) => r.value)).toEqual([
+			"develop",
+			"aaa",
+			"main",
+			"origin/main",
+		]);
+	});
+
+	// 올리는 근거는 태그가 아니라 **위치**다. 자기 브랜치가 기본 브랜치이기도
+	// 하면 태그는 default로 남지만, 지금 있는 곳이라는 사실은 그대로다.
+	test("hoists the checked-out branch even when it is also the default", () => {
+		const rows = buildBaseRows([ref("aaa"), ref("main")], "main", "main");
+		expect(rows.slice(1).map((r) => r.value)).toEqual(["main", "aaa"]);
+		expect(rows.find((r) => r.value === "main")?.tag).toBe("default");
+	});
+
+	test("hoisting keeps local branches ahead of remote ones", () => {
+		const rows = buildBaseRows(
+			[ref("origin/z", "remote"), ref("aaa"), ref("feature")],
+			null,
+			"feature",
+		);
+		expect(rows.slice(1).map((r) => r.kind)).toEqual([
+			"local",
+			"local",
+			"remote",
+		]);
+	});
+
+	// detached HEAD. 올릴 대상이 없으므로 받은 순서 그대로다.
+	test("leaves the order alone when nothing is checked out", () => {
+		const rows = buildBaseRows([ref("aaa"), ref("bbb")], null, null);
+		expect(rows.slice(1).map((r) => r.value)).toEqual(["aaa", "bbb"]);
+	});
+
 	test("tags the default branch so the usual choice is findable", () => {
 		const rows = buildBaseRows([ref("main"), ref("develop")], "main", null);
 		expect(rows.find((r) => r.value === "main")?.tag).toBe("default");

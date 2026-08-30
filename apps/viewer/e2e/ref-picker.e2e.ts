@@ -186,6 +186,29 @@ test.describe("compare base picker", () => {
 	// 두 종류를 화면에서 가르는 것이 이 목록의 요점이다 — Working tree는
 	// 미커밋만, 브랜치는 갈라진 뒤 전부라 같은 줄에 같은 모양으로 두면
 	// 구분이 안 된다.
+	// 브랜치가 수백 개인 리포에서 "나는 어디 있나"를 확인하려고 목록을 훑거나
+	// 검색어를 치지 않아도 되게 한다. 순서 자체는 buildBaseRows(유닛 100%)가
+	// 정하지만, main.ts가 현재 브랜치를 **넘기지 않으면** 유닛은 전부 통과한
+	// 채로 화면만 조용히 옛 순서로 돌아간다 — 그 배선이 여기서만 잡힌다.
+	test("lists the checked-out branch first among the branches", async ({
+		page,
+	}) => {
+		const { url, stop } = await launchViewer([], OPTS);
+		try {
+			await page.goto(url);
+			await page.locator("#ref-picker-btn").click();
+			const rows = page.locator("#ref-picker .ref-row");
+			await expect(rows.filter({ hasText: "develop" })).toHaveCount(1);
+
+			// 0번은 Working tree(별도 구역), 1번이 브랜치 구역의 첫 줄이다.
+			await expect(rows.nth(0)).toHaveText(/Working tree/);
+			await expect(rows.nth(1)).toHaveText(/feature/);
+			await expect(rows.nth(1).locator(".ref-row-tag")).toHaveText("HEAD");
+		} finally {
+			await stop();
+		}
+	});
+
 	test("separates the working tree from the branches, and says how full it is", async ({
 		page,
 	}) => {
