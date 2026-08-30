@@ -20,7 +20,11 @@ import type { RefsResult, WorktreeRecord } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
-import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
+import {
+	buildEmptyStateModel,
+	renderEmptyState,
+	shouldAutoViewBase,
+} from "./emptyState.ts";
 import {
 	encodeGrab,
 	type GrabFileStatus,
@@ -849,6 +853,18 @@ const fetchSummary = async (): Promise<RepoSummary | null> => {
 // 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패하면 기존
 // "No changes." 폴백이 그대로 남는다. marker 동일성 가드 — fetch 동안 다른
 // 렌더가 #empty를 갈아치웠으면(새 diff 도착 등) 낡은 카드를 덮어쓰지 않는다.
+// 자동 base 전환을 한 페이지에서 한 번만 시도한다. 조건이 계속 참이어도
+// 재진입하지 않게 하는 안전장치다(전환 뒤에는 mode가 base라 조건 자체가
+// 거짓이 되지만, 루프 없음을 코드에서 바로 읽히게 둔다).
+let autoBaseTried = false;
+
+// 사용자가 견줄 기준을 고른 적이 있는가 — URL의 `base=`든 저장된
+// 프리퍼런스든. resolveCompareBase가 null을 주면 아무 선택도 없다는 뜻이다.
+// 호출 시점에 다시 읽는다: 모듈 초기화 때 캐시해 두면 피커로 고른 뒤에도
+// 옛 값이 남아 자동 전환이 사용자의 선택을 덮는다.
+const hasExplicitBase = (): boolean =>
+	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) !== null;
+
 const enrichEmptyState = async (): Promise<void> => {
 	const marker = diffMount.querySelector("#empty");
 	if (!marker) return;
@@ -864,6 +880,19 @@ const enrichEmptyState = async (): Promise<void> => {
 		mode: diffModeOf(mode),
 		untrackedShown,
 	});
+	// 빈 화면을 보여주는 대신 볼 것이 있는 쪽으로 바로 데려간다. 저장하지
+	// 않는다 — 추론이지 사용자의 선택이 아니다. 피커로 직접 고르면 그때
+	// 저장되고, 그 뒤로는 hasExplicitBase()가 이 경로를 영구히 막는다.
+	if (
+		shouldAutoViewBase(model, {
+			hasExplicitBase: hasExplicitBase(),
+			alreadyTried: autoBaseTried,
+		})
+	) {
+		autoBaseTried = true;
+		void selectBase("@auto", { persist: false });
+		return;
+	}
 	const card = renderEmptyState(document, model, {
 		onSwitchMode: () => void applySelection("@auto"),
 		onShowUntracked: () => {
@@ -1479,16 +1508,30 @@ const setPickerOpen = (open: boolean): void => {
 	void loadPickerRows();
 };
 
-const applySelection = async (next: string): Promise<void> => {
-	setPickerOpen(false);
-	pickerBtn?.focus();
+/**
+ * 견줄 기준을 바꾼다. `persist`가 사용자의 **선택**과 서버 상태로부터의
+ * **추론**을 가른다 — 추론을 저장해 버리면 고른 적 없는 프리퍼런스가 생겨
+ * 이후 자동 전환이 영영 막힌다.
+ */
+const selectBase = async (
+	next: string,
+	opts: { persist: boolean },
+): Promise<void> => {
 	if (next === compareBase) return;
 	compareBase = next;
-	localStorage.setItem(compareBaseKey(repo), next);
+	if (opts.persist) localStorage.setItem(compareBaseKey(repo), next);
 	syncPickerLabel();
 	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
 	lastEtag = null;
 	await load();
+};
+
+// 피커/카드에서 사용자가 직접 고른 경로. 고른 값이 지금과 같아도 패널은
+// 닫고 포커스를 돌려줘야 하므로 그 둘이 조기 반환보다 앞에 온다.
+const applySelection = async (next: string): Promise<void> => {
+	setPickerOpen(false);
+	pickerBtn?.focus();
+	await selectBase(next, { persist: true });
 };
 
 pickerBtn?.addEventListener("click", () => {

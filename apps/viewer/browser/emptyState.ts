@@ -118,3 +118,29 @@ export const renderEmptyState = (
 
 	return root;
 };
+
+/**
+ * 이 빈 화면을 사용자에게 보여주는 대신 base 뷰로 바로 데려갈 것인가.
+ *
+ * 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어서 기본 뷰(미커밋
+ * 변경)가 구조적으로 비어 있다. 워크트리를 팔 때마다 "볼 게 가장 많은 순간에
+ * 빈 화면"을 만나고, 그때마다 카드의 버튼을 한 번씩 눌러 줘야 했다.
+ *
+ * 판정을 새로 세우지 않고 **카드 자신의 액션을 읽는다** — 카드가 전환을
+ * 권할 상황이 곧 전환할 가치가 있는 상황이라, 조건이 두 곳으로 갈라지지
+ * 않는다.
+ *
+ * 두 가지는 반드시 지킨다:
+ * ① 사용자가 고른 적 있으면(URL `base=` 또는 저장된 프리퍼런스) 덮지 않는다.
+ * ② 토글로 감춰졌을 뿐 **이 뷰에도** 볼 것이 있으면(untracked) 데려가지
+ *    않는다 — 카드가 두 선택지를 나란히 보여주는 편이 낫다. 자동 전환은
+ *    "이 뷰에 정말 아무것도 없을 때"로 한정한다.
+ */
+export const shouldAutoViewBase = (
+	model: EmptyStateModel,
+	opts: { hasExplicitBase: boolean; alreadyTried: boolean },
+): boolean => {
+	if (opts.hasExplicitBase || opts.alreadyTried) return false;
+	const kinds = new Set(model.actions.map((a) => a.kind));
+	return kinds.has("switch-mode") && !kinds.has("show-untracked");
+};

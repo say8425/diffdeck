@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 import {
 	buildEmptyStateModel,
 	renderEmptyState,
+	shouldAutoViewBase,
 } from "../browser/emptyState.ts";
+import type { EmptyStateModel } from "../browser/emptyState.ts";
 import type { RepoSummary } from "../server/summary.ts";
 
 const summary = (over: Partial<RepoSummary> = {}): RepoSummary => ({
@@ -191,5 +193,78 @@ describe("renderEmptyState", () => {
 		);
 		expect(el.querySelector(".empty-context")).toBeNull();
 		expect(el.querySelectorAll("button.empty-action").length).toBe(0);
+	});
+});
+
+describe("shouldAutoViewBase", () => {
+	// 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어서 기본 뷰
+	// (미커밋 변경)가 구조적으로 비어 있다. 정작 볼 게 가장 많을 때 빈 화면이
+	// 뜨는 셈이라, 고른 적이 없다면 볼 것이 있는 쪽을 연다.
+	const model = (over: Partial<EmptyStateModel> = {}): EmptyStateModel => ({
+		headline: "Working tree clean",
+		context: "on feature · 3 commit(s) ahead of main",
+		actions: [
+			{ kind: "switch-mode", label: "12 file(s) changed vs main — view" },
+		],
+		quietNote: null,
+		...over,
+	});
+
+	test("고른 적 없고 base에 볼 것이 있으면 전환한다", () => {
+		expect(
+			shouldAutoViewBase(model(), {
+				hasExplicitBase: false,
+				alreadyTried: false,
+			}),
+		).toBe(true);
+	});
+
+	// 명시적 선택은 절대 덮지 않는다 — URL의 base=든 저장된 프리퍼런스든.
+	test("사용자가 고른 적 있으면 전환하지 않는다", () => {
+		expect(
+			shouldAutoViewBase(model(), {
+				hasExplicitBase: true,
+				alreadyTried: false,
+			}),
+		).toBe(false);
+	});
+
+	// 무한 루프 방지. 조건이 계속 참이어도 한 번만 시도한다.
+	test("이미 시도했으면 다시 전환하지 않는다", () => {
+		expect(
+			shouldAutoViewBase(model(), {
+				hasExplicitBase: false,
+				alreadyTried: true,
+			}),
+		).toBe(false);
+	});
+
+	test("base에 볼 것이 없으면 전환하지 않는다", () => {
+		expect(
+			shouldAutoViewBase(model({ actions: [] }), {
+				hasExplicitBase: false,
+				alreadyTried: false,
+			}),
+		).toBe(false);
+	});
+
+	// **경계선**: 토글로 감춰졌을 뿐 이 뷰에도 볼 것이 있으면 데려가지 않는다.
+	// 사용자가 untracked를 보고 싶었을 수도 있고, 카드가 두 선택지를 나란히
+	// 보여주는 편이 낫다. 자동 전환은 "이 뷰에 아무것도 없을 때"로 한정한다.
+	test("숨겨진 untracked가 있으면 전환하지 않는다", () => {
+		expect(
+			shouldAutoViewBase(
+				model({
+					actions: [
+						{ kind: "switch-mode", label: "12 file(s) changed vs main — view" },
+						{
+							kind: "show-untracked",
+							label: "1 untracked file(s) hidden — show",
+						},
+					],
+				}),
+				{ hasExplicitBase: false, alreadyTried: false },
+			),
+		).toBe(false);
 	});
 });

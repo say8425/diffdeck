@@ -121,4 +121,56 @@ test.describe("informative empty state", () => {
 			await stop();
 		}
 	});
+
+	// 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어 기본 뷰(미커밋
+	// 변경)가 구조적으로 비어 있다. 워크트리를 팔 때마다 "볼 게 가장 많은
+	// 순간에 빈 화면"을 만나고 카드의 버튼을 한 번씩 눌러 줘야 했다 — 고른
+	// 적이 없다면 볼 것이 있는 쪽을 바로 연다.
+	test("nothing at all in the working view: opens the base diff instead", async ({
+		page,
+	}) => {
+		const { url, repoDir, stop } = await launchViewer([], {
+			clean: true,
+			featureBranchCommit: true,
+		});
+		try {
+			// 픽스처의 untracked 스크래치를 지운다 — 그게 남아 있으면 이 뷰에도
+			// (토글 뒤에) 볼 것이 있으므로 자동 전환이 의도적으로 억제된다.
+			rmSync(join(repoDir, "data.txt"));
+			await page.goto(url);
+
+			await expect(page.locator("#status")).toHaveText("1 file(s)");
+			await expect(page.locator("#ref-picker-label")).toHaveText("vs main");
+			await expect(page.locator("#empty")).toHaveCount(0);
+
+			// **저장하지 않는다** — 추론이지 사용자의 선택이 아니다. 저장해 버리면
+			// 고른 적 없는 프리퍼런스가 생겨 이후 판단이 영영 막힌다.
+			const saved = await page.evaluate(() =>
+				Object.keys(localStorage).filter((k) => k.includes("compare-base")),
+			);
+			expect(saved).toEqual([]);
+		} finally {
+			await stop();
+		}
+	});
+
+	// 자동 전환이 사용자의 선택을 덮으면 안 된다. URL의 `base=`는 명시적
+	// 선택이므로 워킹트리가 텅 비어도 그대로 둔다.
+	test("an explicit base choice is never overridden", async ({ page }) => {
+		const { url, repoDir, stop } = await launchViewer([], {
+			clean: true,
+			featureBranchCommit: true,
+		});
+		try {
+			rmSync(join(repoDir, "data.txt"));
+			await page.goto(`${url}&base=HEAD`);
+
+			await expect(page.locator("#empty.empty-card")).toBeVisible();
+			await expect(page.locator("#ref-picker-label")).toHaveText(
+				"Working tree",
+			);
+		} finally {
+			await stop();
+		}
+	});
 });
