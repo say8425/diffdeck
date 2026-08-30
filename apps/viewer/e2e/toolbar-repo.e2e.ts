@@ -11,7 +11,7 @@
 // 되돌릴 수 있다), 긴 브랜치명이 툴바 오른쪽을 화면 밖으로 밀지 않는가.
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 const run = (dir: string, args: string[]): void => {
@@ -38,6 +38,15 @@ test.describe("toolbar repo label", () => {
 
 			await expect(page.locator("#repo-name")).toHaveText(name);
 			await expect(page.locator("#repo-branch")).toHaveText("· main");
+			// 메인 워크트리라 리포 접두가 없다 — 붙으면 `dd-e2e-repo-x / dd-e2e-repo-x`.
+			await expect(page.locator("#repo-scope")).toBeEmpty();
+
+			// 사용자가 지정한 자리: 개수(`n file(s)`) 바로 왼쪽.
+			const beforeStatus = await page.evaluate(
+				() =>
+					document.getElementById("repo-label")?.nextElementSibling?.id ?? null,
+			);
+			expect(beforeStatus).toBe("status");
 
 			// 조각 사이에 공백 텍스트 노드가 끼면 `name  · main`이 된다.
 			// #repo-branch가 구분자를 품고 오므로 마크업은 붙여 써야 하는데,
@@ -127,6 +136,39 @@ test.describe("toolbar repo label", () => {
 		}
 	});
 
+	// 사용자가 실제로 겪은 형태: 한 리포의 워크트리를 여럿 열어 두고 일한다.
+	// 워크트리 이름만 보이면 어느 리포인지 알 수 없고, 리포 이름만 보이면 어느
+	// 워크트리인지 알 수 없다 — 라벨이 둘 다 말해야 탭을 잘못 고르지 않는다.
+	test("names the repo and the worktree when inside a linked worktree", async ({
+		page,
+	}) => {
+		const { url, repoDir, stop } = await launchViewer([]);
+		try {
+			// 사용자 리포와 같은 중첩 배치(`<repo>/.claude/worktrees/*`).
+			const nested = join(repoDir, ".claude", "worktrees", "feat+ABC-1");
+			run(repoDir, ["worktree", "add", "-q", "-b", "feat/ABC-1", nested]);
+
+			// repo는 URL 파라미터라 워크트리를 가리키게 바꾸면 그대로 열린다.
+			// git이 보고하는 경로와 맞추려고 realpath로 정규화한다(macOS의
+			// /var → /private/var 심링크).
+			const target = new URL(url);
+			target.searchParams.set("repo", realpathSync(nested));
+			await page.goto(target.toString());
+
+			await expect(page.locator("#repo-scope")).toHaveText(
+				`${basename(repoDir)} /`,
+			);
+			await expect(page.locator("#repo-name")).toHaveText("feat+ABC-1");
+			await expect(page.locator("#repo-branch")).toHaveText("· feat/ABC-1");
+
+			// 탭 제목에는 리포 접두가 없다 — 탭은 오른쪽부터 잘리는데 리포
+			// 이름은 워크트리마다 같아서 탭을 가르지 못한다.
+			await expect(page).toHaveTitle("feat+ABC-1 · feat/ABC-1 — diffdeck");
+		} finally {
+			await stop();
+		}
+	});
+
 	// watch는 창을 **안 보고 있을 때** 쓰는 기능이라 focus가 발화하지 않는다.
 	// 갱신이 load()에만 걸려 있으면 diff는 2초마다 새 브랜치 것으로 갈리는데
 	// 툴바·탭 제목만 옛 브랜치에 무기한 굳고, 같은 화면의 빈 상태 카드는
@@ -169,11 +211,17 @@ test.describe("toolbar repo label", () => {
 			await page.goto(url);
 			await expect(page.locator("#repo-branch")).toHaveText(`· ${long}`);
 
-			// 상한을 넘지 않는다 — #ref-picker-btn과 같은 260px.
-			const labelWidth = await page
-				.locator("#repo-label")
-				.evaluate((el) => el.getBoundingClientRect().width);
-			expect(labelWidth).toBeLessThanOrEqual(260);
+			// 담기지 않으면 잘린다. 픽셀 상한을 단언하지 않는 이유는 폭을 붙드는
+			// 기제가 max-width가 아니라 flex shrink이기 때문이다 — 상한을 두면
+			// 공간이 남는 넓은 창에서까지 자르게 된다(실측 근거는 CSS 주석에).
+			const label = await page.locator("#repo-label").evaluate((el) => ({
+				clipped: el.scrollWidth > el.clientWidth,
+				// text-overflow를 지우면 잘린 자리에 말줄임표가 사라진다.
+				// scrollWidth로는 그 삭제를 못 보므로 계산된 값을 직접 본다.
+				textOverflow: getComputedStyle(el).textOverflow,
+			}));
+			expect(label.clipped).toBe(true);
+			expect(label.textOverflow).toBe("ellipsis");
 
 			// 오른쪽 그룹이 뷰포트 안에 그대로 있다.
 			const viewport = page.viewportSize();

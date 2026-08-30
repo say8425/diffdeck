@@ -38,8 +38,19 @@ const SEPARATOR = " · ";
  */
 const SHORT_OID_LENGTH = 7;
 
+/** 리포와 워크트리를 가르는 구분자. 경로처럼 읽히라고 슬래시를 쓴다. */
+const SCOPE_SEPARATOR = " / ";
+
+/** bare 저장소 디렉토리의 관례적 접미 — 리포 이름에서는 벗긴다. */
+const BARE_SUFFIX = ".git";
+
 /** 화면 각 자리에 그대로 들어가는 문자열들. 조립은 전부 이 모듈이 끝낸다. */
 export interface RepoLabelView {
+	/**
+	 * `#repo-scope`의 텍스트 — 이 워크트리를 품은 리포. 구분자를 품는다
+	 * (`"diffdeck / "`). 메인 워크트리이거나 리포 루트를 모르면 빈 문자열.
+	 */
+	scope: string;
 	/** `#repo-name`의 텍스트. 빈 문자열이면 라벨이 아무 말도 하지 않는다. */
 	name: string;
 	/** `#repo-branch`의 텍스트. 구분자를 품는다(`" · main"`). 모르면 빈 문자열. */
@@ -116,9 +127,29 @@ const branchOf = (worktree: WorktreeRecord | null): string | null => {
  * 함정(CLAUDE.md — `#grab-popover`·`.grab-hint`에서 두 번 밟았다)에 애초에
  * 들어가지 않는다. "모름"은 hidden이 아니라 **빈 텍스트**다.
  */
+/**
+ * 이 워크트리를 품은 리포의 표시 이름. 메인 워크트리에 있으면 null —
+ * 자기 자신을 접두로 되풀이하면 `diffdeck / diffdeck`이 된다.
+ *
+ * bare 리포에서는 루트가 저장소 디렉토리(`myproj.git`)라 관례적 `.git` 접미를
+ * 벗긴다. 평범한 리포의 디렉토리가 `.git`으로 끝나는 일은 사실상 없다.
+ */
+const scopeNameOf = (repoRoot: string | null, path: string): string | null => {
+	if (repoRoot === null) return null;
+	const root = stripTrailingSlashes(repoRoot);
+	if (root === path) return null;
+	const raw = repoDisplayName(root);
+	const name = raw.endsWith(BARE_SUFFIX)
+		? raw.slice(0, -BARE_SUFFIX.length)
+		: raw;
+	// 이름을 못 내는 루트(`/`)에 접두를 붙이면 라벨이 `" / feat"`로 시작한다.
+	return name === "" ? null : name;
+};
+
 export const repoLabelView = (
 	repo: string,
 	worktrees: readonly WorktreeRecord[],
+	repoRoot: string | null,
 ): RepoLabelView => {
 	const worktree = findWorktree(worktrees, repo);
 	// 워크트리를 찾았으면 그 **최상위 경로**의 이름이 옳다. `repo`가 하위
@@ -126,11 +157,17 @@ export const repoLabelView = (
 	const path = stripTrailingSlashes(worktree?.path ?? repo);
 	const name = repoDisplayName(path);
 	const branch = branchOf(worktree);
+	const scope = scopeNameOf(repoRoot, path);
 
 	const title = branch === null ? path : `${path}${SEPARATOR}${branch}`;
+	// 탭 제목에는 접두를 넣지 않는다. 탭은 좁고 오른쪽부터 잘리는데, 리포
+	// 이름은 그 리포의 워크트리마다 **같아서** 탭을 가르지 못한다 — 구별되는
+	// 쪽(워크트리·브랜치)을 앞세워야 탭만 보고 고를 수 있다. 전체 맥락은
+	// 툴바 라벨과 그 title이 진다.
 	const head = branch === null ? name : `${name}${SEPARATOR}${branch}`;
 
 	return {
+		scope: scope === null ? "" : `${scope}${SCOPE_SEPARATOR}`,
 		name,
 		branch: branch === null ? "" : `${SEPARATOR}${branch}`,
 		title,

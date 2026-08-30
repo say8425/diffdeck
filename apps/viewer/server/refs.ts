@@ -26,6 +26,12 @@ export interface RefsResult {
 	worktrees: WorktreeRecord[];
 	refs: RefRecord[];
 	defaultBranch: string | null;
+	/**
+	 * 리포의 메인 워크트리 경로(bare면 그 저장소 디렉토리). 툴바가 "어느
+	 * 리포의 어느 워크트리인가"를 말하려면 워크트리 경로만으로는 부족해서
+	 * 필요하다 — `worktrees[]`로는 알 수 없다(아래 `parseRepoRoot` 참고).
+	 */
+	repoRoot: string | null;
 }
 
 const REMOTES_PREFIX = "refs/remotes/";
@@ -70,6 +76,25 @@ export const parseWorktreeList = (raw: string): WorktreeRecord[] => {
 	}
 	flush();
 	return out;
+};
+
+/**
+ * 같은 원본에서 **메인 워크트리 경로**를 읽는다. git 호출을 늘리지 않는다.
+ *
+ * git은 메인 워크트리를 항상 첫 레코드로 낸다 — 링크된 워크트리나 중첩
+ * 워크트리에서 명령을 실행해도 그렇다(실측: 평범·bare·중첩 셋 다).
+ *
+ * **`parseWorktreeList`의 결과를 대신 쓰면 안 된다.** 그쪽은 bare와 prunable을
+ * 걸러내는데(고를 수 있게 두면 워킹트리 없는 경로로 데려간다), bare 리포는
+ * 메인 항목이 바로 그 bare라 첫 항목이 링크된 워크트리로 밀린다 — 그러면
+ * 라벨이 남의 워크트리 이름을 리포 이름이라고 말한다(실측으로 확인했다).
+ * 여기서는 필터를 타지 않은 원본의 첫 `worktree ` 토큰을 그대로 쓴다.
+ */
+export const parseRepoRoot = (raw: string): string | null => {
+	for (const token of raw.split("\0")) {
+		if (token.startsWith("worktree ")) return token.slice("worktree ".length);
+	}
+	return null;
 };
 
 const REF_FIELDS = 4;
@@ -142,5 +167,5 @@ export const getRefs = async (repo: string): Promise<RefsResult> => {
 	const worktrees = parseWorktreeList(wtRaw);
 	const live = new Set(worktrees.map((w) => w.path));
 	const { refs, defaultBranch } = parseRefList(refRaw, live);
-	return { worktrees, refs, defaultBranch };
+	return { worktrees, refs, defaultBranch, repoRoot: parseRepoRoot(wtRaw) };
 };

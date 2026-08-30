@@ -166,6 +166,7 @@ const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
 
 const repoLabelEl = document.getElementById("repo-label") as HTMLElement;
+const repoScopeEl = document.getElementById("repo-scope") as HTMLElement;
 const repoNameEl = document.getElementById("repo-name") as HTMLElement;
 const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
 
@@ -173,8 +174,12 @@ const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
  * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
  * 화면 두 곳이 다르게 말하게 되므로 문자열 조립은 전부 repoLabel.ts가 한다.
  */
-const applyRepoLabel = (worktrees: readonly WorktreeRecord[]): void => {
-	const view = repoLabelView(repo, worktrees);
+const applyRepoLabel = (
+	worktrees: readonly WorktreeRecord[],
+	repoRoot: string | null,
+): void => {
+	const view = repoLabelView(repo, worktrees, repoRoot);
+	repoScopeEl.textContent = view.scope;
 	repoNameEl.textContent = view.name;
 	repoBranchEl.textContent = view.branch;
 	repoLabelEl.setAttribute("title", view.title);
@@ -184,7 +189,7 @@ const applyRepoLabel = (worktrees: readonly WorktreeRecord[]): void => {
 // 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
 // /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
 // hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
-applyRepoLabel([]);
+applyRepoLabel([], null);
 
 /**
  * 브랜치를 /api/refs로 최신화한다.
@@ -215,7 +220,7 @@ const refreshRepoLabel = async (): Promise<void> => {
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
-		applyRepoLabel(body.worktrees);
+		applyRepoLabel(body.worktrees, body.repoRoot);
 	} catch {
 		// 부가 정보다 — 못 받아도 이름은 이미 떠 있고 diff는 그대로 동작한다.
 	}
@@ -1434,7 +1439,7 @@ const loadPickerRows = async (): Promise<void> => {
 		// 판정을 공유해야 "내가 어느 워크트리에 있는가"의 답이 하나로 남는다.
 		const current = findWorktree(body.worktrees, repo)?.branch ?? null;
 		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
-		applyRepoLabel(body.worktrees);
+		applyRepoLabel(body.worktrees, body.repoRoot);
 		// 목록을 먼저 그린다. 개수를 기다리면 목록이 /api/refs(수 ms)가 아니라
 		// /api/summary(수십 ms)의 속도로 뜨고, 더 나쁘게는 getRepoSummary가
 		// 의도적으로 single-flight 밖이라(CLAUDE.md) 거기서 매달리면 목록이
