@@ -31,7 +31,7 @@ export const buildEmptyStateModel = (
 	// git 어휘상 거짓(untracked도 워킹트리 상태)이므로 측정한 것만 주장한다.
 	const headline =
 		opts.mode === "working"
-			? summary.untrackedFiles > 0
+			? (summary.untrackedFiles ?? 0) > 0
 				? "No tracked changes"
 				: "Working tree clean"
 			: base
@@ -55,7 +55,7 @@ export const buildEmptyStateModel = (
 			label: `${baseFiles} file(s) changed vs ${base} — view`,
 		});
 	}
-	if (!opts.untrackedShown && summary.untrackedFiles > 0) {
+	if (!opts.untrackedShown && (summary.untrackedFiles ?? 0) > 0) {
 		actions.push({
 			kind: "show-untracked",
 			label: `${summary.untrackedFiles} untracked file(s) hidden — show`,

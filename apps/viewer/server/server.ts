@@ -334,7 +334,15 @@ const createHandler = (cfg: {
 			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
-			const summary = await getRepoSummary(repo, { base, ref });
+			// 카드가 diff와 **다른 축**을 설명하면 안 된다 — head를 빼면
+			// 브랜치를 보고 있는데 카드는 워크트리를 설명한다.
+			const headResult = await resolveSelectionHead(repo, sel);
+			if (headResult instanceof Response) return headResult;
+			const summary = await getRepoSummary(repo, {
+				base,
+				ref,
+				head: headResult.head,
+			});
 			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
 			return new Response(JSON.stringify(summary), {
 				headers: { "content-type": "application/json; charset=utf-8" },
