@@ -18,6 +18,7 @@ import {
 import type { DiffFile } from "../server/diff.ts";
 import type { RefsResult, WorktreeRecord } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
+import { changeTotalsView } from "./changeTotals.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
 import {
@@ -168,6 +169,24 @@ const pickerSearch = document.getElementById(
 const pickerList = document.getElementById("ref-picker-list") as HTMLElement;
 const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
+
+const changeAddEl = document.getElementById("change-add") as HTMLElement;
+const changeDelEl = document.getElementById("change-del") as HTMLElement;
+
+/**
+ * 전체 변경량을 툴바에 쓴다. 개수(`#status`)와 **같은 순간에만** 움직인다 —
+ * 화면에 렌더된 것이 곧 이 숫자의 출처라, 로딩·실패 중에는 손대지 않는다
+ * (그때 화면에는 직전 diff가 그대로 남아 있으므로 숫자도 그것이 맞다).
+ */
+const applyChangeTotals = (
+	files: readonly {
+		hunks: readonly { additionLines: number; deletionLines: number }[];
+	}[],
+): void => {
+	const view = changeTotalsView(files);
+	changeAddEl.textContent = view.additions;
+	changeDelEl.textContent = view.deletions;
+};
 
 const repoLabelEl = document.getElementById("repo-label") as HTMLElement;
 const repoScopeEl = document.getElementById("repo-scope") as HTMLElement;
@@ -916,6 +935,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		diffMount.replaceChildren();
 		diffMount.innerHTML = '<div id="empty">No changes.</div>';
 		statusEl.textContent = "";
+		applyChangeTotals([]);
 		void enrichEmptyState();
 		return;
 	}
@@ -1027,6 +1047,8 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			};
 		});
 	parseCache.prune(items.map((it) => it.id));
+	// 개수 옆의 전체 변경량. items는 방금 전량 파싱됐으므로 합산은 공짜다.
+	applyChangeTotals(items.map((it) => it.fileDiff));
 
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();

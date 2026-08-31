@@ -91,6 +91,18 @@
 			#repo-name {
 				color: var(--vd-fg);
 			}
+			/* 전체 변경량 — 파일 헤더 배지와 같은 add·del 어휘를 쓴다. 앱에 이미
+			   있는 두 색이라 새 값을 만들지 않는다: --vd-success는 grab 보내기의
+			   ok 상태가, #f85149는 fail 상태가 쓰는 바로 그 값이고, 둘이 diff의
+			   add·del 쌍이라는 것은 .grab-l-side 주석이 이미 적고 있다. 엔진의
+			   --diffs-addition-base를 쓸 수는 없다 — 그 토큰은 shadow root
+			   안에만 살아서 툴바에서는 해석되지 않는다. */
+			#change-add {
+				color: var(--vd-success);
+			}
+			#change-del {
+				color: #f85149;
+			}
 			/* One control height for every toolbar widget — without it, line-height:
      normal + differing paddings yield 25/26/26.5/27px mismatches. */
 			#toolbar button {
@@ -864,6 +876,13 @@
 						><span id="repo-branch"></span
 					></span>
 					<span id="status"></span>
+					<!-- 전체 변경량. 개수만으로는 규모를 못 읽는다 — 176 file(s)가
+					     한 줄씩 고친 것인지 통째로 새로 쓴 것인지 갈린다. 조각
+					     사이에 공백 텍스트 노드가 생기면 안 된다(#change-del이
+					     구분자를 품고 온다). -->
+					<span id="change-totals"
+						><span id="change-add"></span><span id="change-del"></span
+					></span>
 				</div>
 				<div class="tb-right">
 					<button
