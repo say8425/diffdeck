@@ -166,7 +166,6 @@ const pickerSearch = document.getElementById(
 	"ref-picker-search",
 ) as HTMLInputElement;
 const pickerList = document.getElementById("ref-picker-list") as HTMLElement;
-const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
 
 const changeAddEl = document.getElementById("change-add") as HTMLElement;
@@ -187,17 +186,18 @@ const applyChangeTotals = (
 	changeDelEl.textContent = view.deletions;
 };
 
-const repoLabelEl = document.getElementById("repo-label") as HTMLElement;
-const repoScopeEl = document.getElementById("repo-scope") as HTMLElement;
-const repoNameEl = document.getElementById("repo-name") as HTMLElement;
-const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
+// 트리거가 곧 정체성 표식이다 — 조작이면서 "지금 무엇을 보고 있는가"를
+// 통째로 말한다. 예전엔 개수 왼쪽에 같은 말을 하는 라벨이 따로 있었다.
+const pickerScopeEl = document.getElementById("picker-scope") as HTMLElement;
+const pickerNameEl = document.getElementById("picker-name") as HTMLElement;
+const pickerBranchEl = document.getElementById("picker-branch") as HTMLElement;
+// 겹치지 않는 다른 축 — 무엇과 견주는가.
+const baseLabelEl = document.getElementById("base-label") as HTMLElement;
 
 /**
  * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
  * 화면 두 곳이 다르게 말하게 되므로 문자열 조립은 전부 repoLabel.ts가 한다.
  */
-/** 마지막으로 계산한 표식 — 피커 트리거가 워크트리 이름을 여기서 읽는다. */
-let lastRepoView = repoLabelView(repo, [], null);
 // /api/refs가 준 마지막 값. 라벨은 diff 응답(base 이름)이 올 때도 다시 그려야
 // 하는데 그때는 워크트리 목록이 손에 없으므로 여기에 붙들어 둔다.
 let lastWorktrees: readonly WorktreeRecord[] = [];
@@ -227,11 +227,12 @@ const applyRepoLabel = (
 		head: currentHead,
 		base: baseDisplay(),
 	});
-	lastRepoView = view;
-	repoScopeEl.textContent = view.scope;
-	repoNameEl.textContent = view.name;
-	repoBranchEl.textContent = view.branch;
-	repoLabelEl.setAttribute("title", view.title);
+	pickerScopeEl.textContent = view.scope;
+	pickerNameEl.textContent = view.name;
+	pickerBranchEl.textContent = view.branch;
+	// 말줄임을 hover로 편다 — 트리거는 이제 세 조각을 담아 길어질 수 있다.
+	pickerBtn?.setAttribute("title", view.title);
+	baseLabelEl.textContent = view.base;
 	document.title = view.documentTitle;
 };
 
@@ -1210,21 +1211,6 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 
 // 트리거가 "지금 무엇과 견주는 중인가"를 말한다. @auto는 서버가 이름을
 // 알려줘야 쓸 수 있으므로 매 응답마다 다시 그린다.
-// 트리거는 **무엇을 보고 있는가**를 말한다(head). 견줄 기준은 서버가
-// 해석하므로 사용자가 고를 축이 아니고, 라벨은 리포 표식이 따로 말한다.
-const pickerLabelText = (): string =>
-	currentHead ?? (lastRepoView.name || "Working tree");
-
-const syncPickerLabel = (): void => {
-	// 라벨도 같은 순간에 다시 그린다 — head·base가 바뀌는 지점이 곧 이 함수를
-	// 부르는 지점이라, 둘이 갈라져 한쪽만 낡는 일이 생기지 않는다.
-	applyRepoLabel();
-	if (!pickerLabel) return;
-	const text = pickerLabelText();
-	pickerLabel.textContent = text;
-	pickerBtn?.setAttribute("title", text);
-};
-
 type FetchDiffResult =
 	| { kind: "data"; files: DiffFile[]; base: string; etag: string | null }
 	| { kind: "unchanged"; base: string };
@@ -1302,7 +1288,7 @@ const recoverFromStaleBase = (unknownBase: boolean): boolean => {
 	staleBaseRecovered = true;
 	localStorage.removeItem(compareBaseKey(repo));
 	compareBase = "HEAD";
-	syncPickerLabel();
+	applyRepoLabel();
 	lastEtag = null;
 	return true;
 };
@@ -1336,7 +1322,7 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 let diffBase = "";
 const applyFetched = (result: FetchDiffResult): void => {
 	diffBase = result.base;
-	syncPickerLabel();
+	applyRepoLabel();
 	if (result.kind === "unchanged") {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
@@ -1564,7 +1550,7 @@ const selectBase = async (
 	if (next === compareBase) return;
 	compareBase = next;
 	if (opts.persist) localStorage.setItem(compareBaseKey(repo), next);
-	syncPickerLabel();
+	applyRepoLabel();
 	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
 	lastEtag = null;
 	await load();
@@ -1611,7 +1597,7 @@ const applyPick = async (row: HeadRow): Promise<void> => {
 	const next = new URL(location.href);
 	next.searchParams.set("head", row.value);
 	history.replaceState(null, "", next.toString());
-	syncPickerLabel();
+	applyRepoLabel();
 	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (base 전환과 같은 이유).
 	lastEtag = null;
 	await load();
@@ -1692,7 +1678,7 @@ const compareBaseFromStorage = urlChoice === null;
 compareBase =
 	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) ??
 	(storedLegacyMode === "base" ? "@auto" : "HEAD");
-syncPickerLabel();
+applyRepoLabel();
 
 // Apply persisted file-tree side and reflect stored prefs in the overflow menu.
 appEl.dataset.treeSide = treeSide;

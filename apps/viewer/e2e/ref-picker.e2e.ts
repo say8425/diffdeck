@@ -167,7 +167,7 @@ test.describe("head picker", () => {
 
 			// feature가 main에서 갈라진 뒤 커밋한 것 하나뿐이다.
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
-			await expect(page.locator("#ref-picker-label")).toHaveText("feature");
+			await expect(page.locator("#picker-name")).toHaveText("feature");
 			// URL이 진실이라야 새로고침·링크 공유가 그대로 재현된다.
 			expect(new URL(page.url()).searchParams.get("head")).toBe("feature");
 		} finally {
@@ -190,7 +190,7 @@ test.describe("head picker", () => {
 				.first()
 				.click();
 
-			await expect(page.locator("#repo-name")).toHaveText("side");
+			await expect(page.locator("#picker-name")).toHaveText("side");
 			expect(new URL(page.url()).searchParams.get("repo")).toBe(
 				realpathSync(nested),
 			);
@@ -236,7 +236,7 @@ test.describe("head picker", () => {
 			await expect(rows.nth(target)).toHaveAttribute("data-active", "true");
 			await page.keyboard.press("Enter");
 
-			await expect(page.locator("#ref-picker-label")).toHaveText("develop");
+			await expect(page.locator("#picker-name")).toHaveText("develop");
 		} finally {
 			await stop();
 		}

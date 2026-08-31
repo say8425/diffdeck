@@ -56,15 +56,21 @@ export interface RepoLabelSelection {
 /** 화면 각 자리에 그대로 들어가는 문자열들. 조립은 전부 이 모듈이 끝낸다. */
 export interface RepoLabelView {
 	/**
-	 * `#repo-scope`의 텍스트 — 이 워크트리를 품은 리포. 구분자를 품는다
+	 * `#picker-scope`의 텍스트 — 이 워크트리를 품은 리포. 구분자를 품는다
 	 * (`"diffdeck / "`). 메인 워크트리이거나 리포 루트를 모르면 빈 문자열.
 	 */
 	scope: string;
-	/** `#repo-name`의 텍스트. 빈 문자열이면 라벨이 아무 말도 하지 않는다. */
+	/** `#picker-name`의 텍스트. 빈 문자열이면 트리거가 아무 말도 하지 않는다. */
 	name: string;
-	/** `#repo-branch`의 텍스트. 구분자를 품는다(`" · main"`). 모르면 빈 문자열. */
+	/** 트리거의 브랜치 조각. 구분자를 품는다(`" · main"`). 모르면 빈 문자열. */
 	branch: string;
-	/** `#repo-label`의 `title` — 말줄임된 라벨을 hover로 편다. */
+	/**
+	 * 견줄 기준(`"vs main"`). **자기 요소를 가지므로 구분자를 품지 않는다** —
+	 * 트리거는 head를 말하고 이 값은 개수 왼쪽의 별도 표식이 말한다. 두 축을
+	 * 한 덩어리로 붙이면 트리거가 고르지도 않는 것을 말하게 된다.
+	 */
+	base: string;
+	/** 트리거 버튼의 `title` — 말줄임된 라벨을 hover로 편다. */
 	title: string;
 	/** `document.title`. 워크트리를 여럿 열어 두면 탭만으로 구별돼야 한다. */
 	documentTitle: string;
@@ -181,13 +187,14 @@ export const repoLabelView = (
 	// 않은 곳을 가리키게 된다.
 	if (selection.head !== null) {
 		const scope = repoRootName(repoRoot);
-		const branch = suffixOf([vsBase]);
 		const root = repoRoot === null ? repo : stripTrailingSlashes(repoRoot);
 		return {
 			scope: scope === null ? "" : `${scope}${SEPARATOR}`,
 			name: selection.head,
-			branch,
-			title: `${root}${SEPARATOR}${selection.head}${branch}`,
+			// 브랜치 뷰에서는 head 자체가 브랜치라 따로 말할 것이 없다.
+			branch: "",
+			base: vsBase ?? "",
+			title: `${root}${SEPARATOR}${selection.head}${suffixOf([vsBase])}`,
 			documentTitle: `${selection.head} — ${APP_NAME}`,
 		};
 	}
@@ -199,8 +206,7 @@ export const repoLabelView = (
 	const branch = branchOf(worktree);
 	const scope = scopeNameOf(repoRoot, path);
 
-	const suffix = suffixOf([branch, vsBase]);
-	const title = `${path}${suffix}`;
+	const title = `${path}${suffixOf([branch, vsBase])}`;
 	// 탭 제목에는 접두를 넣지 않는다. 탭은 좁고 오른쪽부터 잘리는데, 리포
 	// 이름은 그 리포의 워크트리마다 **같아서** 탭을 가르지 못한다 — 구별되는
 	// 쪽(워크트리·브랜치)을 앞세워야 탭만 보고 고를 수 있다. 전체 맥락은
@@ -210,7 +216,8 @@ export const repoLabelView = (
 	return {
 		scope: scope === null ? "" : `${scope}${SCOPE_SEPARATOR}`,
 		name,
-		branch: suffix,
+		branch: suffixOf([branch]),
+		base: vsBase ?? "",
 		title,
 		documentTitle: name === "" ? APP_NAME : `${head} — ${APP_NAME}`,
 	};

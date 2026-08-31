@@ -66,30 +66,11 @@
 			.tb-left > * {
 				flex: none;
 			}
-			/* 리포·브랜치 표식 — 조작이 아니라 정보다. #status와 같은 종(種)이라
+			/* 견줄 기준 표식 — 조작이 아니라 정보다. #status와 같은 종(種)이라
 			   상자가 없고(배경·테두리·radius 없음), 툴바의 13px·시스템 스택을
 			   그대로 상속하므로 font 선언 자체를 두지 않는다. */
-			#repo-label {
-				/* 위 `.tb-left > *`의 flex:none을 되돌린다 — 라벨만 줄어든다.
-				   **폭을 붙드는 기제는 이 shrink 하나뿐이고 그걸로 충분하다.**
-				   한때 `max-width: 260px`도 함께 걸었는데, 실측해 보니 좁은 창에서
-				   두 안의 수치가 완전히 같았고(700/560/460px에서 각각 221/81/0px)
-				   161자 브랜치에서도 툴바가 넘치지 않았다 — 즉 상한은 오버플로
-				   방어에 아무것도 보태지 않으면서, 리포+워크트리+브랜치 세 조각이
-								   자연폭 350px인 흔한 경우를 **공간이 남는데도** 260px로 잘라
-				   "내가 어디 있는지 말한다"는 이 라벨의 존재 이유를 깎았다.
-				   `overflow:hidden`이 이 항목의 자동 최소 크기를 0으로 만들어
-				   (CSS Flexbox §4.5) 필요한 만큼 줄어든다. */
-				flex: 0 1 auto;
-				overflow: hidden;
-				text-overflow: ellipsis;
-				white-space: nowrap;
+			#base-label {
 				color: var(--vd-fg-muted);
-			}
-			/* 한 라벨 안에서 조각을 색으로 가르는 것은 .grab-label의 관례다.
-			   주인공은 워크트리 이름이다 — 사용자가 헷갈리는 축이 그것이라서. */
-			#repo-name {
-				color: var(--vd-fg);
 			}
 			/* 전체 변경량 — 파일 헤더 배지와 같은 add·del 어휘를 쓴다. 앱에 이미
 			   있는 두 색이라 새 값을 만들지 않는다: --vd-success는 grab 보내기의
@@ -396,14 +377,37 @@
 			.tb-picker {
 				position: relative;
 			}
+			/* 트리거는 조작이자 **정보 표출**이다 — 지금 보고 있는 리포·워크트리·
+			   브랜치를 통째로 말하므로 상한을 두지 않는다. 폭을 붙드는 기제는
+			   flex shrink 하나뿐이고, 그건 옛 라벨에서 이미 실측으로 확인했다
+			   (161자 브랜치에서도 툴바가 넘치지 않았다).
+
+			   **display:flex가 여기서 계약이다.** 블록이면 안쪽 inline-flex
+			   버튼이 flex item이 아니라서 줄어드는 몫을 물려받지 못하고 제
+			   자연폭 그대로 상자를 넘쳐, 트리거가 아무리 좁아져도 라벨은
+			   한 번도 잘리지 않는다(실측: scrollWidth == clientWidth). */
+			.tb-picker {
+				display: flex;
+				flex: 0 1 auto;
+				min-width: 0;
+			}
 			#toolbar #ref-picker-btn {
 				gap: 8px;
-				max-width: 260px;
+				min-width: 0;
+			}
+			/* 줄어드는 몫은 라벨만 진다 — 셰브론이 눌리면 컨트롤로 안 읽힌다. */
+			#toolbar #ref-picker-btn > svg {
+				flex: none;
 			}
 			#ref-picker-label {
 				overflow: hidden;
 				text-overflow: ellipsis;
 				white-space: nowrap;
+				/* 구별되는 조각 하나만 밝힌다 — 나머지는 맥락이다. */
+				color: var(--vd-fg-muted);
+			}
+			#picker-name {
+				color: var(--vd-fg);
 			}
 			#ref-picker {
 				position: absolute;
@@ -798,7 +802,10 @@
 							aria-expanded="false"
 							aria-controls="ref-picker"
 						>
-							<span id="ref-picker-label">Working tree</span>
+							<span id="ref-picker-label"
+								><span id="picker-scope"></span><span id="picker-name"></span
+								><span id="picker-branch"></span
+							></span>
 							<svg
 								width="12"
 								height="12"
@@ -862,15 +869,9 @@
 							<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
 						</svg>
 					</button>
-					<!-- 지금 보고 있는 리포·워크트리·브랜치. 개수(#status) 바로
-					     왼쪽에 둔다 — 왼쪽 그룹은 조작(피커·뷰 모드·새로고침)이
-					     먼저 오고 그 결과를 말하는 정보가 뒤에 온다. 조각 사이에
-					     공백 텍스트 노드가 생기면 안 된다 — #repo-scope와
-					     #repo-branch가 각자 구분자를 품고 오므로 붙여 쓴다. -->
-					<span id="repo-label"
-						><span id="repo-scope"></span><span id="repo-name"></span
-						><span id="repo-branch"></span
-					></span>
+					<!-- 견줄 기준. 트리거가 "무엇을 보는가"(head)를 말하므로 여기는
+					     겹치지 않는 다른 축만 말한다 — 예전엔 둘이 같은 말을 했다. -->
+					<span id="base-label"></span>
 					<span id="status"></span>
 					<!-- 전체 변경량. 개수만으로는 규모를 못 읽는다 — 176 file(s)가
 					     한 줄씩 고친 것인지 통째로 새로 쓴 것인지 갈린다. 조각

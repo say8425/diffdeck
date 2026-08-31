@@ -45,7 +45,7 @@ describe("changeTotalsView", () => {
 		const v = changeTotalsView([file(17022, 435)]);
 		expect(v.additions).toBe("+17022");
 		// 구분자는 삭제 쪽이 품고 온다 — 조각 사이에 공백 텍스트 노드를
-		// 만들지 않으려는 것으로, #repo-branch와 같은 관례다.
+		// 만들지 않으려는 것으로, #picker-branch와 같은 관례다.
 		expect(v.deletions).toBe(" -435");
 	});
 

@@ -36,29 +36,32 @@ test.describe("toolbar repo label", () => {
 			await page.goto(url);
 			const name = basename(repoDir);
 
-			await expect(page.locator("#repo-name")).toHaveText(name);
-			await expect(page.locator("#repo-branch")).toHaveText("· main");
+			await expect(page.locator("#picker-name")).toHaveText(name);
+			await expect(page.locator("#picker-branch")).toHaveText("· main");
 			// 메인 워크트리라 리포 접두가 없다 — 붙으면 `dd-e2e-repo-x / dd-e2e-repo-x`.
-			await expect(page.locator("#repo-scope")).toBeEmpty();
+			await expect(page.locator("#picker-scope")).toBeEmpty();
 
-			// 사용자가 지정한 자리: 개수(`n file(s)`) 바로 왼쪽.
+			// 개수 바로 왼쪽 자리는 이제 **견줄 기준**의 몫이다 — 트리거가
+			// "무엇을 보는가"를 말하므로 그 자리에 같은 말을 두면 중복이다.
 			const beforeStatus = await page.evaluate(
 				() =>
-					document.getElementById("repo-label")?.nextElementSibling?.id ?? null,
+					document.getElementById("base-label")?.nextElementSibling?.id ?? null,
 			);
 			expect(beforeStatus).toBe("status");
 
 			// 조각 사이에 공백 텍스트 노드가 끼면 `name  · main`이 된다.
-			// #repo-branch가 구분자를 품고 오므로 마크업은 붙여 써야 하는데,
+			// #picker-branch가 구분자를 품고 오므로 마크업은 붙여 써야 하는데,
 			// 그건 포매터가 되돌릴 수 있는 종류의 계약이라 여기서 못박는다.
 			// **toHaveText로는 못 잡는다** — Playwright가 공백을 정규화해서
 			// 이중 공백도 통과시킨다. textContent를 그대로 봐야 한다.
 			expect(
-				await page.locator("#repo-label").evaluate((el) => el.textContent),
+				await page
+					.locator("#ref-picker-label")
+					.evaluate((el) => el.textContent),
 			).toBe(`${name} · main`);
 
-			// 말줄임을 hover로 펴는 보상 패턴(#ref-picker-btn과 같다).
-			await expect(page.locator("#repo-label")).toHaveAttribute(
+			// 말줄임을 hover로 편다 — 트리거가 세 조각을 담아 길어질 수 있다.
+			await expect(page.locator("#ref-picker-btn")).toHaveAttribute(
 				"title",
 				`${realpathSync(repoDir)} · main`,
 			);
@@ -77,8 +80,8 @@ test.describe("toolbar repo label", () => {
 		});
 		try {
 			await page.goto(url);
-			await expect(page.locator("#repo-name")).toHaveText(basename(repoDir));
-			await expect(page.locator("#repo-branch")).toHaveText("· feature");
+			await expect(page.locator("#picker-name")).toHaveText(basename(repoDir));
+			await expect(page.locator("#picker-branch")).toHaveText("· feature");
 		} finally {
 			await stop();
 		}
@@ -94,7 +97,7 @@ test.describe("toolbar repo label", () => {
 			run(repoDir, ["checkout", "-q", sha]);
 
 			await page.goto(url);
-			await expect(page.locator("#repo-branch")).toHaveText(
+			await expect(page.locator("#picker-branch")).toHaveText(
 				`· detached @ ${sha.slice(0, 7)}`,
 			);
 		} finally {
@@ -110,7 +113,7 @@ test.describe("toolbar repo label", () => {
 		const { url, repoDir, stop } = await launchViewer([]);
 		try {
 			await page.goto(url);
-			await expect(page.locator("#repo-branch")).toHaveText("· main");
+			await expect(page.locator("#picker-branch")).toHaveText("· main");
 
 			run(repoDir, ["checkout", "-qb", "other"]);
 
@@ -124,7 +127,7 @@ test.describe("toolbar repo label", () => {
 				.poll(
 					async () => {
 						await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-						return page.locator("#repo-branch").textContent();
+						return page.locator("#picker-branch").textContent();
 					},
 					{ timeout: 15_000, intervals: [500] },
 				)
@@ -155,11 +158,11 @@ test.describe("toolbar repo label", () => {
 			target.searchParams.set("repo", realpathSync(nested));
 			await page.goto(target.toString());
 
-			await expect(page.locator("#repo-scope")).toHaveText(
+			await expect(page.locator("#picker-scope")).toHaveText(
 				`${basename(repoDir)} /`,
 			);
-			await expect(page.locator("#repo-name")).toHaveText("feat+ABC-1");
-			await expect(page.locator("#repo-branch")).toHaveText("· feat/ABC-1");
+			await expect(page.locator("#picker-name")).toHaveText("feat+ABC-1");
+			await expect(page.locator("#picker-branch")).toHaveText("· feat/ABC-1");
 
 			// 탭 제목에는 리포 접두가 없다 — 탭은 오른쪽부터 잘리는데 리포
 			// 이름은 워크트리마다 같아서 탭을 가르지 못한다.
@@ -181,12 +184,12 @@ test.describe("toolbar repo label", () => {
 		const { url, repoDir, stop } = await launchViewer(["--watch"]);
 		try {
 			await page.goto(url);
-			await expect(page.locator("#repo-branch")).toHaveText("· main");
+			await expect(page.locator("#picker-branch")).toHaveText("· main");
 
 			run(repoDir, ["checkout", "-qb", "watched"]);
 
 			// 폴 주기 + /api/refs의 5초 TTL만큼 수렴을 기다린다.
-			await expect(page.locator("#repo-branch")).toHaveText("· watched", {
+			await expect(page.locator("#picker-branch")).toHaveText("· watched", {
 				timeout: 20_000,
 			});
 			await expect(page).toHaveTitle(
@@ -211,7 +214,7 @@ test.describe("toolbar repo label", () => {
 		try {
 			await page.goto(url);
 			// 워크트리 뷰에서는 그 워크트리의 브랜치를 말한다.
-			await expect(page.locator("#repo-branch")).toHaveText("· feature");
+			await expect(page.locator("#picker-branch")).toHaveText("· feature");
 
 			await page.locator("#ref-picker-btn").click();
 			await page
@@ -220,16 +223,20 @@ test.describe("toolbar repo label", () => {
 				.first()
 				.click();
 
-			await expect(page.locator("#repo-name")).toHaveText("develop");
-			// 견줄 기준이 자동 해석으로 올라가므로 라벨이 그것도 말한다 —
-			// 커밋된 rev에는 미커밋 변경이 없어 워킹트리 기준은 뜻이 없다.
-			await expect(page.locator("#repo-branch")).toHaveText("· vs main");
-			await expect(page.locator("#repo-scope")).toHaveText(
+			await expect(page.locator("#picker-name")).toHaveText("develop");
+			// 브랜치 뷰에서는 head 자체가 브랜치라 트리거가 따로 말할 것이 없다.
+			await expect(page.locator("#picker-branch")).toBeEmpty();
+			await expect(page.locator("#picker-scope")).toHaveText(
 				`${basename(repoDir)} ·`,
 			);
+			// 견줄 기준이 자동 해석으로 올라간다 — 커밋된 rev에는 미커밋
+			// 변경이 없어 워킹트리 기준은 뜻이 없다. 다른 축이므로 자기 자리다.
+			await expect(page.locator("#base-label")).toHaveText("vs main");
 			// 워크트리의 브랜치를 말하면 보고 있지도 않은 곳을 가리킨다.
 			expect(
-				await page.locator("#repo-label").evaluate((el) => el.textContent),
+				await page
+					.locator("#ref-picker-label")
+					.evaluate((el) => el.textContent),
 			).not.toContain("feature");
 			await expect(page).toHaveTitle("develop — diffdeck");
 		} finally {
@@ -249,12 +256,15 @@ test.describe("toolbar repo label", () => {
 			run(repoDir, ["checkout", "-qb", long]);
 
 			await page.goto(url);
-			await expect(page.locator("#repo-branch")).toHaveText(`· ${long}`);
+			await expect(page.locator("#picker-branch")).toHaveText(`· ${long}`);
 
 			// 담기지 않으면 잘린다. 픽셀 상한을 단언하지 않는 이유는 폭을 붙드는
 			// 기제가 max-width가 아니라 flex shrink이기 때문이다 — 상한을 두면
 			// 공간이 남는 넓은 창에서까지 자르게 된다(실측 근거는 CSS 주석에).
-			const label = await page.locator("#repo-label").evaluate((el) => ({
+			// 이 단언이 `.tb-picker { display: flex }`의 회귀망이다: 블록이면
+			// 안쪽 inline-flex 버튼이 flex item이 아니라 줄어드는 몫을 못 받아
+			// 자연폭 그대로 넘치고, 라벨은 한 번도 잘리지 않는다.
+			const label = await page.locator("#ref-picker-label").evaluate((el) => ({
 				clipped: el.scrollWidth > el.clientWidth,
 				// text-overflow를 지우면 잘린 자리에 말줄임표가 사라진다.
 				// scrollWidth로는 그 삭제를 못 보므로 계산된 값을 직접 본다.
@@ -277,24 +287,25 @@ test.describe("toolbar repo label", () => {
 				.evaluate((el) => el.getBoundingClientRect().height);
 			expect(toolbarHeight).toBeLessThan(60);
 
-			// 좁은 창 — 라벨이 줄어드는 몫을 **전담**해야 한다. 실측 근거:
+			// 좁은 창 — 트리거가 줄어드는 몫을 **전담**해야 한다. 실측 근거:
 			// `.tb-left { min-width: 0 }`이 없으면 여기서 .tb-right가 화면 밖으로
-			// 나가고(라벨 없던 시절엔 460px에서도 멀쩡했다), `.tb-left > *`의
+			// 나가고(표식이 없던 시절엔 460px에서도 멀쩡했다), `.tb-left > *`의
 			// flex:none이 없으면 #status가 두 줄로 접혀 툴바가 43 → 49px로 뛴다.
+			// 트리거는 `.tb-picker`의 flex:0 1 auto로 그 예외를 되돌려 받는다.
 			await page.setViewportSize({ width: 560, height: 720 });
 			await page.waitForTimeout(200);
 			const narrow = await page.evaluate(() => {
-				const label = document.getElementById("repo-label");
+				const trigger = document.getElementById("ref-picker-label");
 				const rightGroup = document.querySelector(".tb-right");
 				const toolbar = document.getElementById("toolbar");
-				if (!label || !rightGroup || !toolbar) {
+				if (!trigger || !rightGroup || !toolbar) {
 					throw new Error("toolbar nodes missing");
 				}
 				return {
 					rightEdge: rightGroup.getBoundingClientRect().right,
 					height: toolbar.getBoundingClientRect().height,
 					// overflow:hidden / text-overflow:ellipsis를 지우면 사라진다.
-					clipped: label.scrollWidth > label.clientWidth,
+					clipped: trigger.scrollWidth > trigger.clientWidth,
 				};
 			});
 			expect(narrow.rightEdge).toBeLessThanOrEqual(560);

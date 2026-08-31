@@ -13,7 +13,7 @@
  */
 import type { Hunk } from "@diffdeck/diffs";
 
-/** 조각 구분자. 삭제 쪽 텍스트가 품고 온다(`#repo-branch`와 같은 관례). */
+/** 조각 구분자. 삭제 쪽 텍스트가 품고 온다(`#picker-branch`와 같은 관례). */
 const SEPARATOR = " ";
 
 interface HunkCounts {
