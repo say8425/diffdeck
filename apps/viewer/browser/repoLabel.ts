@@ -44,6 +44,15 @@ const SCOPE_SEPARATOR = " / ";
 /** bare 저장소 디렉토리의 관례적 접미 — 리포 이름에서는 벗긴다. */
 const BARE_SUFFIX = ".git";
 
+/** 지금 무엇을 보고 있고 무엇과 견주는가. */
+export interface RepoLabelSelection {
+	/** head로 고른 브랜치. null이면 워크트리를 본다. */
+	head: string | null;
+	/** 견줄 기준의 표시명. 워킹트리(HEAD) 대비면 null — 그건 "커밋 안 한
+	 *  변경"이지 무엇과 견준 결과가 아니다. */
+	base: string | null;
+}
+
 /** 화면 각 자리에 그대로 들어가는 문자열들. 조립은 전부 이 모듈이 끝낸다. */
 export interface RepoLabelView {
 	/**
@@ -119,6 +128,37 @@ const branchOf = (worktree: WorktreeRecord | null): string | null => {
 };
 
 /**
+ * 리포 루트의 표시 이름. bare 리포에서는 루트가 저장소 디렉토리(`myproj.git`)라
+ * 관례적 `.git` 접미를 벗긴다 — 평범한 리포의 디렉토리가 `.git`으로 끝나는
+ * 일은 사실상 없다.
+ */
+const repoRootName = (repoRoot: string | null): string | null => {
+	if (repoRoot === null) return null;
+	const raw = repoDisplayName(stripTrailingSlashes(repoRoot));
+	const name = raw.endsWith(BARE_SUFFIX)
+		? raw.slice(0, -BARE_SUFFIX.length)
+		: raw;
+	// 이름을 못 내는 루트(`/`)에 접두를 붙이면 라벨이 `" / feat"`로 시작한다.
+	return name === "" ? null : name;
+};
+
+/**
+ * 이 워크트리를 품은 리포 이름. 메인 워크트리에 있으면 null — 자기 자신을
+ * 접두로 되풀이하면 `diffdeck / diffdeck`이 된다.
+ */
+const scopeNameOf = (repoRoot: string | null, path: string): string | null =>
+	repoRoot !== null && stripTrailingSlashes(repoRoot) === path
+		? null
+		: repoRootName(repoRoot);
+
+/** 조각들을 ` · `로 이어 붙인다. 빈 것은 자리를 차지하지 않는다. */
+const suffixOf = (parts: readonly (string | null)[]): string =>
+	parts
+		.filter((p): p is string => p !== null && p !== "")
+		.map((p) => `${SEPARATOR}${p}`)
+		.join("");
+
+/**
  * 툴바 라벨과 탭 제목에 들어갈 문자열 일습.
  *
  * 워크트리 목록이 아직 안 왔거나(부트스트랩 첫 프레임) `/api/refs`가 실패해도
@@ -127,30 +167,30 @@ const branchOf = (worktree: WorktreeRecord | null): string | null => {
  * 함정(CLAUDE.md — `#grab-popover`·`.grab-hint`에서 두 번 밟았다)에 애초에
  * 들어가지 않는다. "모름"은 hidden이 아니라 **빈 텍스트**다.
  */
-/**
- * 이 워크트리를 품은 리포의 표시 이름. 메인 워크트리에 있으면 null —
- * 자기 자신을 접두로 되풀이하면 `diffdeck / diffdeck`이 된다.
- *
- * bare 리포에서는 루트가 저장소 디렉토리(`myproj.git`)라 관례적 `.git` 접미를
- * 벗긴다. 평범한 리포의 디렉토리가 `.git`으로 끝나는 일은 사실상 없다.
- */
-const scopeNameOf = (repoRoot: string | null, path: string): string | null => {
-	if (repoRoot === null) return null;
-	const root = stripTrailingSlashes(repoRoot);
-	if (root === path) return null;
-	const raw = repoDisplayName(root);
-	const name = raw.endsWith(BARE_SUFFIX)
-		? raw.slice(0, -BARE_SUFFIX.length)
-		: raw;
-	// 이름을 못 내는 루트(`/`)에 접두를 붙이면 라벨이 `" / feat"`로 시작한다.
-	return name === "" ? null : name;
-};
-
 export const repoLabelView = (
 	repo: string,
 	worktrees: readonly WorktreeRecord[],
 	repoRoot: string | null,
+	selection: RepoLabelSelection = { head: null, base: null },
 ): RepoLabelView => {
+	const vsBase = selection.base === null ? null : `vs ${selection.base}`;
+	// **브랜치를 head로 보면 워크트리는 결과에 영향을 주지 않는다** — 어느
+	// 워크트리에서 보든 같은 diff다(실측). 이름을 그대로 두면 "이 워크트리의
+	// 무언가를 보고 있다"는 잘못된 인상을 주므로 빼고, 주인공 자리를 그
+	// 브랜치에 준다. 워크트리의 브랜치를 말하는 것은 더 나쁘다 — 보고 있지도
+	// 않은 곳을 가리키게 된다.
+	if (selection.head !== null) {
+		const scope = repoRootName(repoRoot);
+		const branch = suffixOf([vsBase]);
+		const root = repoRoot === null ? repo : stripTrailingSlashes(repoRoot);
+		return {
+			scope: scope === null ? "" : `${scope}${SEPARATOR}`,
+			name: selection.head,
+			branch,
+			title: `${root}${SEPARATOR}${selection.head}${branch}`,
+			documentTitle: `${selection.head} — ${APP_NAME}`,
+		};
+	}
 	const worktree = findWorktree(worktrees, repo);
 	// 워크트리를 찾았으면 그 **최상위 경로**의 이름이 옳다. `repo`가 하위
 	// 디렉토리일 때 그 basename은 `viewer` 같은 엉뚱한 값이다.
@@ -159,7 +199,8 @@ export const repoLabelView = (
 	const branch = branchOf(worktree);
 	const scope = scopeNameOf(repoRoot, path);
 
-	const title = branch === null ? path : `${path}${SEPARATOR}${branch}`;
+	const suffix = suffixOf([branch, vsBase]);
+	const title = `${path}${suffix}`;
 	// 탭 제목에는 접두를 넣지 않는다. 탭은 좁고 오른쪽부터 잘리는데, 리포
 	// 이름은 그 리포의 워크트리마다 **같아서** 탭을 가르지 못한다 — 구별되는
 	// 쪽(워크트리·브랜치)을 앞세워야 탭만 보고 고를 수 있다. 전체 맥락은
@@ -169,7 +210,7 @@ export const repoLabelView = (
 	return {
 		scope: scope === null ? "" : `${scope}${SCOPE_SEPARATOR}`,
 		name,
-		branch: branch === null ? "" : `${SEPARATOR}${branch}`,
+		branch: suffix,
 		title,
 		documentTitle: name === "" ? APP_NAME : `${head} — ${APP_NAME}`,
 	};

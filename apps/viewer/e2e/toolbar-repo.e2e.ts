@@ -197,6 +197,46 @@ test.describe("toolbar repo label", () => {
 		}
 	});
 
+	// 브랜치를 head로 보면 **워크트리는 결과에 영향을 주지 않는다** — 어느
+	// 워크트리에서 보든 같은 diff다. 그래서 라벨에서 워크트리 이름을 빼고
+	// 보고 있는 브랜치를 주인공으로 세운다. 예전에는 워크트리의 브랜치를
+	// 말해서, 화면에는 A의 diff가 떠 있는데 라벨은 B라고 하는 상태가 됐다.
+	test("a branch head drops the worktree name and says what it is viewing", async ({
+		page,
+	}) => {
+		const { url, repoDir, stop } = await launchViewer([], {
+			branches: ["develop"],
+			featureBranchCommit: true,
+		});
+		try {
+			await page.goto(url);
+			// 워크트리 뷰에서는 그 워크트리의 브랜치를 말한다.
+			await expect(page.locator("#repo-branch")).toHaveText("· feature");
+
+			await page.locator("#ref-picker-btn").click();
+			await page
+				.locator("#ref-picker .ref-row")
+				.filter({ hasText: /^develop/ })
+				.first()
+				.click();
+
+			await expect(page.locator("#repo-name")).toHaveText("develop");
+			// 견줄 기준이 자동 해석으로 올라가므로 라벨이 그것도 말한다 —
+			// 커밋된 rev에는 미커밋 변경이 없어 워킹트리 기준은 뜻이 없다.
+			await expect(page.locator("#repo-branch")).toHaveText("· vs main");
+			await expect(page.locator("#repo-scope")).toHaveText(
+				`${basename(repoDir)} ·`,
+			);
+			// 워크트리의 브랜치를 말하면 보고 있지도 않은 곳을 가리킨다.
+			expect(
+				await page.locator("#repo-label").evaluate((el) => el.textContent),
+			).not.toContain("feature");
+			await expect(page).toHaveTitle("develop — diffdeck");
+		} finally {
+			await stop();
+		}
+	});
+
 	// 유닛이 원리적으로 못 보는 계약: happy-dom에는 레이아웃이 없다.
 	// 툴바에는 flex-wrap도 @media도 없어서, max-width + ellipsis가 빠지면
 	// 긴 이름 하나로 .tb-right(찾기·트리토글·⋯)가 화면 밖으로 나간다.

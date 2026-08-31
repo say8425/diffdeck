@@ -198,12 +198,35 @@ const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
  */
 /** 마지막으로 계산한 표식 — 피커 트리거가 워크트리 이름을 여기서 읽는다. */
 let lastRepoView = repoLabelView(repo, [], null);
+// /api/refs가 준 마지막 값. 라벨은 diff 응답(base 이름)이 올 때도 다시 그려야
+// 하는데 그때는 워크트리 목록이 손에 없으므로 여기에 붙들어 둔다.
+let lastWorktrees: readonly WorktreeRecord[] = [];
+let lastRepoRoot: string | null = null;
+
+/**
+ * 견줄 기준의 **표시명**. 워킹트리(HEAD) 대비면 null — 그건 "커밋 안 한 변경"
+ * 이지 무엇과 견준 결과가 아니라서 라벨이 아무 말도 하지 않아야 한다.
+ * `@auto`의 이름은 서버가 매 diff 응답의 `x-diff-base`로 알려준다.
+ */
+const baseDisplay = (): string | null =>
+	compareBase === "HEAD"
+		? null
+		: compareBase === "@auto"
+			? diffBase || null
+			: compareBase;
 
 const applyRepoLabel = (
-	worktrees: readonly WorktreeRecord[],
-	repoRoot: string | null,
+	worktrees?: readonly WorktreeRecord[],
+	repoRoot?: string | null,
 ): void => {
-	const view = repoLabelView(repo, worktrees, repoRoot);
+	if (worktrees) {
+		lastWorktrees = worktrees;
+		lastRepoRoot = repoRoot ?? null;
+	}
+	const view = repoLabelView(repo, lastWorktrees, lastRepoRoot, {
+		head: currentHead,
+		base: baseDisplay(),
+	});
 	lastRepoView = view;
 	repoScopeEl.textContent = view.scope;
 	repoNameEl.textContent = view.name;
@@ -1193,6 +1216,9 @@ const pickerLabelText = (): string =>
 	currentHead ?? (lastRepoView.name || "Working tree");
 
 const syncPickerLabel = (): void => {
+	// 라벨도 같은 순간에 다시 그린다 — head·base가 바뀌는 지점이 곧 이 함수를
+	// 부르는 지점이라, 둘이 갈라져 한쪽만 낡는 일이 생기지 않는다.
+	applyRepoLabel();
 	if (!pickerLabel) return;
 	const text = pickerLabelText();
 	pickerLabel.textContent = text;
@@ -1576,6 +1602,12 @@ const applyPick = async (row: HeadRow): Promise<void> => {
 	}
 	if (row.value === currentHead) return;
 	currentHead = row.value;
+	// 커밋된 rev에는 "커밋 안 한 변경"이 없다 — base가 워킹트리(HEAD) 기준이면
+	// 그 조합은 언제나 빈 diff다. 브랜치를 고르는 것은 곧 "그 브랜치가 base에서
+	// 갈라진 뒤 한 일"을 보겠다는 뜻이므로 기준을 자동 해석으로 올린다.
+	// URL에는 싣지 않는다: 추론이지 사용자의 선택이 아니고(자동 base 전환과
+	// 같은 부류), 새로고침하면 그 전환이 같은 상태를 다시 만든다.
+	if (compareBase === "HEAD") compareBase = "@auto";
 	const next = new URL(location.href);
 	next.searchParams.set("head", row.value);
 	history.replaceState(null, "", next.toString());
