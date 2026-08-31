@@ -299,3 +299,76 @@ describe("getDiffFiles base mode", () => {
 		expect(baseB?.newContents).toContain("BETA_working");
 	});
 });
+
+describe("head selection (rev → rev)", () => {
+	// init -- A (main)
+	//      \-- B (feat)
+	// 브랜치를 head로 보면 "그 브랜치가 갈라진 뒤 한 일"만 보여야 한다.
+	const branchOffAndAdvanceMain = async (): Promise<void> => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q main`;
+		writeFileSync(join(repo, "b.txt"), "main moved on\n");
+		await $`git -C ${repo} add b.txt`;
+		await $`git -C ${repo} commit -qm "main moves"`;
+	};
+
+	test("shows the branch's committed work, not the working tree", async () => {
+		await branchOffAndAdvanceMain();
+		// 워킹트리를 더럽힌다 — head가 커밋된 rev면 이건 보이면 안 된다.
+		writeFileSync(join(repo, "a.txt"), "one\nuncommitted\n");
+
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.map((f) => f.name)).toEqual(["a.txt"]);
+		expect(files[0]?.newContents).toBe("one\ntwo\n");
+	});
+
+	// **갈림점은 head 기준이어야 한다.** `merge-base(ref, HEAD)`로 재면 지금
+	// 워크트리의 HEAD(main)와 갈림점을 잡게 되는데, 그 둘은 아무 관계도 없다
+	// — 남의 브랜치를 보면서 내 위치를 기준 삼는 셈이다. 그러면 main이 그
+	// 사이 만든 b.txt가 "feat에서 삭제됨"으로 끼어든다.
+	test("measures the merge base against the head, not the current HEAD", async () => {
+		await branchOffAndAdvanceMain();
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.map((f) => f.name)).not.toContain("b.txt");
+		expect(files).toHaveLength(1);
+	});
+
+	test("a committed head carries no untracked files", async () => {
+		await branchOffAndAdvanceMain();
+		writeFileSync(join(repo, "scratch.txt"), "not in any commit\n");
+
+		const files = await getDiffFiles(repo, {
+			untracked: true,
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.some((f) => f.status === "untracked")).toBe(false);
+	});
+
+	// 이미지 카드가 텍스트 diff와 다른 축을 보면 안 된다.
+	test("getFileBytes reads the new side from the head revision", async () => {
+		await branchOffAndAdvanceMain();
+		writeFileSync(join(repo, "a.txt"), "one\nuncommitted\n");
+
+		const bytes = await getFileBytes(repo, "a.txt", "new", {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(new TextDecoder().decode(bytes ?? new Uint8Array())).toBe(
+			"one\ntwo\n",
+		);
+	});
+});

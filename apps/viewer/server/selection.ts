@@ -41,16 +41,41 @@ const parseBase = (params: URLSearchParams): BaseSelector => {
 	return params.get("mode") === "base" ? { kind: "auto" } : { kind: "head" };
 };
 
+/**
+ * 무엇을 볼 것인가 — diff의 **오른쪽(new) 항**.
+ *
+ * 오래도록 이 축에는 선택지가 없었다(언제나 워킹트리). 피커가 head를 고르게
+ * 되면서 축이 열렸고, base와는 **독립**이다.
+ */
+export type HeadSelector =
+	/** 워킹트리 — 지금 디스크의 파일. 기본값이고 커밋 안 한 변경이 보인다. */
+	| { kind: "worktree" }
+	/** 사용자가 고른 참조. 워킹트리를 거치지 않으므로 커밋된 것만 보인다. */
+	| { kind: "ref"; ref: string };
+
+/**
+ * **`head=HEAD`는 base와 달리 정규화하지 않는다.** `base=HEAD`는 "커밋 안 한
+ * 것만"이라 워킹트리 뷰와 결과가 같지만, `head=HEAD`는 **커밋된 HEAD**를 보는
+ * 것이라 워킹트리 뷰와 다르다 — 미커밋 변경이 빠진다. 둘을 합치면 그 구분이
+ * 사라진다.
+ */
+const parseHead = (params: URLSearchParams): HeadSelector => {
+	const raw = params.get("head") ?? "";
+	return raw === "" ? { kind: "worktree" } : { kind: "ref", ref: raw };
+};
+
 export interface Selection {
 	repo: string;
 	untracked: boolean;
 	base: BaseSelector;
+	head: HeadSelector;
 }
 
 export const parseSelection = (params: URLSearchParams): Selection => ({
 	repo: params.get("repo") ?? "",
 	untracked: params.get("untracked") === "1",
 	base: parseBase(params),
+	head: parseHead(params),
 });
 
 /**
@@ -87,4 +112,8 @@ export const selectionCacheKey = (
 		// 없고, head 기준에 해석값을 넣으면 origin/HEAD가 움직일 때마다
 		// 워킹트리 뷰의 캐시가 이유 없이 날아간다.
 		baseIdentity(sel.base, resolvedBaseRef),
+		// head도 같은 계약을 탄다 — 빠지면 워킹트리 뷰와 브랜치 뷰가 같은
+		// 슬롯에 합류해 한쪽이 남의 diff를 받는다. ref는 **이름**으로 넣는다
+		// (OID는 지문의 몫이라는 위 규칙과 같은 이유).
+		sel.head.kind === "ref" ? `head:${sel.head.ref}` : "head:worktree",
 	].join("\0");
