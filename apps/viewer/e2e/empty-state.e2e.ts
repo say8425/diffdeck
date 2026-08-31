@@ -49,9 +49,10 @@ test.describe("informative empty state", () => {
 				card.locator("button.empty-action", { hasText: "untracked" }),
 			).toHaveText("1 untracked file(s) hidden — show");
 
-			// 클릭 → 피커가 자동 해석 base로 바뀌고 커밋된 diff가 렌더된다.
+			// 클릭 → base가 자동 해석으로 바뀌고 커밋된 diff가 렌더된다.
+			// 피커 라벨은 이제 head를 말하므로 base의 증거가 아니다 — 관찰
+			// 가능한 신호는 카드가 사라지고 개수가 나타나는 것이다.
 			await switchBtn.click();
-			await expect(page.locator("#ref-picker-label")).toHaveText("vs main");
 			await expect(page.locator("#empty")).toHaveCount(0);
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
 			await expect.poll(() => treeHasPath(page, "src/hello.ts")).toBe(true);
@@ -78,7 +79,10 @@ test.describe("informative empty state", () => {
 	});
 
 	test("all quiet: card says nothing to show in any mode", async ({ page }) => {
-		const { url, repoDir, stop } = await launchViewer([], { clean: true });
+		const { url, repoDir, stop } = await launchViewer([], {
+			clean: true,
+			branches: ["develop"],
+		});
 		try {
 			// 픽스처가 항상 남기는 untracked data.txt를 지워 완전 무변경 상태로.
 			rmSync(join(repoDir, "data.txt"));
@@ -93,23 +97,13 @@ test.describe("informative empty state", () => {
 			await expect(card.locator(".empty-context")).toHaveText("on main");
 			await expect(card.locator("button.empty-action")).toHaveCount(0);
 
-			// 회귀: 양쪽이 다 빈 상태에서 기준을 바꿔도 카드가 새 문구로
-			// 갱신되어야 한다 — 빈 payload의 etag가 기준과 무관하게 같아 304로
-			// 이전 카드에 고착되던 버그의 가드 (선택 변경 시 lastEtag 리셋).
-			await page.locator("#ref-picker-btn").click();
-			await page
-				.locator("#ref-picker .ref-row")
-				.filter({ hasText: /^main/ })
-				.first()
-				.click();
-			await expect(
-				page.locator("#empty.empty-card .empty-headline"),
-			).toHaveText("No changes vs main");
-
 			// 회귀: 304(unchanged) 응답이라도 빈 상태가 유지되는 동안엔 카드를
 			// 재계산해야 한다 — untracked 개수는 지문 밖 사실이라, 새 untracked
 			// 파일이 생겨도 diff 지문은 그대로(untracked=0은 -uno)여서 304가
 			// 온다. focus 리프레시 후 카드에 안내가 나타나야 한다.
+			//
+			// **head를 바꾸기 전에** 확인한다 — 커밋된 rev를 보고 있으면
+			// untracked는 재지 않은 값(null)이라 이 안내가 원리적으로 없다.
 			writeFileSync(join(repoDir, "late.txt"), "new untracked\n");
 			await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 			await expect(
@@ -117,6 +111,21 @@ test.describe("informative empty state", () => {
 					hasText: "untracked",
 				}),
 			).toHaveText("1 untracked file(s) hidden — show");
+
+			// 회귀: 양쪽이 다 빈 상태에서 선택을 바꿔도 카드가 새 사실로
+			// 갱신되어야 한다 — 빈 payload의 etag가 선택과 무관하게 같아 304로
+			// 이전 카드에 고착되던 버그의 가드 (선택 변경 시 lastEtag 리셋).
+			// head를 바꾸면 요약의 branch가 **보고 있는 그 브랜치**를 말하므로
+			// 카드의 컨텍스트 줄이 그 증거다.
+			await page.locator("#ref-picker-btn").click();
+			await page
+				.locator("#ref-picker .ref-row")
+				.filter({ hasText: /^develop/ })
+				.first()
+				.click();
+			await expect(page.locator("#empty.empty-card .empty-context")).toHaveText(
+				"on develop",
+			);
 		} finally {
 			await stop();
 		}
@@ -140,7 +149,6 @@ test.describe("informative empty state", () => {
 			await page.goto(url);
 
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
-			await expect(page.locator("#ref-picker-label")).toHaveText("vs main");
 			await expect(page.locator("#empty")).toHaveCount(0);
 
 			// **저장하지 않는다** — 추론이지 사용자의 선택이 아니다. 저장해 버리면
@@ -165,10 +173,9 @@ test.describe("informative empty state", () => {
 			rmSync(join(repoDir, "data.txt"));
 			await page.goto(`${url}&base=HEAD`);
 
+			// 카드가 그대로 떠 있다는 것이 "덮지 않았다"의 증거다 — 자동 전환이
+			// 걸렸다면 diff가 렌더되어 카드가 사라진다.
 			await expect(page.locator("#empty.empty-card")).toBeVisible();
-			await expect(page.locator("#ref-picker-label")).toHaveText(
-				"Working tree",
-			);
 		} finally {
 			await stop();
 		}

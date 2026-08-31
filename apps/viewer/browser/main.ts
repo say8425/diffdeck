@@ -72,12 +72,11 @@ import {
 	WATCH_KEY,
 } from "./prefs.ts";
 import {
-	type BaseRow,
-	buildBaseRows,
-	filterBaseRows,
-	type RowCounts,
+	buildHeadRows,
+	filterPickerRows,
+	type HeadRow,
 } from "./refPicker/model.ts";
-import { findWorktree, repoLabelView } from "./repoLabel.ts";
+import { repoLabelView } from "./repoLabel.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -197,11 +196,15 @@ const repoBranchEl = document.getElementById("repo-branch") as HTMLElement;
  * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
  * 화면 두 곳이 다르게 말하게 되므로 문자열 조립은 전부 repoLabel.ts가 한다.
  */
+/** 마지막으로 계산한 표식 — 피커 트리거가 워크트리 이름을 여기서 읽는다. */
+let lastRepoView = repoLabelView(repo, [], null);
+
 const applyRepoLabel = (
 	worktrees: readonly WorktreeRecord[],
 	repoRoot: string | null,
 ): void => {
 	const view = repoLabelView(repo, worktrees, repoRoot);
+	lastRepoView = view;
 	repoScopeEl.textContent = view.scope;
 	repoNameEl.textContent = view.name;
 	repoBranchEl.textContent = view.branch;
@@ -255,6 +258,13 @@ let includeUntracked = resolveUntracked(params.get("untracked"));
 // 그 밖은 그 참조 자체다. merge-base(HEAD, HEAD)가 HEAD라 "HEAD"가 별도
 // 분기 없이 오늘의 워킹트리 뷰가 된다.
 let compareBase = "HEAD";
+/**
+ * head로 고른 브랜치. null이면 워킹트리를 본다(기본).
+ *
+ * **저장하지 않는다** — URL이 진실이라야 링크가 그대로 재현되고, 저장하면
+ * 다음에 그 리포를 열 때 남의 브랜치 뷰에 갇힌 채 시작한다.
+ */
+let currentHead: string | null = params.get("head") || null;
 const diffModeOf = (base: string): "working" | "base" =>
 	base === "HEAD" ? "working" : "base";
 // grab 참조와 이미지 blob이 쓰는 "실제로 견주는 대상"의 이름. 사용자가
@@ -861,6 +871,7 @@ const syncTreeFold = (): void => {
 const fetchSummary = async (): Promise<RepoSummary | null> => {
 	try {
 		const query = new URLSearchParams({ repo, token, base: compareBase });
+		if (currentHead) query.set("head", currentHead);
 		const res = await fetch(`/api/summary?${query.toString()}`);
 		if (!res.ok) return null;
 		return (await res.json()) as RepoSummary;
@@ -952,6 +963,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			side,
 			mode: diffModeOf(compareBase),
 			base: compareBase,
+			...(currentHead ? { head: currentHead } : {}),
 			version,
 		});
 
@@ -1175,12 +1187,10 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 
 // 트리거가 "지금 무엇과 견주는 중인가"를 말한다. @auto는 서버가 이름을
 // 알려줘야 쓸 수 있으므로 매 응답마다 다시 그린다.
+// 트리거는 **무엇을 보고 있는가**를 말한다(head). 견줄 기준은 서버가
+// 해석하므로 사용자가 고를 축이 아니고, 라벨은 리포 표식이 따로 말한다.
 const pickerLabelText = (): string =>
-	compareBase === "HEAD"
-		? "Working tree"
-		: compareBase === "@auto"
-			? `vs ${diffBase || "base"}`
-			: `vs ${compareBase}`;
+	currentHead ?? (lastRepoView.name || "Working tree");
 
 const syncPickerLabel = (): void => {
 	if (!pickerLabel) return;
@@ -1210,6 +1220,7 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		untracked: includeUntracked ? "1" : "0",
 		base: compareBase,
 	});
+	if (currentHead) query.set("head", currentHead);
 	try {
 		// 조건부 요청: 서버 지문이 그대로면 304가 오고, 수십 MB payload 전송과
 		// JSON 파싱·재렌더 전부를 건너뛴다.
@@ -1405,15 +1416,18 @@ const CHECK_SVG =
 
 // 목록을 받기 전에도 Working tree 행은 항상 있다. 빈 배열로 두면 피커를
 // 열 때마다 "No match"가 한 프레임 스치고, 그건 목록이 없는 것처럼 읽힌다.
-let pickerRows: BaseRow[] = buildBaseRows([], null, null);
+let pickerRows: HeadRow[] = buildHeadRows([], [], null, {
+	repo,
+	head: currentHead,
+});
 // 방향키가 움직이는 활성 행. 필터가 바뀌면 첫 행으로 되돌린다.
 let pickerActive = 0;
 // 현재 화면에 그려진 행들 — 키보드 처리와 렌더가 같은 목록을 봐야 한다.
-let pickerVisible: BaseRow[] = [];
+let pickerVisible: HeadRow[] = [];
 
 const renderPickerRows = (): void => {
 	if (!pickerList) return;
-	const rows = filterBaseRows(pickerRows, pickerSearch?.value ?? "");
+	const rows = filterPickerRows(pickerRows, pickerSearch?.value ?? "");
 	pickerVisible = rows;
 	if (pickerActive >= rows.length) pickerActive = 0;
 	pickerList.replaceChildren();
@@ -1426,8 +1440,8 @@ const renderPickerRows = (): void => {
 		return;
 	}
 	const SECTION_LABEL: Record<string, string> = {
-		uncommitted: "UNCOMMITTED",
-		branches: "COMPARE WITH A BRANCH",
+		worktrees: "WORKTREES",
+		branches: "BRANCHES",
 	};
 	let section: string | null = null;
 	for (const [index, row] of rows.entries()) {
@@ -1452,7 +1466,8 @@ const renderPickerRows = (): void => {
 			el.dataset.active = "true";
 			pickerSearch?.setAttribute("aria-activedescendant", el.id);
 		}
-		const selected = row.value === compareBase;
+		// 값의 종류가 둘(경로·참조 이름)이라 비교는 모델이 끝내 둔다.
+		const selected = row.selected;
 		el.setAttribute("aria-selected", String(selected));
 		// 사용자 입력이 섞이지 않는 상수 마크업이라 안전하다.
 		if (selected) el.insertAdjacentHTML("afterbegin", CHECK_SVG);
@@ -1466,7 +1481,7 @@ const renderPickerRows = (): void => {
 			note.textContent = row.note;
 			el.append(note);
 		}
-		el.addEventListener("click", () => void applySelection(row.value));
+		el.addEventListener("click", () => void applyPick(row));
 		pickerList.append(el);
 	}
 };
@@ -1481,37 +1496,18 @@ const loadPickerRows = async (): Promise<void> => {
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
-		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
-		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
-		// 목록에서 자기 경로를 찾아 읽는다.
-		// 정확 일치가 아니라 findWorktree를 쓴다 — repo는 CLI 기동 시점의
-		// process.cwd()라 리포 루트라는 보장이 없어, 하위 디렉토리에서 켜면
-		// 정확 일치가 실패해 HEAD 태그가 조용히 사라진다. 툴바 라벨과 같은
-		// 판정을 공유해야 "내가 어느 워크트리에 있는가"의 답이 하나로 남는다.
-		const current = findWorktree(body.worktrees, repo)?.branch ?? null;
 		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
+		// "내가 어느 워크트리에 있는가"의 판정은 모델이 repoLabel의 것을
+		// 그대로 쓴다(답이 앱 안에 둘 있으면 안 된다).
 		applyRepoLabel(body.worktrees, body.repoRoot);
-		// 목록을 먼저 그린다. 개수를 기다리면 목록이 /api/refs(수 ms)가 아니라
-		// /api/summary(수십 ms)의 속도로 뜨고, 더 나쁘게는 getRepoSummary가
-		// 의도적으로 single-flight 밖이라(CLAUDE.md) 거기서 매달리면 목록이
-		// Working tree 한 줄에 영구히 갇힌다.
-		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current);
-		renderPickerRows();
-
-		// 개수는 부가 정보다 — 도착하면 얹고, 못 받으면 목록을 그대로 쓴다.
-		const summary = await fetchSummary();
-		if (!summary) return;
-		const counts: RowCounts = {
-			working: summary.workingFiles,
-			// 표시명(base)이 아니라 **실제로 잰 ref**로 맞춘다. base는 origin/
-			// 접두가 벗겨져 있어, 그걸로 맞추면 origin/main으로 잰 숫자가 로컬
-			// main 행에 붙는다 — 로컬이 뒤처져 있으면 값이 실제로 갈린다.
-			base:
-				summary.ref !== null && summary.baseFiles !== null
-					? { name: summary.ref, files: summary.baseFiles }
-					: null,
-		};
-		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current, counts);
+		// /api/refs 하나로 목록이 완성된다. 예전에는 행마다 파일 개수를 얹으려고
+		// /api/summary를 이어 받았는데, 그건 base 축의 수치라 head를 고르는
+		// 지금은 행의 뜻과 맞지 않는다(그리고 getRepoSummary는 의도적으로
+		// single-flight 밖이라 목록이 그 속도에 묶였다).
+		pickerRows = buildHeadRows(body.worktrees, body.refs, body.defaultBranch, {
+			repo,
+			head: currentHead,
+		});
 		renderPickerRows();
 	} catch {
 		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.
@@ -1556,6 +1552,39 @@ const applySelection = async (next: string): Promise<void> => {
 	await selectBase(next, { persist: true });
 };
 
+/**
+ * 피커에서 고른 행을 적용한다. **두 구역은 일어나는 일이 다르다.**
+ *
+ * 워크트리는 다른 리포 경로다 — diff·파일트리·라벨·프리퍼런스 키가 전부
+ * 갈리므로 상태를 손으로 되돌리는 대신 그 URL로 **이동**한다. 옮기면서
+ * `head`를 들고 가지 않는 이유는 그것이 워크트리에 매인 값이 아니어서다:
+ * 그대로 두면 새 워크트리에서 남의 브랜치를 보게 된다.
+ *
+ * 브랜치는 같은 워크트리 안의 축이라 이동 없이 `head`만 바꾼다. URL에 실어
+ * 두면 새로고침과 링크 공유가 그대로 재현된다.
+ */
+const applyPick = async (row: HeadRow): Promise<void> => {
+	setPickerOpen(false);
+	pickerBtn?.focus();
+	if (row.kind === "worktree") {
+		if (row.selected) return;
+		const next = new URL(location.href);
+		next.searchParams.set("repo", row.value);
+		next.searchParams.delete("head");
+		location.href = next.toString();
+		return;
+	}
+	if (row.value === currentHead) return;
+	currentHead = row.value;
+	const next = new URL(location.href);
+	next.searchParams.set("head", row.value);
+	history.replaceState(null, "", next.toString());
+	syncPickerLabel();
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (base 전환과 같은 이유).
+	lastEtag = null;
+	await load();
+};
+
 pickerBtn?.addEventListener("click", () => {
 	const opening = Boolean(pickerPanel?.hidden);
 	// 두 패널이 동시에 열려 있으면 바깥 클릭 규칙이 서로를 가린다.
@@ -1591,7 +1620,7 @@ pickerSearch?.addEventListener("keydown", (event) => {
 	if (event.key === "Enter") {
 		event.preventDefault();
 		const row = pickerVisible[pickerActive];
-		if (row) void applySelection(row.value);
+		if (row) void applyPick(row);
 	}
 });
 

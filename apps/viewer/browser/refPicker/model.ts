@@ -1,122 +1,149 @@
 /**
- * 피커가 보여줄 "무엇과 견줄까" 목록의 순수 로직.
+ * 피커가 보여줄 "무엇을 볼까" 목록의 순수 로직.
+ *
+ * **이 피커는 base가 아니라 head를 고른다.** 예전에는 "무엇과 견줄까"(base)를
+ * 골랐는데, 그러면 목록에 뜬 브랜치 이름이 "그 브랜치를 보여줘"로 읽히면서
+ * 실제로는 반대 축을 건드리는 어긋남이 생겼다 — 메인 워크트리에서 남의
+ * 브랜치를 골라도 1 file만 나오던 것이 그 결과다. base는 이제 서버가
+ * 해석한다(`@auto`).
+ *
+ * 두 구역은 고르면 **일어나는 일이 다르다**:
+ * - 워크트리 → 그 워크트리로 **이동**한다(`repo` 파라미터가 바뀐다).
+ * - 브랜치   → 그 브랜치를 head로 **본다**(`head` 파라미터, 커밋된 것만).
  *
  * DOM도 fetch도 모르므로 유닛으로 전부 덮인다 — 배선만 main.ts에 남는다.
  */
-import type { RefRecord } from "../../server/refs.ts";
+import type { RefRecord, WorktreeRecord } from "../../server/refs.ts";
+import { findWorktree, repoDisplayName } from "../repoLabel.ts";
 
 /** 목록의 두 구역. 종류가 다르다는 것을 화면에서 가르는 근거다. */
-export type RowSection = "uncommitted" | "branches";
+export type RowSection = "worktrees" | "branches";
 
-export interface BaseRow {
-	/** `base=` 쿼리에 실릴 값. */
+export interface HeadRow {
+	/**
+	 * 고르면 무엇이 일어나는가.
+	 * - `worktree` — 그 워크트리로 이동(`value`는 최상위 **경로**).
+	 * - `local`/`remote` — 그 브랜치를 head로 본다(`value`는 참조 **이름**).
+	 */
+	kind: "worktree" | "local" | "remote";
+	/** 워크트리면 최상위 경로, 브랜치면 참조 이름. */
 	value: string;
 	/** 화면에 보이는 이름. */
 	label: string;
-	kind: "working" | "local" | "remote";
 	section: RowSection;
 	/** 맥락 표시. note에 합쳐져 오른쪽에 붙는다. */
-	tag: "default" | "HEAD" | null;
-	/** 행 오른쪽 보조 텍스트. 모르는 것은 지어내지 않으므로 null일 수 있다. */
+	tag: "default" | null;
+	/** 행 오른쪽 보조 텍스트. 워크트리는 **물고 있는 브랜치**가 여기 온다. */
 	note: string | null;
+	/** 지금 보고 있는 행. 값의 종류가 둘이라 비교를 모델이 끝낸다. */
+	selected: boolean;
 }
 
-/**
- * 서버가 **이미 아는** 개수만 담는다. /api/summary가 매 로드마다 계산하는
- * 값이라 git 호출이 늘지 않는다. 브랜치마다 개수를 붙이려면 브랜치당 호출이
- * 하나씩 더 들기 때문에, 여기 없는 행에는 숫자를 쓰지 않는다.
- */
-export interface RowCounts {
-	/** 미커밋 변경 파일 수. 모르면 null. */
-	working: number | null;
-	/** 그 개수가 측정된 비교 대상과 파일 수. */
-	base: { name: string; files: number } | null;
+/** 지금 무엇을 보고 있는가. */
+export interface CurrentHead {
+	/** 뷰어가 연 경로(`repo` 파라미터). 리포 루트라는 보장은 없다. */
+	repo: string;
+	/** head로 고른 브랜치. 워크트리를 보고 있으면 null. */
+	head: string | null;
 }
 
-const files = (n: number): string => `${n} file(s)`;
-
-/**
- * 아직 커밋하지 않은 변경만 보는 선택. `merge-base(HEAD, HEAD) === HEAD`라서
- * 서버에 특별한 분기 없이 오늘의 워킹트리 뷰와 같은 결과가 된다.
- */
-const WORKING_VALUE = "HEAD";
-
-export const buildBaseRows = (
-	refs: readonly RefRecord[],
+const worktreeNote = (
+	worktree: WorktreeRecord,
 	defaultBranch: string | null,
-	currentBranch: string | null,
-	counts?: RowCounts,
-): BaseRow[] => {
-	// 0을 "nothing yet"으로 쓰는 이유: 숫자 0은 훑어볼 때 눈에 안 걸리는데,
-	// 이 행이 비어 있다는 사실이야말로 고르기 전에 알아야 하는 것이다.
-	const workingNote =
-		counts?.working == null
-			? null
-			: counts.working === 0
-				? "nothing yet"
-				: files(counts.working);
-
-	const workingRow: BaseRow = {
-		value: WORKING_VALUE,
-		label: "Working tree",
-		kind: "working",
-		section: "uncommitted",
-		tag: null,
-		note: workingNote,
-	};
-
-	const toRow = (r: RefRecord): BaseRow => {
-		// 자기 자신과 견주면 언제나 비어 보인다. 막지는 않되 왜 그런지
-		// 읽히도록 표시한다 — 조용한 빈 화면이 이 기능의 가장 큰 위험이다.
-		const tag =
-			r.name === defaultBranch
-				? "default"
-				: r.name === currentBranch
-					? "HEAD"
-					: null;
-		const measured =
-			counts?.base && counts.base.name === r.name
-				? files(counts.base.files)
-				: null;
-		const parts = [tag, measured].filter((s): s is string => s !== null);
-		return {
-			value: r.name,
-			label: r.name,
-			kind: r.kind,
-			section: "branches",
-			tag,
-			note: parts.length > 0 ? parts.join(" · ") : null,
-		};
-	};
-
-	// 지금 체크아웃한 브랜치를 브랜치 구역의 맨 위로 올린다. 브랜치가 수백 개인
-	// 리포에서 "나는 어디 있나"를 확인하려고 목록을 훑거나 검색어를 치지 않아도
-	// 되게 하는 것이 이 자리의 몫이다.
-	//
-	// 판단 근거는 태그가 아니라 **위치**다 — 자기 브랜치가 기본 브랜치이기도
-	// 하면 `toRow`의 태그는 `default`로 남지만, 지금 있는 곳이라는 사실은
-	// 그대로이므로 여전히 올린다.
-	//
-	// 올림은 로컬 안에서만 한다. 체크아웃된 브랜치는 언제나 로컬이고(원격
-	// 레코드의 이름은 `origin/main` 꼴이라 짧은 현재 브랜치명과 애초에 안
-	// 맞는다), 로컬이 원격보다 앞이므로 이것으로 구역 맨 위가 된다.
-	const isCurrent = (r: RefRecord): boolean =>
-		currentBranch !== null && r.name === currentBranch;
-	const locals = refs.filter((r) => r.kind === "local");
-
-	// 로컬을 먼저, 원격을 뒤로. 각 무리 안에서는 받은 순서를 그대로 둔다.
-	return [
-		workingRow,
-		...locals.filter(isCurrent).map(toRow),
-		...locals.filter((r) => !isCurrent(r)).map(toRow),
-		...refs.filter((r) => r.kind === "remote").map(toRow),
-	];
+): string | null => {
+	if (!worktree.branch) return null;
+	// 브랜치 구역과 같은 어휘로 `default`를 단다 — 왜 맨 위인지 읽히게.
+	// ` · `로 잇는 것은 이 피커가 태그와 개수를 잇던 방식 그대로다.
+	return worktree.branch === defaultBranch
+		? `${worktree.branch} · default`
+		: worktree.branch;
 };
 
-export const filterBaseRows = (
-	rows: readonly BaseRow[],
+/**
+ * 워크트리 구역. **고를 것이 없으면 구역 자체를 내지 않는다** — 제목만 남기고
+ * 목록을 비우면 "뭔가 있어야 하는데 없다"로 읽힌다. 워크트리가 하나면 지금
+ * 그것을 보고 있으므로 고를 것이 없다.
+ *
+ * 순서: default 브랜치를 물고 있는 워크트리 → 지금 보고 있는 것 → 받은 순서.
+ */
+const worktreeRows = (
+	worktrees: readonly WorktreeRecord[],
+	defaultBranch: string | null,
+	current: CurrentHead,
+): HeadRow[] => {
+	// head가 브랜치면 워크트리는 "지금 보고 있지 않은 것"이라 고를 대상이다 —
+	// 그때까지 숨기면 워크트리가 하나뿐인 리포에서 브랜치 뷰에 갇힌다.
+	if (worktrees.length <= 1 && current.head === null) return [];
+	// "내가 어느 워크트리에 있는가"는 repoLabel의 판정을 그대로 쓴다 — 답이
+	// 앱 안에 둘 있으면 안 되고, repo가 하위 디렉토리일 때도 맞아야 한다.
+	const viewed =
+		current.head === null ? findWorktree(worktrees, current.repo) : null;
+	const rank = (worktree: WorktreeRecord): number => {
+		if (defaultBranch !== null && worktree.branch === defaultBranch) return 0;
+		return worktree === viewed ? 1 : 2;
+	};
+	return [...worktrees]
+		.map((worktree, index) => ({ worktree, index }))
+		.sort((a, b) => rank(a.worktree) - rank(b.worktree) || a.index - b.index)
+		.map(({ worktree }) => ({
+			kind: "worktree" as const,
+			value: worktree.path,
+			label: repoDisplayName(worktree.path),
+			section: "worktrees" as const,
+			tag: null,
+			note: worktreeNote(worktree, defaultBranch),
+			selected: worktree === viewed,
+		}));
+};
+
+/**
+ * 브랜치 구역. 순서: default → 지금 보고 있는 브랜치 → 나머지(로컬 먼저).
+ *
+ * 올림은 **위치**로 판단한다 — 자기 브랜치가 default이기도 하면 태그는
+ * `default`로 남지만 자리는 하나뿐이므로 중복해서 올리지 않는다.
+ */
+const branchRows = (
+	refs: readonly RefRecord[],
+	defaultBranch: string | null,
+	current: CurrentHead,
+): HeadRow[] => {
+	const toRow = (record: RefRecord): HeadRow => {
+		const isDefault = record.name === defaultBranch;
+		return {
+			kind: record.kind,
+			value: record.name,
+			label: record.name,
+			section: "branches",
+			tag: isDefault ? "default" : null,
+			note: isDefault ? "default" : null,
+			selected: record.name === current.head,
+		};
+	};
+	const rank = (record: RefRecord): number => {
+		if (record.name === defaultBranch) return 0;
+		if (record.name === current.head) return 1;
+		return record.kind === "local" ? 2 : 3;
+	};
+	return [...refs]
+		.map((record, index) => ({ record, index }))
+		.sort((a, b) => rank(a.record) - rank(b.record) || a.index - b.index)
+		.map(({ record }) => toRow(record));
+};
+
+export const buildHeadRows = (
+	worktrees: readonly WorktreeRecord[],
+	refs: readonly RefRecord[],
+	defaultBranch: string | null,
+	current: CurrentHead,
+): HeadRow[] => [
+	...worktreeRows(worktrees, defaultBranch, current),
+	...branchRows(refs, defaultBranch, current),
+];
+
+export const filterPickerRows = (
+	rows: readonly HeadRow[],
 	query: string,
-): BaseRow[] => {
+): HeadRow[] => {
 	const needle = query.trim().toLowerCase();
 	if (needle === "") return [...rows];
 	return rows.filter((r) => r.label.toLowerCase().includes(needle));
