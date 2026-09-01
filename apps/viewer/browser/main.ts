@@ -932,6 +932,10 @@ const enrichEmptyState = async (): Promise<void> => {
 	// 바꾸면(새 diff가 로딩 중) 새 모드 문구의 카드를 그리면 모순이므로 버린다.
 	const mode = compareBase;
 	const untrackedShown = includeUntracked;
+	// head도 굳혀야 한다 — 브랜치를 갈아타도 base가 이미 `@auto`면 mode는 안
+	// 바뀌므로, head만 다른 두 요약이 같은 스냅샷을 통과해 옛 head의 카드가
+	// 그려질 수 있다.
+	const head = currentHead;
 	const summary = await fetchSummary();
 	// 요약이 없으면 이제서야 폴백 문구를 쓴다 — 여기까지 와야 "말할 것이
 	// 더 없다"가 참이 된다. 노드 동일성은 유지해 이후 marker 가드가 계속
@@ -944,7 +948,13 @@ const enrichEmptyState = async (): Promise<void> => {
 		return;
 	}
 	if (diffMount.querySelector("#empty") !== marker) return;
-	if (mode !== compareBase || untrackedShown !== includeUntracked) return;
+	if (
+		mode !== compareBase ||
+		untrackedShown !== includeUntracked ||
+		head !== currentHead
+	) {
+		return;
+	}
 	const model = buildEmptyStateModel(summary, {
 		mode: diffModeOf(mode),
 		untrackedShown,
@@ -1448,12 +1458,14 @@ window.addEventListener("focus", () => void load());
 const CHECK_SVG =
 	'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 
-// 목록을 받기 전에도 Working tree 행은 항상 있다. 빈 배열로 두면 피커를
-// 열 때마다 "No match"가 한 프레임 스치고, 그건 목록이 없는 것처럼 읽힌다.
-let pickerRows: HeadRow[] = buildHeadRows([], [], null, {
-	repo,
-	head: currentHead,
-});
+// 아직 /api/refs를 한 번도 못 받았다. head 모델에는 목록 없이 세울 수 있는
+// 행이 하나도 없으므로(워크트리 0개 + refs 0개 → 빈 배열) 이 값은 정말로
+// 비어 있다 — 예전 base 모델의 "Working tree 행은 항상 있다"는 전제는 더
+// 이상 참이 아니다. 그래서 빈 목록의 문구를 `pickerLoaded`로 가른다:
+// **"No match"는 걸러낸 결과가 없다는 뜻**이라, 받아 본 적조차 없는 첫
+// 오픈에 그걸 쓰면 "이 리포엔 고를 게 없다"는 거짓말이 한 프레임 스친다.
+let pickerRows: HeadRow[] = [];
+let pickerLoaded = false;
 // 방향키가 움직이는 활성 행. 필터가 바뀌면 첫 행으로 되돌린다.
 let pickerActive = 0;
 // 현재 화면에 그려진 행들 — 키보드 처리와 렌더가 같은 목록을 봐야 한다.
@@ -1469,7 +1481,8 @@ const renderPickerRows = (): void => {
 	if (rows.length === 0) {
 		const empty = document.createElement("div");
 		empty.id = "ref-picker-empty";
-		empty.textContent = "No match";
+		empty.setAttribute("role", "presentation");
+		empty.textContent = pickerLoaded ? "No match" : "Loading…";
 		pickerList.append(empty);
 		return;
 	}
@@ -1483,10 +1496,14 @@ const renderPickerRows = (): void => {
 			if (section !== null) {
 				const rule = document.createElement("div");
 				rule.className = "ref-divider";
+				// listbox의 허용 자식은 option/group뿐이라, 구분선·제목을 그냥
+				// 두면 보조기술이 옵션 수를 잘못 세거나 제목을 옵션처럼 읽는다.
+				rule.setAttribute("role", "presentation");
 				pickerList.append(rule);
 			}
 			const head = document.createElement("div");
 			head.className = "ref-section";
+			head.setAttribute("role", "presentation");
 			head.textContent = SECTION_LABEL[row.section] ?? row.section;
 			pickerList.append(head);
 			section = row.section;
@@ -1538,6 +1555,7 @@ const loadPickerRows = async (): Promise<void> => {
 		// /api/summary를 이어 받았는데, 그건 base 축의 수치라 head를 고르는
 		// 지금은 행의 뜻과 맞지 않는다(그리고 getRepoSummary는 의도적으로
 		// single-flight 밖이라 목록이 그 속도에 묶였다).
+		pickerLoaded = true;
 		pickerRows = buildHeadRows(body.worktrees, body.refs, body.defaultBranch, {
 			repo,
 			head: currentHead,

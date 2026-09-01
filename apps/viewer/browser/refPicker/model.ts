@@ -146,5 +146,12 @@ export const filterPickerRows = (
 ): HeadRow[] => {
 	const needle = query.trim().toLowerCase();
 	if (needle === "") return [...rows];
-	return rows.filter((r) => r.label.toLowerCase().includes(needle));
+	// `note`도 본다 — 워크트리 행의 **브랜치 이름**이 거기 산다. label만 보면
+	// 브랜치명을 타이핑했을 때 그 브랜치를 물고 있는 워크트리가 안 잡히는데,
+	// 그건 이 목록에서 가장 자연스러운 검색어다.
+	return rows.filter(
+		(r) =>
+			r.label.toLowerCase().includes(needle) ||
+			(r.note ?? "").toLowerCase().includes(needle),
+	);
 };

@@ -197,4 +197,11 @@ describe("filterPickerRows", () => {
 	test("returns nothing when the query matches nothing", () => {
 		expect(filterPickerRows(rows, "zzz")).toEqual([]);
 	});
+
+	// 워크트리 행의 **브랜치 이름**은 label이 아니라 note에 산다. label만 보면
+	// 이 목록에서 가장 자연스러운 검색어(브랜치명)로 워크트리를 못 찾는다.
+	test("finds a worktree by the branch it holds", () => {
+		const held = filterPickerRows(rows, "feat").map((r) => r.value);
+		expect(held).toContain("/w/repo/.claude/worktrees/feat");
+	});
 });

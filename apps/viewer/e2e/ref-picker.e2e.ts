@@ -170,6 +170,13 @@ test.describe("head picker", () => {
 			await expect(page.locator("#picker-name")).toHaveText("feature");
 			// URL이 진실이라야 새로고침·링크 공유가 그대로 재현된다.
 			expect(new URL(page.url()).searchParams.get("head")).toBe("feature");
+			// **저장하지 않는다** — 저장하면 다음에 이 리포를 열 때 남의 브랜치
+			// 뷰에 갇힌 채 시작한다. base 쪽(empty-state ④)과 짝이 되는 단언이다.
+			expect(
+				await page.evaluate(() =>
+					Object.keys(localStorage).filter((k) => k.includes("head")),
+				),
+			).toEqual([]);
 		} finally {
 			await stop();
 		}
@@ -183,6 +190,16 @@ test.describe("head picker", () => {
 			run(repoDir, ["worktree", "add", "-q", "-b", "side/work", nested]);
 
 			await page.goto(url);
+			// **먼저 head를 세운다.** 워킹트리 뷰에서 시작하면 URL에 `head`가
+			// 애초에 없어서, 구현이 그것을 그대로 실어 날라도 아래 단언이
+			// 통과한다 — 문서에 명시된 실패 모드를 못 잡는 vacuous 스펙이 된다.
+			await page.locator("#ref-picker-btn").click();
+			// `data-value`로 고른다 — 워크트리 행도 자기가 물고 있는 브랜치를
+			// 태그로 달고 있어서 hasText로는 그쪽이 먼저 잡힌다(워크트리 구역이
+			// 위에 있다). 값은 워크트리면 경로, 브랜치면 ref 이름이다.
+			await page.locator('#ref-picker .ref-row[data-value="feature"]').click();
+			expect(new URL(page.url()).searchParams.get("head")).toBe("feature");
+
 			await page.locator("#ref-picker-btn").click();
 			await page
 				.locator("#ref-picker .ref-row")
@@ -194,6 +211,9 @@ test.describe("head picker", () => {
 			expect(new URL(page.url()).searchParams.get("repo")).toBe(
 				realpathSync(nested),
 			);
+			// head는 워크트리에 매인 값이 아니다 — 들고 가면 새 워크트리에서
+			// 남의 브랜치를 보게 된다.
+			expect(new URL(page.url()).searchParams.get("head")).toBeNull();
 		} finally {
 			await stop();
 		}

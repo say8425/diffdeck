@@ -86,10 +86,23 @@ test.describe("toolbar change totals", () => {
 
 	// 변경이 없으면 개수와 함께 자리를 통째로 비운다 — `+0 -0`이 남으면
 	// 아무 말도 아닌 숫자가 툴바를 차지한다.
-	test("says nothing when there is nothing to count", async ({ page }) => {
-		const { url, stop } = await launchViewer([], { clean: true });
+	test("clears the totals when a render lands with nothing to count", async ({
+		page,
+	}) => {
+		// **전이를 봐야 한다.** clean 리포로 띄우면 첫 렌더가 곧 빈 분기라
+		// #change-add/#change-del이 마크업 상태(빈 문자열) 그대로이고, 그러면
+		// `applyChangeTotals([])` 배선을 통째로 지워도 이 단언이 초록이다 —
+		// CLAUDE.md가 경고하는 lockfile 픽스처와 같은 vacuity 구조다. 그래서
+		// 숫자가 실제로 **쓰인 뒤** 사라지는지를 본다.
+		const { url, repoDir, stop } = await launchViewer([]);
 		try {
 			await page.goto(url);
+			await expect(page.locator("#change-add")).not.toBeEmpty();
+
+			// 워킹트리를 되돌리면 볼 것이 없어진다.
+			capture(repoDir, ["checkout", "--", "."]);
+			await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+
 			await expect(page.locator("#status")).toBeEmpty();
 			await expect(page.locator("#change-totals")).toBeEmpty();
 		} finally {
