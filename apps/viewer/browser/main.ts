@@ -904,8 +904,16 @@ const fetchSummary = async (): Promise<RepoSummary | null> => {
 	}
 };
 
-// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패하면 기존
-// "No changes." 폴백이 그대로 남는다. marker 동일성 가드 — fetch 동안 다른
+/**
+ * 첫 로드와 **빈 상태 해석 중**에 쓰는 같은 표시. 두 자리가 같은 마크업을
+ * 쓰는 것이 계약이다 — 로딩에서 로딩으로 넘어가는 자리라 다른 것을 그리면
+ * 사용자에게는 한 번 깜박인 것으로 보인다.
+ */
+const LOADING_MARKUP =
+	'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+
+// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패해야만
+// "No changes." 폴백으로 내려앉는다. marker 동일성 가드 — fetch 동안 다른
 // 렌더가 #empty를 갈아치웠으면(새 diff 도착 등) 낡은 카드를 덮어쓰지 않는다.
 // 자동 base 전환을 한 페이지에서 한 번만 시도한다. 조건이 계속 참이어도
 // 재진입하지 않게 하는 안전장치다(전환 뒤에는 mode가 base라 조건 자체가
@@ -927,7 +935,16 @@ const enrichEmptyState = async (): Promise<void> => {
 	const mode = compareBase;
 	const untrackedShown = includeUntracked;
 	const summary = await fetchSummary();
-	if (!summary) return;
+	// 요약이 없으면 이제서야 폴백 문구를 쓴다 — 여기까지 와야 "말할 것이
+	// 더 없다"가 참이 된다. 노드 동일성은 유지해 이후 marker 가드가 계속
+	// 맞아떨어지게 한다.
+	if (!summary) {
+		if (diffMount.querySelector("#empty") === marker) {
+			marker.removeAttribute("data-loading");
+			marker.textContent = "No changes.";
+		}
+		return;
+	}
 	if (diffMount.querySelector("#empty") !== marker) return;
 	if (mode !== compareBase || untrackedShown !== includeUntracked) return;
 	const model = buildEmptyStateModel(summary, {
@@ -968,7 +985,15 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		teardownViews();
 		parseCache.prune([]);
 		diffMount.replaceChildren();
-		diffMount.innerHTML = '<div id="empty">No changes.</div>';
+		// **빈 상태의 문구는 /api/summary가 와야 정해진다.** 여기서 "No
+		// changes."를 먼저 그리면 그 말이 화면에 떴다가 60~80ms 뒤 카드가
+		// 도착하며 곧바로 뒤집힌다(실측: 첫 로드 673ms "No changes." → 753ms
+		// "No tracked changes …"). 자동 base 전환이 걸리는 경우엔 더 나쁘다 —
+		// 볼 것이 있는데도 없다고 한 번 말한 뒤 diff가 뜬다. 그래서 자리만
+		// 잡아 두고 문구는 enrichEmptyState가 **한 번만** 쓴다. 로딩 표시를
+		// 그대로 재사용하는 것이 계약이다: 다른 표시를 쓰면 로딩 → 로딩으로
+		// 넘어가는 자리에서 한 번 더 깜박인다.
+		diffMount.innerHTML = LOADING_MARKUP;
 		statusEl.textContent = "";
 		applyChangeTotals([]);
 		void enrichEmptyState();
@@ -1349,8 +1374,7 @@ const load = async (): Promise<void> => {
 	// 않는 것이 의도된 동작이다. 렌더가 성공하면 renderPatch가 이 노드를
 	// 통째로 대체한다.
 	if (!lastFiles) {
-		diffMount.innerHTML =
-			'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+		diffMount.innerHTML = LOADING_MARKUP;
 	}
 	const result = await fetchDiff();
 	if (result === null) {

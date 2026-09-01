@@ -20,6 +20,36 @@ const treeHasPath = (page: Page, path: string): Promise<boolean> =>
 			path,
 		);
 
+/**
+ * `#empty`가 거쳐 간 문구를 **첫 페인트 전부터** 기록한다. 깜박임은 최종
+ * 상태로는 원리적으로 안 보이므로(끝나고 나면 옳은 카드가 떠 있다) 중간
+ * 프레임을 붙잡아야만 잡힌다.
+ */
+const recordEmptyTexts = async (page: Page): Promise<void> => {
+	await page.addInitScript(() => {
+		const seen: string[] = [];
+		(window as unknown as { __emptyTexts: string[] }).__emptyTexts = seen;
+		const push = (): void => {
+			const el = document.getElementById("empty");
+			const text = el ? (el.textContent ?? "") : "";
+			if (text !== "" && seen[seen.length - 1] !== text) seen.push(text);
+		};
+		// `document`를 관찰한다 — 이 스크립트는 document-start에 도는데 그때
+		// `documentElement`는 아직 없을 수 있다(실측: 기록이 통째로 빈다).
+		new MutationObserver(push).observe(document, {
+			childList: true,
+			subtree: true,
+			characterData: true,
+		});
+		document.addEventListener("DOMContentLoaded", push);
+	});
+};
+
+const emptyTexts = (page: Page): Promise<string[]> =>
+	page.evaluate(
+		() => (window as unknown as { __emptyTexts: string[] }).__emptyTexts,
+	);
+
 test.describe("informative empty state", () => {
 	test("clean feature branch: card explains where the changes are", async ({
 		page,
@@ -176,6 +206,69 @@ test.describe("informative empty state", () => {
 			// 카드가 그대로 떠 있다는 것이 "덮지 않았다"의 증거다 — 자동 전환이
 			// 걸렸다면 diff가 렌더되어 카드가 사라진다.
 			await expect(page.locator("#empty.empty-card")).toBeVisible();
+		} finally {
+			await stop();
+		}
+	});
+	// 빈 상태의 문구는 /api/summary가 와야 정해진다. 예전엔 "No changes."를
+	// 먼저 그려 놓고 60~80ms 뒤 카드로 덮었다 — 사용자에게는 없다고 한 번
+	// 말한 뒤 말을 바꾸는 것으로 보인다(실측: 673ms "No changes." → 753ms
+	// 카드). 최종 상태로는 원리적으로 안 보이므로 중간 프레임을 기록해 본다.
+	test("never says No changes before the card is ready", async ({ page }) => {
+		const { url, stop } = await launchViewer([], {
+			clean: true,
+			featureBranchCommit: true,
+		});
+		try {
+			await recordEmptyTexts(page);
+			await page.goto(url);
+			await expect(
+				page.locator("#empty.empty-card .empty-headline"),
+			).toHaveText("No tracked changes");
+
+			const texts = await emptyTexts(page);
+			// 로딩 표시에서 카드로 곧장 간다. 그 사이 어떤 문구도 끼면 안 된다.
+			expect(texts).not.toContain("No changes.");
+			expect(texts[0]).toContain("Loading diff…");
+		} finally {
+			await stop();
+		}
+	});
+
+	// 자동 base 전환이 걸리는 경우가 가장 나쁘다 — 볼 것이 있는데도 "없다"고
+	// 한 번 말한 뒤 diff가 뜬다.
+	test("the auto base switch shows no interim No changes", async ({ page }) => {
+		const { url, repoDir, stop } = await launchViewer([], {
+			clean: true,
+			featureBranchCommit: true,
+		});
+		try {
+			rmSync(join(repoDir, "data.txt"));
+			await recordEmptyTexts(page);
+			await page.goto(url);
+			await expect(page.locator("#status")).toHaveText("1 file(s)");
+
+			expect(await emptyTexts(page)).not.toContain("No changes.");
+		} finally {
+			await stop();
+		}
+	});
+
+	// 요약을 못 받아야만 폴백 문구로 내려앉는다 — 새로 생긴 분기라 일부러
+	// 그리로 들어간다(커버리지는 branch를 세지 않고, main.ts는 게이트 밖이다).
+	test("falls back to the bare line when the summary is unreachable", async ({
+		page,
+	}) => {
+		const { url, stop } = await launchViewer([], {
+			clean: true,
+			featureBranchCommit: true,
+		});
+		try {
+			await page.route("**/api/summary*", (route) => route.abort());
+			await page.goto(url);
+			await expect(page.locator("#empty")).toHaveText("No changes.");
+			// 폴백은 로딩 표시를 걷어낸다 — 스피너가 남으면 영원히 로딩이다.
+			await expect(page.locator("#empty")).not.toHaveAttribute("data-loading");
 		} finally {
 			await stop();
 		}
