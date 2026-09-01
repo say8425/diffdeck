@@ -209,9 +209,13 @@ let lastRepoRoot: string | null = null;
  * `@auto`의 이름은 서버가 매 diff 응답의 `x-diff-base`로 알려준다.
  */
 const baseDisplay = (): string | null =>
-	compareBase === "HEAD"
+	// 커밋된 rev를 보는 중이면 워킹트리 기준은 뜻이 없어 서버가 auto로
+	// 해석한다(`server/selection.ts`의 normalize). 화면도 같은 규칙을 써야
+	// 라벨이 서버가 실제로 쓴 기준과 어긋나지 않는다 — 안 그러면 서버는
+	// main과 견주는데 툴바는 아무 말도 안 한다.
+	compareBase === "HEAD" && currentHead === null
 		? null
-		: compareBase === "@auto"
+		: compareBase === "HEAD" || compareBase === "@auto"
 			? diffBase || null
 			: compareBase;
 
@@ -1252,7 +1256,7 @@ type FetchDiffAttempt =
 	| FetchDiffResult
 	// 서버가 살아있고 이 요청 자체가 잘못됐다는 신호(토큰 불일치·git repo
 	// 아님) — 재시도해도 같은 답을 받으므로 즉시 포기한다.
-	| { kind: "terminal"; unknownBase: boolean }
+	| { kind: "terminal"; unknownBase: boolean; unknownHead: boolean }
 	// 서버가 일시적으로 응답을 못 만든(single-flight 타임아웃 503,
 	// singleFlight.ts) 경우와 네트워크 레벨 실패(fetch 자체가 throw) —
 	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다.
@@ -1276,9 +1280,11 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		if (res.status === 304) return { kind: "unchanged", base };
 		if (res.status === 503) return { kind: "retryable" };
 		if (!res.ok) {
+			const marker = res.headers.get("x-diff-error");
 			return {
 				kind: "terminal",
-				unknownBase: res.headers.get("x-diff-error") === "unknown-base",
+				unknownBase: marker === "unknown-base",
+				unknownHead: marker === "unknown-head",
 			};
 		}
 		const files = (await res.json()) as DiffFile[];
@@ -1326,7 +1332,11 @@ const recoverFromStaleBase = (unknownBase: boolean): boolean => {
 	return true;
 };
 
+/** 직전 시도가 "그 head를 못 찾겠다"로 끝났으면 그 ref 이름. */
+let lastUnknownHead: string | null = null;
+
 const fetchDiff = async (): Promise<FetchDiffResult | null> => {
+	lastUnknownHead = null;
 	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
 	// 재시도)에 의존하므로 의도적으로 순차 실행 — Promise.all로 병렬화할 대상이
 	// 아니다 (diff.ts:resolveBaseRef와 동일 관례).
@@ -1342,6 +1352,11 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 				attempt--;
 				continue;
 			}
+			// head는 base와 달리 **URL에 산다** — 저장된 값을 조용히 지우는
+			// 자가복구를 쓸 수 없다(링크가 요청한 것과 다른 화면을 이유도 없이
+			// 보여주게 된다). 대신 화면이 무슨 일인지 말하고 빠져나갈 길을
+			// 준다. 이 종류는 흔하다: 머지 후 삭제된 브랜치를 가리키는 링크.
+			lastUnknownHead = result.unknownHead ? currentHead : null;
 			return null;
 		}
 		if (attempt >= RETRY_DELAYS_MS.length) return null;
@@ -1372,6 +1387,34 @@ const applyFetched = (result: FetchDiffResult): void => {
 	renderPatch(result.files);
 };
 
+/**
+ * "그 head가 없다" 카드. 빈 상태 카드와 **같은 클래스**를 쓴다 — 새 어휘를
+ * 만들 이유가 없고, 액션 버튼의 생김새도 그대로 물려받는다.
+ */
+const renderMissingHead = (ref: string): void => {
+	diffMount.replaceChildren();
+	const card = document.createElement("div");
+	card.id = "empty";
+	card.className = "empty-card";
+	const headline = document.createElement("div");
+	headline.className = "empty-headline";
+	headline.textContent = "That branch is gone";
+	const context = document.createElement("div");
+	context.className = "empty-context";
+	context.textContent = `No ref named ${ref} in this repo`;
+	const action = document.createElement("button");
+	action.type = "button";
+	action.className = "empty-action";
+	action.textContent = "View the working tree instead";
+	action.addEventListener("click", () => {
+		const next = new URL(location.href);
+		next.searchParams.delete("head");
+		location.href = next.toString();
+	});
+	card.append(headline, context, action);
+	diffMount.append(card);
+};
+
 const load = async (): Promise<void> => {
 	// 정체성 갱신은 diff와 독립이다 — 기다리지 않는다. 브랜치를 갈아탄 뒤
 	// 창으로 돌아오면(focus → load) 라벨이 따라온다.
@@ -1399,6 +1442,18 @@ const load = async (): Promise<void> => {
 		// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
 		// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
 		// changes."를 계속 주장하게 된다.
+		// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
+		// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
+		// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
+		// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
+		// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
+		// 달리 사용자가 속는다.
+		const goneHead = lastUnknownHead;
+		if (goneHead !== null) {
+			if (!codeView) renderMissingHead(goneHead);
+			statusEl.textContent = "";
+			return;
+		}
 		if (!codeView) {
 			diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
 		}

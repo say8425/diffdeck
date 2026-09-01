@@ -261,4 +261,34 @@ test.describe("head picker", () => {
 			await stop();
 		}
 	});
+
+	// 머지 후 삭제된 브랜치를 가리키는 링크. 예전엔 "Failed to load diff."만
+	// 남고 새로고침해도 같아서 스스로 못 빠져나왔다 — head는 URL에 살아서
+	// base처럼 저장된 값을 지우는 자가복구를 쓸 수 없기 때문이다.
+	test("a head that no longer exists says so and offers a way out", async ({
+		page,
+	}) => {
+		const { url, stop } = await launchViewer([], OPTS);
+		try {
+			await page.goto(`${url}&head=gone-branch`);
+
+			const card = page.locator("#empty.empty-card");
+			await expect(card.locator(".empty-headline")).toHaveText(
+				"That branch is gone",
+			);
+			await expect(card.locator(".empty-context")).toHaveText(
+				"No ref named gone-branch in this repo",
+			);
+
+			// **자동으로 되돌리지 않는다** — 링크가 요청한 것을 말없이 바꾸면
+			// 사용자가 속는다. URL은 그대로여야 한다.
+			expect(new URL(page.url()).searchParams.get("head")).toBe("gone-branch");
+
+			await card.locator("button.empty-action").click();
+			await expect(page.locator("#status")).toHaveText(/file\(s\)/);
+			expect(new URL(page.url()).searchParams.get("head")).toBeNull();
+		} finally {
+			await stop();
+		}
+	});
 });

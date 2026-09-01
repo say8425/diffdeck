@@ -208,4 +208,33 @@ describe("selectionCacheKey with an explicit head", () => {
 			selectionCacheKey(sel("repo=/r&head=dev"), null),
 		);
 	});
+
+	// 커밋된 rev에는 "아직 커밋 안 한 것"이 없다. 곧이곧대로 답하면
+	// `git diff <rev> <rev>`가 되어 에러 없이 빈 화면이 되므로, 의미 없는
+	// 조합을 유일하게 말이 되는 해석으로 푼다.
+	test("a rev head with a working-tree base resolves to auto", () => {
+		for (const q of [
+			"head=feat",
+			"head=feat&base=HEAD",
+			"head=feat&mode=working",
+		]) {
+			const sel = parseSelection(new URLSearchParams(q));
+			expect(sel.base).toEqual({ kind: "auto" });
+			expect(sel.head).toEqual({ kind: "ref", ref: "feat" });
+		}
+	});
+
+	// 사용자가 고른 진짜 base는 그대로 둔다 — 정규화는 "빈 화면 조합" 하나만
+	// 건드린다.
+	test("an explicit base ref survives alongside a head", () => {
+		const sel = parseSelection(new URLSearchParams("head=feat&base=develop"));
+		expect(sel.base).toEqual({ kind: "ref", ref: "develop" });
+	});
+
+	// 워킹트리를 보는 기본 뷰는 정규화 대상이 아니다.
+	test("a worktree head keeps the working-tree base", () => {
+		expect(parseSelection(new URLSearchParams("")).base).toEqual({
+			kind: "head",
+		});
+	});
 });

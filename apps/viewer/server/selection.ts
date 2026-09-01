@@ -71,12 +71,35 @@ export interface Selection {
 	head: HeadSelector;
 }
 
-export const parseSelection = (params: URLSearchParams): Selection => ({
-	repo: params.get("repo") ?? "",
-	untracked: params.get("untracked") === "1",
-	base: parseBase(params),
-	head: parseHead(params),
-});
+/**
+ * **커밋된 rev를 보는데 base가 워킹트리면 그 조합은 정의상 빈 diff다.**
+ * `base=HEAD`(= `mode=working`, = base 미지정)는 "아직 커밋 안 한 것만"이라는
+ * 뜻인데 커밋된 rev에는 그런 것이 없어서, 서버가 곧이곧대로 답하면
+ * `git diff <rev> <rev>`가 되어 **에러 없이 빈 화면**이 나온다(실측:
+ * `?head=main`이라는 가장 자연스러운 수동·공유 URL이 그렇다. 빈 상태 카드는
+ * `No changes on main`이라고 말하는데 실제로는 그 브랜치에 볼 것이 많다).
+ *
+ * 자동 base 전환도 여기서는 구제하지 못한다 — 그 판정은 카드의 `switch-mode`
+ * 액션 유무를 보는데, mode가 working이면 `getRepoSummary`가 base 개수를 아예
+ * 재지 않아(`opts.ref`가 없다) 액션이 생기지 않는다.
+ *
+ * 그래서 의미 없는 조합을 빈 화면으로 답하는 대신 사용자가 원했을 수 있는
+ * 유일한 해석 — "그 브랜치가 갈라진 뒤 한 일" — 으로 푼다. **이 규칙은 원래
+ * 브라우저 한 줄(`applyPick`의 `compareBase === "HEAD" → "@auto"`)에만 살아서
+ * URL을 손으로 만들면 우회됐다.** 파서로 올려 한 곳으로 만든다.
+ */
+const normalize = (base: BaseSelector, head: HeadSelector): BaseSelector =>
+	head.kind === "ref" && base.kind === "head" ? { kind: "auto" } : base;
+
+export const parseSelection = (params: URLSearchParams): Selection => {
+	const head = parseHead(params);
+	return {
+		repo: params.get("repo") ?? "",
+		untracked: params.get("untracked") === "1",
+		base: normalize(parseBase(params), head),
+		head,
+	};
+};
 
 /**
  * payload 캐시와 single-flight가 공유하는 키.
