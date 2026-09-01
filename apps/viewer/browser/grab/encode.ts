@@ -15,6 +15,16 @@ export interface EncodeInput {
 	status: GrabFileStatus;
 	mode: "working" | "base";
 	baseName: string;
+	/**
+	 * 지금 보고 있는 리비전(head 축). 워킹트리를 보고 있으면 없다.
+	 *
+	 * **이게 빠지면 참조가 거짓말을 한다**: 브랜치를 head로 보는 화면에서
+	 * 잡은 줄은 그 브랜치의 **커밋된** 내용인데, 붙여넣기를 받은 에이전트는
+	 * 자기 워킹트리의 같은 경로를 연다 — 다른 브랜치일 수 있다. 이 기능의
+	 * 존재 이유가 "에이전트에게 바로 붙여넣기"이므로 어느 리비전인지 말해야
+	 * 한다.
+	 */
+	head?: string;
 	snippet: Snippet;
 	prompt: string;
 }
@@ -25,9 +35,14 @@ const fmtRange = (start: number, end: number): string =>
 const sideText = (side: "old" | "new"): string =>
 	side === "new" ? "new side" : "old side";
 
-const modeText = (mode: "working" | "base", baseName: string): string => {
-	if (mode !== "base") return "working diff";
-	return baseName ? `base diff vs ${baseName}` : "base diff";
+const modeText = (
+	mode: "working" | "base",
+	baseName: string,
+	head?: string,
+): string => {
+	const at = head ? ` on ${head}` : "";
+	if (mode !== "base") return `working diff${at}`;
+	return baseName ? `base diff vs ${baseName}${at}` : `base diff${at}`;
 };
 
 const statusSuffix = (status: GrabFileStatus): string =>
@@ -93,7 +108,7 @@ export const encodeGrab = (input: EncodeInput): string => {
 	const fileLine = input.prevPath
 		? `File: ${input.path} (renamed from ${input.prevPath})`
 		: `File: ${input.path}`;
-	const meta = `${modeText(input.mode, input.baseName)}${statusSuffix(input.status)}`;
+	const meta = `${modeText(input.mode, input.baseName, input.head)}${statusSuffix(input.status)}`;
 	const linesLine =
 		snippet.kind === "side"
 			? `Lines: ${fmtRange(snippet.startLine, snippet.endLine)} (${sideText(snippet.side)}, ${meta})`

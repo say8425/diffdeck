@@ -128,6 +128,19 @@ describe("buildEmptyStateModel", () => {
 		expect(m.context).toBe("detached @ abc1234");
 	});
 
+	// head가 커밋된 rev면 서버가 워킹트리를 재지 않고 null을 준다. 그때
+	// "Working tree clean"이라고 말하면 보고 있지도 않은 워킹트리에 대해
+	// 단언하는 것 — null을 도입한 이유가 그것이다.
+	test("unmeasured working tree makes no claim about it", () => {
+		const m = buildEmptyStateModel(
+			summary({ workingFiles: null, untrackedFiles: null }),
+			{ mode: "working", untrackedShown: false },
+		);
+		expect(m.headline).toBe("No changes");
+		// 재지 않은 개수로 "숨겨진 untracked가 있다"고 권하지도 않는다.
+		expect(m.actions.some((a) => a.kind === "show-untracked")).toBe(false);
+	});
+
 	test("working mode ignores a zero baseFiles for actions", () => {
 		const m = buildEmptyStateModel(summary({ baseFiles: 0 }), {
 			mode: "working",

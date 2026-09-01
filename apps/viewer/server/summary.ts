@@ -55,7 +55,7 @@ export const getRepoSummary = async (
 	const workingFiles = opts.head
 		? null
 		: countZ(
-				await $`git -C ${repo} diff --name-only -z HEAD 2>/dev/null`
+				await $`git -C ${repo} diff --name-only -z HEAD -- 2>/dev/null`
 					.nothrow()
 					.text(),
 			);
@@ -76,12 +76,14 @@ export const getRepoSummary = async (
 		});
 		if (mergeBase) {
 			// diff와 같은 축을 세야 카드가 화면과 다른 개수를 말하지 않는다.
+			// 끝의 `--`는 diff.ts의 같은 이유다 — 참조 이름이 경로와 겹치면
+			// `ambiguous argument`가 나고 nothrow가 그것을 0으로 삼킨다.
 			baseFiles = countZ(
 				opts.head
-					? await $`git -C ${repo} diff --name-only -z ${mergeBase} ${opts.head} 2>/dev/null`
+					? await $`git -C ${repo} diff --name-only -z ${mergeBase} ${opts.head} -- 2>/dev/null`
 							.nothrow()
 							.text()
-					: await $`git -C ${repo} diff --name-only -z ${mergeBase} 2>/dev/null`
+					: await $`git -C ${repo} diff --name-only -z ${mergeBase} -- 2>/dev/null`
 							.nothrow()
 							.text(),
 			);

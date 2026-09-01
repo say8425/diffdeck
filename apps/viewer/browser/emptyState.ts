@@ -29,11 +29,20 @@ export const buildEmptyStateModel = (
 	const { base } = summary;
 	// working 모드 헤드라인: 숨겨진 untracked가 있으면 "Working tree clean"은
 	// git 어휘상 거짓(untracked도 워킹트리 상태)이므로 측정한 것만 주장한다.
+	//
+	// **`null`을 `0`으로 접으면 안 된다.** head가 커밋된 rev면 서버가
+	// untracked를 재지 않고 `null`을 주는데(재지 않은 것을 0으로 적으면 그게
+	// 곧 주장이 된다 — summary.ts의 계약), `?? 0`으로 접으면 워킹트리를 보고
+	// 있지도 않은 화면이 "Working tree clean"이라고 그 워킹트리에 대해
+	// 단언한다. 모르면 아무 말도 안 하는 쪽(`No changes`)으로 간다.
+	const untracked = summary.untrackedFiles;
 	const headline =
 		opts.mode === "working"
-			? (summary.untrackedFiles ?? 0) > 0
-				? "No tracked changes"
-				: "Working tree clean"
+			? untracked === null
+				? "No changes"
+				: untracked > 0
+					? "No tracked changes"
+					: "Working tree clean"
 			: base
 				? `No changes vs ${base}`
 				: "No changes";

@@ -84,7 +84,12 @@
 			/* 줄어드는 몫은 전부 트리거가 진다. 뒤따르는 세 마디(견줄 기준 · 개수 ·
 			   변경량)는 짧고 고정폭에 가까운데 트리거만 브랜치명만큼 길어지기
 			   때문이고, 이 규칙이 없으면 #status가 두 줄로 접혀 툴바 높이가
-			   43 → 49px로 뛴다(실측). id 규칙이 이걸 이긴다. */
+			   43 → 49px로 뛴다(실측).
+
+			   예외는 아래 `#toolbar .tb-picker`가 되돌려 받는다. **특이도로**
+			   이긴다(0,1,1 대 0,1,0) — 예전엔 `.tb-picker`라 둘 다 (0,1,0)이고
+			   소스 순서로만 이겼는데, 그러면 피커 규칙을 한곳으로 모으는
+			   평범한 정리가 트리거를 조용히 `flex: none`으로 되돌린다. */
 			.tb-left > * {
 				flex: none;
 			}
@@ -408,11 +413,19 @@
 			   버튼이 flex item이 아니라서 줄어드는 몫을 물려받지 못하고 제
 			   자연폭 그대로 상자를 넘쳐, 트리거가 아무리 좁아져도 라벨은
 			   한 번도 잘리지 않는다(실측: scrollWidth == clientWidth). */
-			.tb-picker {
+			#toolbar .tb-picker {
 				display: flex;
 				flex: 0 1 auto;
 				min-width: 0;
 			}
+			/* **`min-width: 0`은 위 `display: flex`와 한 짝이다.** `.tb-picker`가
+			   flex 컨테이너가 된 순간 이 버튼은 flex item이고, 기본
+			   `min-width: auto`가 콘텐츠 기반 최소 크기 — 즉 `nowrap` 라벨의
+			   텍스트 전체 폭 — 으로 풀린다. 라벨 자신의 `overflow: hidden`은
+			   라벨의 자동 최소값만 0으로 만들 뿐 버튼의 min-content 기여를
+			   줄이지 못하므로, 이 줄이 빠지면 `display: flex`를 지웠을 때와
+			   **똑같이** 라벨이 한 번도 안 잘린다. 이 줄은 옛 `max-width: 260px`을
+			   대체하며 들어왔으니 "상한을 없앴으니 잉여"로 읽고 지우지 말 것. */
 			#toolbar #ref-picker-btn {
 				gap: 8px;
 				min-width: 0;

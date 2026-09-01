@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
@@ -355,6 +355,32 @@ describe("head selection (rev → rev)", () => {
 			head: "feat",
 		});
 		expect(files.some((f) => f.status === "untracked")).toBe(false);
+	});
+
+	// **참조 이름이 트래킹된 경로와 같을 때.** `docs`·`src`·`test` 같은 이름은
+	// 흔한데, `git diff <base> <ref>`에 `--`가 없으면 git이 rev인지 path인지
+	// 못 정해 `ambiguous argument`로 죽는다. 그 실패는 `2>/dev/null` +
+	// `.nothrow()`가 빈 문자열로 삼켜 **에러 없는 "변경 없음"** 이 된다 —
+	// 사용자는 피커에서 그 브랜치를 고르기만 해도 이 상태에 들어간다.
+	// 기존 픽스처의 `feat`/`main`은 원리적으로 이 결함을 못 잡는다.
+	test("a branch named like a tracked directory still diffs", async () => {
+		await $`git -C ${repo} branch -M main`;
+		mkdirSync(join(repo, "docs"));
+		writeFileSync(join(repo, "docs", "a.md"), "on main\n");
+		await $`git -C ${repo} add docs`;
+		await $`git -C ${repo} commit -qm docs`;
+		await $`git -C ${repo} checkout -qb docs`;
+		writeFileSync(join(repo, "docs", "b.md"), "on the branch\n");
+		await $`git -C ${repo} add docs`;
+		await $`git -C ${repo} commit -qm "more docs"`;
+		await $`git -C ${repo} checkout -q main`;
+
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "docs",
+		});
+		expect(files.map((f) => f.name)).toEqual(["docs/b.md"]);
 	});
 
 	// 이미지 카드가 텍스트 diff와 다른 축을 보면 안 된다.

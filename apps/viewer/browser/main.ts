@@ -236,11 +236,6 @@ const applyRepoLabel = (
 	document.title = view.documentTitle;
 };
 
-// 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
-// /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
-// hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
-applyRepoLabel([], null);
-
 /**
  * 브랜치를 /api/refs로 최신화한다.
  *
@@ -638,6 +633,9 @@ const buildGrabSnapshot = (
 		status: statusOf(fileId),
 		mode: diffModeOf(compareBase),
 		baseName: effectiveBaseName(),
+		// 어느 리비전에서 잡았는지 — 없으면 참조가 워킹트리를 가리키는 것으로
+		// 읽힌다(encode.ts의 `head` 주석). blobUrl 호출부와 같은 관례.
+		...(currentHead ? { head: currentHead } : {}),
 		snippet,
 	};
 	return {
@@ -1702,6 +1700,19 @@ const compareBaseFromStorage = urlChoice === null;
 compareBase =
 	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) ??
 	(storedLegacyMode === "base" ? "@auto" : "HEAD");
+// 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
+// /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
+// hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
+//
+// **이 호출은 `compareBase`·`currentHead` 선언보다 뒤에 있어야 한다.** 한때
+// 선언부(284·291행)보다 앞인 242행에 있었는데, 그때 살아 있던 이유는
+// 번들러뿐이었다: `bun build`가 최상위 `let`을 `var`로 낮춰 TDZ가 아니라
+// `undefined`가 됐다(실측 — 같은 코드를 ESM 그대로 평가하면
+// `ReferenceError: Cannot access 'currentHead' before initialization`으로
+// 모듈이 통째로 죽는다). 게다가 `undefined`는 `null`이 아니라 head 분기를
+// 통과해 `#base-label`에 리터럴 `"vs undefined"`를 썼다 — 같은 동기 실행
+// 안의 이 호출이 덮어써서 페인트만 안 됐을 뿐이다. 타입체크도 커버리지도
+// 유닛도 이걸 못 본다(main.ts는 셋 다 밖이다).
 applyRepoLabel();
 
 // Apply persisted file-tree side and reflect stored prefs in the overflow menu.

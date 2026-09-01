@@ -293,11 +293,21 @@ export const getDiffFiles = async (
 	if (base) {
 		// head가 있으면 리비전 둘을 준다(rev→rev). 없으면 리비전 하나 —
 		// 그때만 오른쪽이 워킹트리가 되어 미커밋 변경이 함께 실린다.
+		//
+		// **끝의 `--`가 계약이다.** 참조 이름이 트래킹된 경로와 같으면(흔하다:
+		// `docs`·`src`·`test`) git이 rev인지 path인지 못 정해 `ambiguous
+		// argument`로 죽는데, `2>/dev/null` + `.nothrow()`가 그 실패를 빈
+		// 문자열로 삼켜 **에러 없는 "변경 없음" 화면**이 된다(실측). 피커가
+		// `%(refname:short)`를 그대로 넘기므로 사용자는 목록에서 고르기만
+		// 해도 이 상태에 들어간다. head 축이 사용자 ref 이름을 `git diff`의
+		// 위치 인자로 처음 통과시키면서 열린 노출이다 — 예전엔 언제나
+		// `HEAD` 아니면 merge-base OID였다. `merge-base`·`rev-list`·
+		// `rev-parse`·`show <rev>:<path>`는 rev만 받아 영향이 없다(실측).
 		const nameStatus = opts.head
-			? await $`git -C ${repo} diff --name-status -z ${base} ${opts.head} 2>/dev/null`
+			? await $`git -C ${repo} diff --name-status -z ${base} ${opts.head} -- 2>/dev/null`
 					.nothrow()
 					.text()
-			: await $`git -C ${repo} diff --name-status -z ${base} 2>/dev/null`
+			: await $`git -C ${repo} diff --name-status -z ${base} -- 2>/dev/null`
 					.nothrow()
 					.text();
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
