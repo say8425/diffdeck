@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.4.0...diffdeck-v1.5.0) (2026-09-04)
+
+
+### Features
+
+* 그랩 팝오버 ⌥⏎ 단순 복사와 라인넘버 드래그 선택 제거 ([#69](https://github.com/say8425/diffdeck/issues/69)) ([eeeff04](https://github.com/say8425/diffdeck/commit/eeeff046afdfd472caeae1626a00eccb40b958ac))
+
 ## [1.4.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.3.2...diffdeck-v1.4.0) (2026-08-21)
 
 
