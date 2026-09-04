@@ -117,3 +117,55 @@ test("reports the ref it measured against, prefix intact", async () => {
 	expect(summary.base).toBe("main");
 	expect(summary.ref).toBe("origin/main");
 });
+
+describe("getRepoSummary with a head revision", () => {
+	// 워킹트리는 그 뷰의 측정 대상이 아니다. 0으로 적으면 "아무것도 없다"는
+	// 주장이 되어, 실제로는 미커밋 변경이 있는데도 카드가 조용하다고 말한다.
+	test("does not claim anything about the working tree", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "feat\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q main`;
+		// 워킹트리를 더럽혀 둔다 — 그래도 null이어야 한다.
+		writeFileSync(join(repo, "a.txt"), "dirty\n");
+		writeFileSync(join(repo, "scratch.txt"), "untracked\n");
+
+		const s = await getRepoSummary(repo, {
+			base: "main",
+			ref: "main",
+			head: "feat",
+		});
+		expect(s.workingFiles).toBeNull();
+		expect(s.untrackedFiles).toBeNull();
+	});
+
+	// 카드의 "on <branch>"가 보고 있지도 않은 곳을 가리키면 안 된다.
+	test("names the branch being viewed, not the worktree's", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} branch feat`;
+		const s = await getRepoSummary(repo, {
+			base: "main",
+			ref: "main",
+			head: "feat",
+		});
+		expect(s.branch).toBe("feat");
+	});
+
+	// 개수를 diff와 같은 축으로 세야 카드가 화면과 다른 말을 하지 않는다.
+	test("counts the base diff against the head revision", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "feat\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q main`;
+
+		const s = await getRepoSummary(repo, {
+			base: "main",
+			ref: "main",
+			head: "feat",
+		});
+		expect(s.baseFiles).toBe(1);
+		expect(s.aheadCommits).toBe(1);
+	});
+});

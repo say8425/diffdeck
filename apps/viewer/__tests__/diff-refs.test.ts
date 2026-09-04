@@ -3,7 +3,12 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import { getRefs, parseRefList, parseWorktreeList } from "../server/refs.ts";
+import {
+	getRefs,
+	parseRefList,
+	parseRepoRoot,
+	parseWorktreeList,
+} from "../server/refs.ts";
 
 // `git worktree list --porcelain -z`의 실측 형식(git 2.54.0): 속성 한 줄마다
 // NUL이 붙고, 레코드 사이는 빈 항목이다.
@@ -14,6 +19,53 @@ const wt = (...records: string[][]): string =>
 // 사이에 리터럴 개행이 하나 들어간다.
 const refs = (...records: string[][]): string =>
 	records.map((fields) => `${fields.join("\0")}\0`).join("\n");
+
+describe("parseRepoRoot", () => {
+	// git은 메인 워크트리를 **항상 먼저** 낸다 — 링크된 워크트리나 중첩
+	// 워크트리에서 명령을 실행해도 그렇다(실측: 평범·bare·중첩 셋 다).
+	// 그래서 리포 루트는 git 호출을 늘리지 않고 첫 레코드에서 얻는다.
+	test("takes the first record — the main worktree", () => {
+		const raw = wt(
+			["worktree /repo", "HEAD abc", "branch refs/heads/main"],
+			[
+				"worktree /repo/.claude/worktrees/feat",
+				"HEAD abc",
+				"branch refs/heads/feat",
+			],
+		);
+		expect(parseRepoRoot(raw)).toBe("/repo");
+	});
+
+	// **bare가 정확히 이 함수가 필요한 이유다.** parseWorktreeList는 bare를
+	// 걸러내므로(워킹트리가 없어 고를 수 없다) 그 결과의 첫 항목은 메인이
+	// 아니라 링크된 워크트리다 — 실측으로 확인했다. 필터 전 원본을 읽어야
+	// 리포 이름을 옳게 말한다.
+	test("keeps the bare main worktree that parseWorktreeList drops", () => {
+		const raw = wt(
+			["worktree /srv/myproj.git", "bare"],
+			["worktree /srv/wt-feat", "HEAD abc", "branch refs/heads/feat"],
+		);
+		expect(parseRepoRoot(raw)).toBe("/srv/myproj.git");
+		expect(parseWorktreeList(raw).map((w) => w.path)).toEqual(["/srv/wt-feat"]);
+	});
+
+	test("keeps a prunable main worktree too", () => {
+		const raw = wt(
+			[
+				"worktree /repo",
+				"HEAD abc",
+				"prunable gitdir file points to non-existent location",
+			],
+			["worktree /wt", "HEAD abc", "branch refs/heads/feat"],
+		);
+		expect(parseRepoRoot(raw)).toBe("/repo");
+	});
+
+	test("returns null when git said nothing", () => {
+		expect(parseRepoRoot("")).toBeNull();
+		expect(parseRepoRoot("\0")).toBeNull();
+	});
+});
 
 describe("parseWorktreeList", () => {
 	test("reads path, branch and head from an attached worktree", () => {

@@ -59,6 +59,21 @@ describe("encodeGrab", () => {
 			"(new side, base diff)",
 		);
 	});
+	// 브랜치를 head로 보는 화면에서 잡은 줄은 그 브랜치의 **커밋된** 내용이다.
+	// 참조가 그걸 말하지 않으면 붙여넣기를 받은 에이전트가 자기 워킹트리의
+	// 같은 경로(다른 브랜치일 수 있다)를 열어 엉뚱한 줄을 고친다.
+	test("head를 보고 있으면 어느 리비전인지 말한다", () => {
+		expect(
+			encodeGrab({ ...base, mode: "base", baseName: "main", head: "develop" }),
+		).toContain("Lines: 84-98 (new side, base diff vs main on develop)");
+	});
+
+	test("head 없으면 예전 문구 그대로 — 워킹트리를 보고 있다는 뜻이다", () => {
+		expect(encodeGrab({ ...base, mode: "base", baseName: "main" })).toContain(
+			"Lines: 84-98 (new side, base diff vs main)",
+		);
+	});
+
 	test("untracked 상태 주석", () => {
 		expect(encodeGrab({ ...base, status: "untracked" })).toContain(
 			"(new side, working diff, untracked)",

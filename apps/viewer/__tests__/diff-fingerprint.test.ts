@@ -22,6 +22,25 @@ afterEach(() => {
 });
 
 describe("repoFingerprint", () => {
+	// head가 브랜치면 그 브랜치가 움직였을 때 캐시가 깨져야 한다 — 이 필드가
+	// 막으려는 유일한 실패다. 다른 head 테스트들이 지나가며 라인 커버리지로는
+	// 초록이지만(게이트는 branch를 안 센다) 이 시나리오를 찌르는 것은 없었다.
+	test("a moving head branch changes the fingerprint", async () => {
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q -`;
+
+		const before = await repoFingerprint(repo, { head: "feat" });
+
+		await $`git -C ${repo} checkout -q feat`;
+		writeFileSync(join(repo, "a.txt"), "one\ntwo\nthree\n");
+		await $`git -C ${repo} commit -qam more`;
+		await $`git -C ${repo} checkout -q -`;
+
+		expect(await repoFingerprint(repo, { head: "feat" })).not.toBe(before);
+	});
+
 	test("is non-empty and stable while nothing changes", async () => {
 		const fp1 = await repoFingerprint(repo);
 		const fp2 = await repoFingerprint(repo);

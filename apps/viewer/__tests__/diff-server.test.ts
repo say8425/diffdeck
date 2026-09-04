@@ -768,3 +768,88 @@ describe("diff server 400 kinds are distinguishable", () => {
 		expect(res.headers.get("x-diff-error")).toBeNull();
 	});
 });
+
+describe("head selection over HTTP", () => {
+	const diffUrl = (query: string): string =>
+		`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}&${query}`;
+
+	test("views the branch's committed content, not the working tree", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "three\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q main`;
+
+		const res = await fetch(diffUrl("base=main&head=feat"));
+		expect(res.status).toBe(200);
+		const files = (await res.json()) as {
+			name: string;
+			newContents: string;
+		}[];
+		expect(files.map((f) => f.name)).toEqual(["a.txt"]);
+		expect(files[0]?.newContents).toBe("three\n");
+	});
+
+	// 표식을 base와 가르는 이유는 클라이언트의 자가복구가 다르기 때문이다.
+	// 커버리지 게이트는 branch를 세지 않으므로(CLAUDE.md) 이 400 경로로
+	// 일부러 들어간다 — 초록불은 "이 분기가 나갔다"는 증거가 아니다.
+	test("an unknown head ref is refused with its own marker", async () => {
+		const res = await fetch(diffUrl("head=no-such-branch"));
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
+	});
+
+	// **보안 경계다.** head 값은 이제 `git diff`의 두 번째 인자로도 가므로,
+	// 첫 글자가 `-`인 참조가 닿으면 `--output=<path>`로 데몬이 쓸 수 있는
+	// 아무 경로나 만들거나 비운다. verifyBaseRef가 그 전에 끊어야 한다.
+	test("a head that looks like an option never reaches git", async () => {
+		const res = await fetch(
+			diffUrl(`head=${encodeURIComponent("--output=/tmp/diffdeck-pwned")}`),
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
+		expect(existsSync("/tmp/diffdeck-pwned")).toBe(false);
+	});
+
+	// **세 라우트가 각자 400을 내야 한다.** 예전엔 `/api/diff`만 이 경로로
+	// 들어가는 테스트가 있었고, 나머지 둘은 `resolveSelectionHead` 호출
+	// **라인**만 실행돼 라인 커버리지로는 초록이었다 — 게이트가 branch를 안
+	// 세므로 return이 한 번도 안 나가도 100%가 유지된다(CLAUDE.md).
+	test("summary refuses an unknown head with the same marker", async () => {
+		const res = await fetch(
+			`${base}/api/summary?repo=${encodeURIComponent(repo)}&token=${handle.token}&head=no-such-branch`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
+	});
+
+	// blob은 이미지 전용이라 비-이미지 경로는 head 해석 **전에** 404다.
+	// 확장자가 .png여야 이 분기까지 도달한다.
+	test("blob refuses an unknown head with the same marker", async () => {
+		const res = await fetch(
+			`${base}/api/blob?repo=${encodeURIComponent(repo)}&token=${handle.token}&path=logo.png&side=new&head=no-such-branch`,
+		);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
+	});
+
+	// 이미지 카드가 텍스트 diff와 같은 축을 본다는 주장은 지금까지 유닛
+	// (`getFileBytes`)에만 있었다 — HTTP 레벨에서 head를 실어 부르는 테스트가
+	// 아예 없어서 라우트의 배선은 검증된 적이 없다.
+	test("blob reads the new side from the head revision", async () => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "logo.png"), "from the branch\n");
+		await $`git -C ${repo} add logo.png`;
+		await $`git -C ${repo} commit -qm feat`;
+		await $`git -C ${repo} checkout -q main`;
+		// 워킹트리를 더럽힌다 — head가 rev면 이건 보이면 안 된다.
+		writeFileSync(join(repo, "logo.png"), "uncommitted\n");
+
+		const res = await fetch(
+			`${base}/api/blob?repo=${encodeURIComponent(repo)}&token=${handle.token}&path=logo.png&side=new&base=main&head=feat`,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toBe("from the branch\n");
+	});
+});

@@ -41,17 +41,65 @@ const parseBase = (params: URLSearchParams): BaseSelector => {
 	return params.get("mode") === "base" ? { kind: "auto" } : { kind: "head" };
 };
 
+/**
+ * 무엇을 볼 것인가 — diff의 **오른쪽(new) 항**.
+ *
+ * 오래도록 이 축에는 선택지가 없었다(언제나 워킹트리). 피커가 head를 고르게
+ * 되면서 축이 열렸고, base와는 **독립**이다.
+ */
+export type HeadSelector =
+	/** 워킹트리 — 지금 디스크의 파일. 기본값이고 커밋 안 한 변경이 보인다. */
+	| { kind: "worktree" }
+	/** 사용자가 고른 참조. 워킹트리를 거치지 않으므로 커밋된 것만 보인다. */
+	| { kind: "ref"; ref: string };
+
+/**
+ * **`head=HEAD`는 base와 달리 정규화하지 않는다.** `base=HEAD`는 "커밋 안 한
+ * 것만"이라 워킹트리 뷰와 결과가 같지만, `head=HEAD`는 **커밋된 HEAD**를 보는
+ * 것이라 워킹트리 뷰와 다르다 — 미커밋 변경이 빠진다. 둘을 합치면 그 구분이
+ * 사라진다.
+ */
+const parseHead = (params: URLSearchParams): HeadSelector => {
+	const raw = params.get("head") ?? "";
+	return raw === "" ? { kind: "worktree" } : { kind: "ref", ref: raw };
+};
+
 export interface Selection {
 	repo: string;
 	untracked: boolean;
 	base: BaseSelector;
+	head: HeadSelector;
 }
 
-export const parseSelection = (params: URLSearchParams): Selection => ({
-	repo: params.get("repo") ?? "",
-	untracked: params.get("untracked") === "1",
-	base: parseBase(params),
-});
+/**
+ * **커밋된 rev를 보는데 base가 워킹트리면 그 조합은 정의상 빈 diff다.**
+ * `base=HEAD`(= `mode=working`, = base 미지정)는 "아직 커밋 안 한 것만"이라는
+ * 뜻인데 커밋된 rev에는 그런 것이 없어서, 서버가 곧이곧대로 답하면
+ * `git diff <rev> <rev>`가 되어 **에러 없이 빈 화면**이 나온다(실측:
+ * `?head=main`이라는 가장 자연스러운 수동·공유 URL이 그렇다. 빈 상태 카드는
+ * `No changes on main`이라고 말하는데 실제로는 그 브랜치에 볼 것이 많다).
+ *
+ * 자동 base 전환도 여기서는 구제하지 못한다 — 그 판정은 카드의 `switch-mode`
+ * 액션 유무를 보는데, mode가 working이면 `getRepoSummary`가 base 개수를 아예
+ * 재지 않아(`opts.ref`가 없다) 액션이 생기지 않는다.
+ *
+ * 그래서 의미 없는 조합을 빈 화면으로 답하는 대신 사용자가 원했을 수 있는
+ * 유일한 해석 — "그 브랜치가 갈라진 뒤 한 일" — 으로 푼다. **이 규칙은 원래
+ * 브라우저 한 줄(`applyPick`의 `compareBase === "HEAD" → "@auto"`)에만 살아서
+ * URL을 손으로 만들면 우회됐다.** 파서로 올려 한 곳으로 만든다.
+ */
+const normalize = (base: BaseSelector, head: HeadSelector): BaseSelector =>
+	head.kind === "ref" && base.kind === "head" ? { kind: "auto" } : base;
+
+export const parseSelection = (params: URLSearchParams): Selection => {
+	const head = parseHead(params);
+	return {
+		repo: params.get("repo") ?? "",
+		untracked: params.get("untracked") === "1",
+		base: normalize(parseBase(params), head),
+		head,
+	};
+};
 
 /**
  * payload 캐시와 single-flight가 공유하는 키.
@@ -87,4 +135,8 @@ export const selectionCacheKey = (
 		// 없고, head 기준에 해석값을 넣으면 origin/HEAD가 움직일 때마다
 		// 워킹트리 뷰의 캐시가 이유 없이 날아간다.
 		baseIdentity(sel.base, resolvedBaseRef),
+		// head도 같은 계약을 탄다 — 빠지면 워킹트리 뷰와 브랜치 뷰가 같은
+		// 슬롯에 합류해 한쪽이 남의 diff를 받는다. ref는 **이름**으로 넣는다
+		// (OID는 지문의 몫이라는 위 규칙과 같은 이유).
+		sel.head.kind === "ref" ? `head:${sel.head.ref}` : "head:worktree",
 	].join("\0");

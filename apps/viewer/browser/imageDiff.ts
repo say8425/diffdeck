@@ -36,6 +36,8 @@ export const blobUrl = (params: {
 	mode: "working" | "base";
 	/** 사용자가 고른 견줄 기준. 없으면 서버가 mode로 되돌아간다. */
 	base?: string;
+	/** head로 고른 브랜치. 없으면 워킹트리를 본다. */
+	head?: string;
 	version?: string;
 }): string => {
 	const query = new URLSearchParams({
@@ -48,6 +50,7 @@ export const blobUrl = (params: {
 	// 이미지 카드와 텍스트 diff가 같은 비교를 보여줘야 한다 — 기준이 갈리면
 	// 한쪽은 base를, 다른 쪽은 워킹트리를 보여준다.
 	if (params.base) query.set("base", params.base);
+	if (params.head) query.set("head", params.head);
 	if (params.version) query.set("v", params.version);
 	return `/api/blob?${query.toString()}`;
 };

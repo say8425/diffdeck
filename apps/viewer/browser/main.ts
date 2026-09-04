@@ -16,11 +16,16 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
-import type { RefsResult } from "../server/refs.ts";
+import type { RefsResult, WorktreeRecord } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
+import { changeTotalsView } from "./changeTotals.ts";
 import { createCopyButton } from "./copyButton.ts";
 import { movedBeyondThreshold } from "./drag.ts";
-import { buildEmptyStateModel, renderEmptyState } from "./emptyState.ts";
+import {
+	buildEmptyStateModel,
+	renderEmptyState,
+	shouldAutoViewBase,
+} from "./emptyState.ts";
 import {
 	encodeGrab,
 	type GrabFileStatus,
@@ -67,11 +72,11 @@ import {
 	WATCH_KEY,
 } from "./prefs.ts";
 import {
-	type BaseRow,
-	buildBaseRows,
-	filterBaseRows,
-	type RowCounts,
+	buildHeadRows,
+	filterPickerRows,
+	type HeadRow,
 } from "./refPicker/model.ts";
+import { repoLabelView } from "./repoLabel.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -161,8 +166,114 @@ const pickerSearch = document.getElementById(
 	"ref-picker-search",
 ) as HTMLInputElement;
 const pickerList = document.getElementById("ref-picker-list") as HTMLElement;
-const pickerLabel = document.getElementById("ref-picker-label") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
+
+const changeAddEl = document.getElementById("change-add") as HTMLElement;
+const changeDelEl = document.getElementById("change-del") as HTMLElement;
+
+/**
+ * 전체 변경량을 툴바에 쓴다. 개수(`#status`)와 **같은 순간에만** 움직인다 —
+ * 화면에 렌더된 것이 곧 이 숫자의 출처라, 로딩·실패 중에는 손대지 않는다
+ * (그때 화면에는 직전 diff가 그대로 남아 있으므로 숫자도 그것이 맞다).
+ */
+const applyChangeTotals = (
+	files: readonly {
+		hunks: readonly { additionLines: number; deletionLines: number }[];
+	}[],
+): void => {
+	const view = changeTotalsView(files);
+	changeAddEl.textContent = view.additions;
+	changeDelEl.textContent = view.deletions;
+};
+
+// 트리거가 곧 정체성 표식이다 — 조작이면서 "지금 무엇을 보고 있는가"를
+// 통째로 말한다. 예전엔 개수 왼쪽에 같은 말을 하는 라벨이 따로 있었다.
+const pickerScopeEl = document.getElementById("picker-scope") as HTMLElement;
+const pickerNameEl = document.getElementById("picker-name") as HTMLElement;
+const pickerBranchEl = document.getElementById("picker-branch") as HTMLElement;
+// 겹치지 않는 다른 축 — 무엇과 견주는가.
+const baseLabelEl = document.getElementById("base-label") as HTMLElement;
+
+/**
+ * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
+ * 화면 두 곳이 다르게 말하게 되므로 문자열 조립은 전부 repoLabel.ts가 한다.
+ */
+// /api/refs가 준 마지막 값. 라벨은 diff 응답(base 이름)이 올 때도 다시 그려야
+// 하는데 그때는 워크트리 목록이 손에 없으므로 여기에 붙들어 둔다.
+let lastWorktrees: readonly WorktreeRecord[] = [];
+let lastRepoRoot: string | null = null;
+
+/**
+ * 견줄 기준의 **표시명**. 워킹트리(HEAD) 대비면 null — 그건 "커밋 안 한 변경"
+ * 이지 무엇과 견준 결과가 아니라서 라벨이 아무 말도 하지 않아야 한다.
+ * `@auto`의 이름은 서버가 매 diff 응답의 `x-diff-base`로 알려준다.
+ */
+const baseDisplay = (): string | null =>
+	// 커밋된 rev를 보는 중이면 워킹트리 기준은 뜻이 없어 서버가 auto로
+	// 해석한다(`server/selection.ts`의 normalize). 화면도 같은 규칙을 써야
+	// 라벨이 서버가 실제로 쓴 기준과 어긋나지 않는다 — 안 그러면 서버는
+	// main과 견주는데 툴바는 아무 말도 안 한다.
+	compareBase === "HEAD" && currentHead === null
+		? null
+		: compareBase === "HEAD" || compareBase === "@auto"
+			? diffBase || null
+			: compareBase;
+
+const applyRepoLabel = (
+	worktrees?: readonly WorktreeRecord[],
+	repoRoot?: string | null,
+): void => {
+	if (worktrees) {
+		lastWorktrees = worktrees;
+		lastRepoRoot = repoRoot ?? null;
+	}
+	const view = repoLabelView(repo, lastWorktrees, lastRepoRoot, {
+		head: currentHead,
+		base: baseDisplay(),
+	});
+	pickerScopeEl.textContent = view.scope;
+	pickerNameEl.textContent = view.name;
+	pickerBranchEl.textContent = view.branch;
+	// 말줄임을 hover로 편다 — 트리거는 이제 세 조각을 담아 길어질 수 있다.
+	pickerBtn?.setAttribute("title", view.title);
+	baseLabelEl.textContent = view.base;
+	document.title = view.documentTitle;
+};
+
+/**
+ * 브랜치를 /api/refs로 최신화한다.
+ *
+ * 부르는 곳은 셋이다: load()(부트스트랩·focus·refresh·토글), 피커 열림,
+ * 그리고 watch의 poll(). **poll()이 빠지면 안 된다** — watch는 창을 안 보고
+ * 있을 때 쓰는 기능이라 focus가 발화하지 않아서, diff만 새 브랜치 것으로
+ * 갈리고 툴바·탭 제목은 옛 브랜치에 무기한 굳는다. 게다가 같은 화면의 빈 상태
+ * 카드는 /api/summary(캐시 없음)로 **살아 있는** 브랜치를 말하므로, 한 화면이
+ * 서로 다른 두 브랜치를 동시에 주장하게 된다 — 이 기능이 없애려던 오진을
+ * 새로 만드는 셈이다.
+ *
+ * 비용은 /api/refs의 5초 TTL이 흡수한다: 폴이 2초여도 실제 git 호출은 5초에
+ * 두 번(worktree list + for-each-ref)이 상한이고, 폴이 매번 태우는 diff 빌드에
+ * 비하면 무시할 수준이다. "내용이 바뀐 폴에서만" 같은 조건은 쓸 수 없다 —
+ * 워킹트리가 깨끗한 채로 브랜치만 갈아타면 diff 지문이 그대로라 304로 흘러
+ * 한 번도 안 돌기 때문이다(그게 정확히 고쳐야 할 경우다).
+ *
+ * 신선도는 피커와 **같다**: 같은 TTL 캐시를 그대로 타므로 브랜치를 갈아탄
+ * 직후의 첫 갱신은 캐시를 읽을 수 있고 늦어도 5초 안에 수렴한다. 캐시를
+ * 우회하지 않는 이유는 같은 데이터를 보는 두 UI가 서로 다른 신선도를 주장하면
+ * 안 되기 때문이다.
+ */
+const refreshRepoLabel = async (): Promise<void> => {
+	try {
+		const res = await fetch(
+			`/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		if (!res.ok) return;
+		const body = (await res.json()) as RefsResult;
+		applyRepoLabel(body.worktrees, body.repoRoot);
+	} catch {
+		// 부가 정보다 — 못 받아도 이름은 이미 떠 있고 diff는 그대로 동작한다.
+	}
+};
 
 let diffStyle: "unified" | "split" = resolveDiffStyle(params.get("style"));
 let includeUntracked = resolveUntracked(params.get("untracked"));
@@ -170,6 +281,13 @@ let includeUntracked = resolveUntracked(params.get("untracked"));
 // 그 밖은 그 참조 자체다. merge-base(HEAD, HEAD)가 HEAD라 "HEAD"가 별도
 // 분기 없이 오늘의 워킹트리 뷰가 된다.
 let compareBase = "HEAD";
+/**
+ * head로 고른 브랜치. null이면 워킹트리를 본다(기본).
+ *
+ * **저장하지 않는다** — URL이 진실이라야 링크가 그대로 재현되고, 저장하면
+ * 다음에 그 리포를 열 때 남의 브랜치 뷰에 갇힌 채 시작한다.
+ */
+let currentHead: string | null = params.get("head") || null;
 const diffModeOf = (base: string): "working" | "base" =>
 	base === "HEAD" ? "working" : "base";
 // grab 참조와 이미지 blob이 쓰는 "실제로 견주는 대상"의 이름. 사용자가
@@ -519,6 +637,9 @@ const buildGrabSnapshot = (
 		status: statusOf(fileId),
 		mode: diffModeOf(compareBase),
 		baseName: effectiveBaseName(),
+		// 어느 리비전에서 잡았는지 — 없으면 참조가 워킹트리를 가리키는 것으로
+		// 읽힌다(encode.ts의 `head` 주석). blobUrl 호출부와 같은 관례.
+		...(currentHead ? { head: currentHead } : {}),
 		snippet,
 	};
 	return {
@@ -776,6 +897,7 @@ const syncTreeFold = (): void => {
 const fetchSummary = async (): Promise<RepoSummary | null> => {
 	try {
 		const query = new URLSearchParams({ repo, token, base: compareBase });
+		if (currentHead) query.set("head", currentHead);
 		const res = await fetch(`/api/summary?${query.toString()}`);
 		if (!res.ok) return null;
 		return (await res.json()) as RepoSummary;
@@ -784,9 +906,29 @@ const fetchSummary = async (): Promise<RepoSummary | null> => {
 	}
 };
 
-// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패하면 기존
-// "No changes." 폴백이 그대로 남는다. marker 동일성 가드 — fetch 동안 다른
+/**
+ * 첫 로드와 **빈 상태 해석 중**에 쓰는 같은 표시. 두 자리가 같은 마크업을
+ * 쓰는 것이 계약이다 — 로딩에서 로딩으로 넘어가는 자리라 다른 것을 그리면
+ * 사용자에게는 한 번 깜박인 것으로 보인다.
+ */
+const LOADING_MARKUP =
+	'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+
+// 빈 상태를 정보형 카드로 승격한다. best-effort: 요약 fetch가 실패해야만
+// "No changes." 폴백으로 내려앉는다. marker 동일성 가드 — fetch 동안 다른
 // 렌더가 #empty를 갈아치웠으면(새 diff 도착 등) 낡은 카드를 덮어쓰지 않는다.
+// 자동 base 전환을 한 페이지에서 한 번만 시도한다. 조건이 계속 참이어도
+// 재진입하지 않게 하는 안전장치다(전환 뒤에는 mode가 base라 조건 자체가
+// 거짓이 되지만, 루프 없음을 코드에서 바로 읽히게 둔다).
+let autoBaseTried = false;
+
+// 사용자가 견줄 기준을 고른 적이 있는가 — URL의 `base=`든 저장된
+// 프리퍼런스든. resolveCompareBase가 null을 주면 아무 선택도 없다는 뜻이다.
+// 호출 시점에 다시 읽는다: 모듈 초기화 때 캐시해 두면 피커로 고른 뒤에도
+// 옛 값이 남아 자동 전환이 사용자의 선택을 덮는다.
+const hasExplicitBase = (): boolean =>
+	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) !== null;
+
 const enrichEmptyState = async (): Promise<void> => {
 	const marker = diffMount.querySelector("#empty");
 	if (!marker) return;
@@ -794,14 +936,46 @@ const enrichEmptyState = async (): Promise<void> => {
 	// 바꾸면(새 diff가 로딩 중) 새 모드 문구의 카드를 그리면 모순이므로 버린다.
 	const mode = compareBase;
 	const untrackedShown = includeUntracked;
+	// head도 굳혀야 한다 — 브랜치를 갈아타도 base가 이미 `@auto`면 mode는 안
+	// 바뀌므로, head만 다른 두 요약이 같은 스냅샷을 통과해 옛 head의 카드가
+	// 그려질 수 있다.
+	const head = currentHead;
 	const summary = await fetchSummary();
-	if (!summary) return;
+	// 요약이 없으면 이제서야 폴백 문구를 쓴다 — 여기까지 와야 "말할 것이
+	// 더 없다"가 참이 된다. 노드 동일성은 유지해 이후 marker 가드가 계속
+	// 맞아떨어지게 한다.
+	if (!summary) {
+		if (diffMount.querySelector("#empty") === marker) {
+			marker.removeAttribute("data-loading");
+			marker.textContent = "No changes.";
+		}
+		return;
+	}
 	if (diffMount.querySelector("#empty") !== marker) return;
-	if (mode !== compareBase || untrackedShown !== includeUntracked) return;
+	if (
+		mode !== compareBase ||
+		untrackedShown !== includeUntracked ||
+		head !== currentHead
+	) {
+		return;
+	}
 	const model = buildEmptyStateModel(summary, {
 		mode: diffModeOf(mode),
 		untrackedShown,
 	});
+	// 빈 화면을 보여주는 대신 볼 것이 있는 쪽으로 바로 데려간다. 저장하지
+	// 않는다 — 추론이지 사용자의 선택이 아니다. 피커로 직접 고르면 그때
+	// 저장되고, 그 뒤로는 hasExplicitBase()가 이 경로를 영구히 막는다.
+	if (
+		shouldAutoViewBase(model, {
+			hasExplicitBase: hasExplicitBase(),
+			alreadyTried: autoBaseTried,
+		})
+	) {
+		autoBaseTried = true;
+		void selectBase("@auto", { persist: false });
+		return;
+	}
 	const card = renderEmptyState(document, model, {
 		onSwitchMode: () => void applySelection("@auto"),
 		onShowUntracked: () => {
@@ -823,8 +997,17 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 		teardownViews();
 		parseCache.prune([]);
 		diffMount.replaceChildren();
-		diffMount.innerHTML = '<div id="empty">No changes.</div>';
+		// **빈 상태의 문구는 /api/summary가 와야 정해진다.** 여기서 "No
+		// changes."를 먼저 그리면 그 말이 화면에 떴다가 60~80ms 뒤 카드가
+		// 도착하며 곧바로 뒤집힌다(실측: 첫 로드 673ms "No changes." → 753ms
+		// "No tracked changes …"). 자동 base 전환이 걸리는 경우엔 더 나쁘다 —
+		// 볼 것이 있는데도 없다고 한 번 말한 뒤 diff가 뜬다. 그래서 자리만
+		// 잡아 두고 문구는 enrichEmptyState가 **한 번만** 쓴다. 로딩 표시를
+		// 그대로 재사용하는 것이 계약이다: 다른 표시를 쓰면 로딩 → 로딩으로
+		// 넘어가는 자리에서 한 번 더 깜박인다.
+		diffMount.innerHTML = LOADING_MARKUP;
 		statusEl.textContent = "";
+		applyChangeTotals([]);
 		void enrichEmptyState();
 		return;
 	}
@@ -841,6 +1024,7 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			side,
 			mode: diffModeOf(compareBase),
 			base: compareBase,
+			...(currentHead ? { head: currentHead } : {}),
 			version,
 		});
 
@@ -936,6 +1120,8 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 			};
 		});
 	parseCache.prune(items.map((it) => it.id));
+	// 개수 옆의 전체 변경량. items는 방금 전량 파싱됐으므로 합산은 공짜다.
+	applyChangeTotals(items.map((it) => it.fileDiff));
 
 	searchFiles = items.map((it) => ({ fileId: it.id, fileDiff: it.fileDiff }));
 	findBar?.setData();
@@ -1062,20 +1248,6 @@ const renderPatch = (unsorted: DiffFile[]): void => {
 
 // 트리거가 "지금 무엇과 견주는 중인가"를 말한다. @auto는 서버가 이름을
 // 알려줘야 쓸 수 있으므로 매 응답마다 다시 그린다.
-const pickerLabelText = (): string =>
-	compareBase === "HEAD"
-		? "Working tree"
-		: compareBase === "@auto"
-			? `vs ${diffBase || "base"}`
-			: `vs ${compareBase}`;
-
-const syncPickerLabel = (): void => {
-	if (!pickerLabel) return;
-	const text = pickerLabelText();
-	pickerLabel.textContent = text;
-	pickerBtn?.setAttribute("title", text);
-};
-
 type FetchDiffResult =
 	| { kind: "data"; files: DiffFile[]; base: string; etag: string | null }
 	| { kind: "unchanged"; base: string };
@@ -1084,7 +1256,7 @@ type FetchDiffAttempt =
 	| FetchDiffResult
 	// 서버가 살아있고 이 요청 자체가 잘못됐다는 신호(토큰 불일치·git repo
 	// 아님) — 재시도해도 같은 답을 받으므로 즉시 포기한다.
-	| { kind: "terminal"; unknownBase: boolean }
+	| { kind: "terminal"; unknownBase: boolean; unknownHead: boolean }
 	// 서버가 일시적으로 응답을 못 만든(single-flight 타임아웃 503,
 	// singleFlight.ts) 경우와 네트워크 레벨 실패(fetch 자체가 throw) —
 	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다.
@@ -1097,6 +1269,7 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		untracked: includeUntracked ? "1" : "0",
 		base: compareBase,
 	});
+	if (currentHead) query.set("head", currentHead);
 	try {
 		// 조건부 요청: 서버 지문이 그대로면 304가 오고, 수십 MB payload 전송과
 		// JSON 파싱·재렌더 전부를 건너뛴다.
@@ -1107,9 +1280,11 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		if (res.status === 304) return { kind: "unchanged", base };
 		if (res.status === 503) return { kind: "retryable" };
 		if (!res.ok) {
+			const marker = res.headers.get("x-diff-error");
 			return {
 				kind: "terminal",
-				unknownBase: res.headers.get("x-diff-error") === "unknown-base",
+				unknownBase: marker === "unknown-base",
+				unknownHead: marker === "unknown-head",
 			};
 		}
 		const files = (await res.json()) as DiffFile[];
@@ -1152,12 +1327,16 @@ const recoverFromStaleBase = (unknownBase: boolean): boolean => {
 	staleBaseRecovered = true;
 	localStorage.removeItem(compareBaseKey(repo));
 	compareBase = "HEAD";
-	syncPickerLabel();
+	applyRepoLabel();
 	lastEtag = null;
 	return true;
 };
 
+/** 직전 시도가 "그 head를 못 찾겠다"로 끝났으면 그 ref 이름. */
+let lastUnknownHead: string | null = null;
+
 const fetchDiff = async (): Promise<FetchDiffResult | null> => {
+	lastUnknownHead = null;
 	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
 	// 재시도)에 의존하므로 의도적으로 순차 실행 — Promise.all로 병렬화할 대상이
 	// 아니다 (diff.ts:resolveBaseRef와 동일 관례).
@@ -1173,6 +1352,11 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 				attempt--;
 				continue;
 			}
+			// head는 base와 달리 **URL에 산다** — 저장된 값을 조용히 지우는
+			// 자가복구를 쓸 수 없다(링크가 요청한 것과 다른 화면을 이유도 없이
+			// 보여주게 된다). 대신 화면이 무슨 일인지 말하고 빠져나갈 길을
+			// 준다. 이 종류는 흔하다: 머지 후 삭제된 브랜치를 가리키는 링크.
+			lastUnknownHead = result.unknownHead ? currentHead : null;
 			return null;
 		}
 		if (attempt >= RETRY_DELAYS_MS.length) return null;
@@ -1186,7 +1370,7 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 let diffBase = "";
 const applyFetched = (result: FetchDiffResult): void => {
 	diffBase = result.base;
-	syncPickerLabel();
+	applyRepoLabel();
 	if (result.kind === "unchanged") {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
@@ -1203,15 +1387,45 @@ const applyFetched = (result: FetchDiffResult): void => {
 	renderPatch(result.files);
 };
 
+/**
+ * "그 head가 없다" 카드. 빈 상태 카드와 **같은 클래스**를 쓴다 — 새 어휘를
+ * 만들 이유가 없고, 액션 버튼의 생김새도 그대로 물려받는다.
+ */
+const renderMissingHead = (ref: string): void => {
+	diffMount.replaceChildren();
+	const card = document.createElement("div");
+	card.id = "empty";
+	card.className = "empty-card";
+	const headline = document.createElement("div");
+	headline.className = "empty-headline";
+	headline.textContent = "That branch is gone";
+	const context = document.createElement("div");
+	context.className = "empty-context";
+	context.textContent = `No ref named ${ref} in this repo`;
+	const action = document.createElement("button");
+	action.type = "button";
+	action.className = "empty-action";
+	action.textContent = "View the working tree instead";
+	action.addEventListener("click", () => {
+		const next = new URL(location.href);
+		next.searchParams.delete("head");
+		location.href = next.toString();
+	});
+	card.append(headline, context, action);
+	diffMount.append(card);
+};
+
 const load = async (): Promise<void> => {
+	// 정체성 갱신은 diff와 독립이다 — 기다리지 않는다. 브랜치를 갈아탄 뒤
+	// 창으로 돌아오면(focus → load) 라벨이 따라온다.
+	void refreshRepoLabel();
 	statusEl.textContent = "Loading…";
 	// 첫 로드(아직 아무것도 렌더된 적 없음)에만 로딩 인디케이터를 띄운다 —
 	// 이후 갱신은 기존 내용을 유지한 채 백그라운드로 교체되므로 비워지지
 	// 않는 것이 의도된 동작이다. 렌더가 성공하면 renderPatch가 이 노드를
 	// 통째로 대체한다.
 	if (!lastFiles) {
-		diffMount.innerHTML =
-			'<div id="empty" data-loading><span class="loading-spinner"></span>Loading diff…</div>';
+		diffMount.innerHTML = LOADING_MARKUP;
 	}
 	const result = await fetchDiff();
 	if (result === null) {
@@ -1228,6 +1442,18 @@ const load = async (): Promise<void> => {
 		// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
 		// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
 		// changes."를 계속 주장하게 된다.
+		// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
+		// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
+		// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
+		// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
+		// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
+		// 달리 사용자가 속는다.
+		const goneHead = lastUnknownHead;
+		if (goneHead !== null) {
+			if (!codeView) renderMissingHead(goneHead);
+			statusEl.textContent = "";
+			return;
+		}
 		if (!codeView) {
 			diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
 		}
@@ -1287,17 +1513,22 @@ window.addEventListener("focus", () => void load());
 const CHECK_SVG =
 	'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 
-// 목록을 받기 전에도 Working tree 행은 항상 있다. 빈 배열로 두면 피커를
-// 열 때마다 "No match"가 한 프레임 스치고, 그건 목록이 없는 것처럼 읽힌다.
-let pickerRows: BaseRow[] = buildBaseRows([], null, null);
+// 아직 /api/refs를 한 번도 못 받았다. head 모델에는 목록 없이 세울 수 있는
+// 행이 하나도 없으므로(워크트리 0개 + refs 0개 → 빈 배열) 이 값은 정말로
+// 비어 있다 — 예전 base 모델의 "Working tree 행은 항상 있다"는 전제는 더
+// 이상 참이 아니다. 그래서 빈 목록의 문구를 `pickerLoaded`로 가른다:
+// **"No match"는 걸러낸 결과가 없다는 뜻**이라, 받아 본 적조차 없는 첫
+// 오픈에 그걸 쓰면 "이 리포엔 고를 게 없다"는 거짓말이 한 프레임 스친다.
+let pickerRows: HeadRow[] = [];
+let pickerLoaded = false;
 // 방향키가 움직이는 활성 행. 필터가 바뀌면 첫 행으로 되돌린다.
 let pickerActive = 0;
 // 현재 화면에 그려진 행들 — 키보드 처리와 렌더가 같은 목록을 봐야 한다.
-let pickerVisible: BaseRow[] = [];
+let pickerVisible: HeadRow[] = [];
 
 const renderPickerRows = (): void => {
 	if (!pickerList) return;
-	const rows = filterBaseRows(pickerRows, pickerSearch?.value ?? "");
+	const rows = filterPickerRows(pickerRows, pickerSearch?.value ?? "");
 	pickerVisible = rows;
 	if (pickerActive >= rows.length) pickerActive = 0;
 	pickerList.replaceChildren();
@@ -1305,13 +1536,14 @@ const renderPickerRows = (): void => {
 	if (rows.length === 0) {
 		const empty = document.createElement("div");
 		empty.id = "ref-picker-empty";
-		empty.textContent = "No match";
+		empty.setAttribute("role", "presentation");
+		empty.textContent = pickerLoaded ? "No match" : "Loading…";
 		pickerList.append(empty);
 		return;
 	}
 	const SECTION_LABEL: Record<string, string> = {
-		uncommitted: "UNCOMMITTED",
-		branches: "COMPARE WITH A BRANCH",
+		worktrees: "WORKTREES",
+		branches: "BRANCHES",
 	};
 	let section: string | null = null;
 	for (const [index, row] of rows.entries()) {
@@ -1319,10 +1551,14 @@ const renderPickerRows = (): void => {
 			if (section !== null) {
 				const rule = document.createElement("div");
 				rule.className = "ref-divider";
+				// listbox의 허용 자식은 option/group뿐이라, 구분선·제목을 그냥
+				// 두면 보조기술이 옵션 수를 잘못 세거나 제목을 옵션처럼 읽는다.
+				rule.setAttribute("role", "presentation");
 				pickerList.append(rule);
 			}
 			const head = document.createElement("div");
 			head.className = "ref-section";
+			head.setAttribute("role", "presentation");
 			head.textContent = SECTION_LABEL[row.section] ?? row.section;
 			pickerList.append(head);
 			section = row.section;
@@ -1336,7 +1572,8 @@ const renderPickerRows = (): void => {
 			el.dataset.active = "true";
 			pickerSearch?.setAttribute("aria-activedescendant", el.id);
 		}
-		const selected = row.value === compareBase;
+		// 값의 종류가 둘(경로·참조 이름)이라 비교는 모델이 끝내 둔다.
+		const selected = row.selected;
 		el.setAttribute("aria-selected", String(selected));
 		// 사용자 입력이 섞이지 않는 상수 마크업이라 안전하다.
 		if (selected) el.insertAdjacentHTML("afterbegin", CHECK_SVG);
@@ -1350,7 +1587,7 @@ const renderPickerRows = (): void => {
 			note.textContent = row.note;
 			el.append(note);
 		}
-		el.addEventListener("click", () => void applySelection(row.value));
+		el.addEventListener("click", () => void applyPick(row));
 		pickerList.append(el);
 	}
 };
@@ -1365,31 +1602,19 @@ const loadPickerRows = async (): Promise<void> => {
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
-		// %(HEAD)는 명령을 실행한 워크트리 기준이라 리포 전역 목록에서는
-		// misleading하다. 이 워크트리가 무엇을 체크아웃했는지는 worktree
-		// 목록에서 자기 경로를 찾아 읽는다.
-		const current = body.worktrees.find((w) => w.path === repo)?.branch ?? null;
-		// 목록을 먼저 그린다. 개수를 기다리면 목록이 /api/refs(수 ms)가 아니라
-		// /api/summary(수십 ms)의 속도로 뜨고, 더 나쁘게는 getRepoSummary가
-		// 의도적으로 single-flight 밖이라(CLAUDE.md) 거기서 매달리면 목록이
-		// Working tree 한 줄에 영구히 갇힌다.
-		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current);
-		renderPickerRows();
-
-		// 개수는 부가 정보다 — 도착하면 얹고, 못 받으면 목록을 그대로 쓴다.
-		const summary = await fetchSummary();
-		if (!summary) return;
-		const counts: RowCounts = {
-			working: summary.workingFiles,
-			// 표시명(base)이 아니라 **실제로 잰 ref**로 맞춘다. base는 origin/
-			// 접두가 벗겨져 있어, 그걸로 맞추면 origin/main으로 잰 숫자가 로컬
-			// main 행에 붙는다 — 로컬이 뒤처져 있으면 값이 실제로 갈린다.
-			base:
-				summary.ref !== null && summary.baseFiles !== null
-					? { name: summary.ref, files: summary.baseFiles }
-					: null,
-		};
-		pickerRows = buildBaseRows(body.refs, body.defaultBranch, current, counts);
+		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
+		// "내가 어느 워크트리에 있는가"의 판정은 모델이 repoLabel의 것을
+		// 그대로 쓴다(답이 앱 안에 둘 있으면 안 된다).
+		applyRepoLabel(body.worktrees, body.repoRoot);
+		// /api/refs 하나로 목록이 완성된다. 예전에는 행마다 파일 개수를 얹으려고
+		// /api/summary를 이어 받았는데, 그건 base 축의 수치라 head를 고르는
+		// 지금은 행의 뜻과 맞지 않는다(그리고 getRepoSummary는 의도적으로
+		// single-flight 밖이라 목록이 그 속도에 묶였다).
+		pickerLoaded = true;
+		pickerRows = buildHeadRows(body.worktrees, body.refs, body.defaultBranch, {
+			repo,
+			head: currentHead,
+		});
 		renderPickerRows();
 	} catch {
 		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.
@@ -1408,14 +1633,67 @@ const setPickerOpen = (open: boolean): void => {
 	void loadPickerRows();
 };
 
+/**
+ * 견줄 기준을 바꾼다. `persist`가 사용자의 **선택**과 서버 상태로부터의
+ * **추론**을 가른다 — 추론을 저장해 버리면 고른 적 없는 프리퍼런스가 생겨
+ * 이후 자동 전환이 영영 막힌다.
+ */
+const selectBase = async (
+	next: string,
+	opts: { persist: boolean },
+): Promise<void> => {
+	if (next === compareBase) return;
+	compareBase = next;
+	if (opts.persist) localStorage.setItem(compareBaseKey(repo), next);
+	applyRepoLabel();
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
+	lastEtag = null;
+	await load();
+};
+
+// 피커/카드에서 사용자가 직접 고른 경로. 고른 값이 지금과 같아도 패널은
+// 닫고 포커스를 돌려줘야 하므로 그 둘이 조기 반환보다 앞에 온다.
 const applySelection = async (next: string): Promise<void> => {
 	setPickerOpen(false);
 	pickerBtn?.focus();
-	if (next === compareBase) return;
-	compareBase = next;
-	localStorage.setItem(compareBaseKey(repo), next);
-	syncPickerLabel();
-	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (untracked 토글과 같은 이유).
+	await selectBase(next, { persist: true });
+};
+
+/**
+ * 피커에서 고른 행을 적용한다. **두 구역은 일어나는 일이 다르다.**
+ *
+ * 워크트리는 다른 리포 경로다 — diff·파일트리·라벨·프리퍼런스 키가 전부
+ * 갈리므로 상태를 손으로 되돌리는 대신 그 URL로 **이동**한다. 옮기면서
+ * `head`를 들고 가지 않는 이유는 그것이 워크트리에 매인 값이 아니어서다:
+ * 그대로 두면 새 워크트리에서 남의 브랜치를 보게 된다.
+ *
+ * 브랜치는 같은 워크트리 안의 축이라 이동 없이 `head`만 바꾼다. URL에 실어
+ * 두면 새로고침과 링크 공유가 그대로 재현된다.
+ */
+const applyPick = async (row: HeadRow): Promise<void> => {
+	setPickerOpen(false);
+	pickerBtn?.focus();
+	if (row.kind === "worktree") {
+		if (row.selected) return;
+		const next = new URL(location.href);
+		next.searchParams.set("repo", row.value);
+		next.searchParams.delete("head");
+		location.href = next.toString();
+		return;
+	}
+	if (row.value === currentHead) return;
+	currentHead = row.value;
+	// 커밋된 rev에는 "커밋 안 한 변경"이 없다 — base가 워킹트리(HEAD) 기준이면
+	// 그 조합은 언제나 빈 diff다. 브랜치를 고르는 것은 곧 "그 브랜치가 base에서
+	// 갈라진 뒤 한 일"을 보겠다는 뜻이므로 기준을 자동 해석으로 올린다.
+	// URL에는 싣지 않는다: 추론이지 사용자의 선택이 아니고(자동 base 전환과
+	// 같은 부류), 새로고침하면 그 전환이 같은 상태를 다시 만든다.
+	if (compareBase === "HEAD") compareBase = "@auto";
+	const next = new URL(location.href);
+	next.searchParams.set("head", row.value);
+	history.replaceState(null, "", next.toString());
+	applyRepoLabel();
+	// 쿼리 의미가 바뀌므로 조건부 요청을 끊는다 (base 전환과 같은 이유).
 	lastEtag = null;
 	await load();
 };
@@ -1455,7 +1733,7 @@ pickerSearch?.addEventListener("keydown", (event) => {
 	if (event.key === "Enter") {
 		event.preventDefault();
 		const row = pickerVisible[pickerActive];
-		if (row) void applySelection(row.value);
+		if (row) void applyPick(row);
 	}
 });
 
@@ -1495,7 +1773,20 @@ const compareBaseFromStorage = urlChoice === null;
 compareBase =
 	resolveCompareBase(urlChoice, (k) => localStorage.getItem(k), repo) ??
 	(storedLegacyMode === "base" ? "@auto" : "HEAD");
-syncPickerLabel();
+// 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
+// /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
+// hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
+//
+// **이 호출은 `compareBase`·`currentHead` 선언보다 뒤에 있어야 한다.** 한때
+// 선언부(284·291행)보다 앞인 242행에 있었는데, 그때 살아 있던 이유는
+// 번들러뿐이었다: `bun build`가 최상위 `let`을 `var`로 낮춰 TDZ가 아니라
+// `undefined`가 됐다(실측 — 같은 코드를 ESM 그대로 평가하면
+// `ReferenceError: Cannot access 'currentHead' before initialization`으로
+// 모듈이 통째로 죽는다). 게다가 `undefined`는 `null`이 아니라 head 분기를
+// 통과해 `#base-label`에 리터럴 `"vs undefined"`를 썼다 — 같은 동기 실행
+// 안의 이 호출이 덮어써서 페인트만 안 됐을 뿐이다. 타입체크도 커버리지도
+// 유닛도 이걸 못 본다(main.ts는 셋 다 밖이다).
+applyRepoLabel();
 
 // Apply persisted file-tree side and reflect stored prefs in the overflow menu.
 appEl.dataset.treeSide = treeSide;
@@ -1741,6 +2032,10 @@ let pollInFlight = false;
 const poll = async (): Promise<void> => {
 	if (pollInFlight) return;
 	pollInFlight = true;
+	// watch 중에는 focus가 발화하지 않으므로 여기서도 정체성을 갱신한다.
+	// 빠지면 diff만 새 브랜치 것으로 갈리고 라벨·탭 제목은 옛 브랜치에 굳는다
+	// (refreshRepoLabel의 주석에 근거와 비용 계산이 있다).
+	void refreshRepoLabel();
 	try {
 		const result = await fetchDiff();
 		if (result === null) return;

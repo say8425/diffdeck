@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
@@ -297,5 +297,104 @@ describe("getDiffFiles base mode", () => {
 		const baseB = base.find((f) => f.name === "b.txt");
 		expect(baseA?.newContents).toContain("ALPHA_on_branch");
 		expect(baseB?.newContents).toContain("BETA_working");
+	});
+});
+
+describe("head selection (rev → rev)", () => {
+	// init -- A (main)
+	//      \-- B (feat)
+	// 브랜치를 head로 보면 "그 브랜치가 갈라진 뒤 한 일"만 보여야 한다.
+	const branchOffAndAdvanceMain = async (): Promise<void> => {
+		await $`git -C ${repo} branch -M main`;
+		await $`git -C ${repo} checkout -qb feat`;
+		writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
+		await $`git -C ${repo} commit -qam feat`;
+		await $`git -C ${repo} checkout -q main`;
+		writeFileSync(join(repo, "b.txt"), "main moved on\n");
+		await $`git -C ${repo} add b.txt`;
+		await $`git -C ${repo} commit -qm "main moves"`;
+	};
+
+	test("shows the branch's committed work, not the working tree", async () => {
+		await branchOffAndAdvanceMain();
+		// 워킹트리를 더럽힌다 — head가 커밋된 rev면 이건 보이면 안 된다.
+		writeFileSync(join(repo, "a.txt"), "one\nuncommitted\n");
+
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.map((f) => f.name)).toEqual(["a.txt"]);
+		expect(files[0]?.newContents).toBe("one\ntwo\n");
+	});
+
+	// **갈림점은 head 기준이어야 한다.** `merge-base(ref, HEAD)`로 재면 지금
+	// 워크트리의 HEAD(main)와 갈림점을 잡게 되는데, 그 둘은 아무 관계도 없다
+	// — 남의 브랜치를 보면서 내 위치를 기준 삼는 셈이다. 그러면 main이 그
+	// 사이 만든 b.txt가 "feat에서 삭제됨"으로 끼어든다.
+	test("measures the merge base against the head, not the current HEAD", async () => {
+		await branchOffAndAdvanceMain();
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.map((f) => f.name)).not.toContain("b.txt");
+		expect(files).toHaveLength(1);
+	});
+
+	test("a committed head carries no untracked files", async () => {
+		await branchOffAndAdvanceMain();
+		writeFileSync(join(repo, "scratch.txt"), "not in any commit\n");
+
+		const files = await getDiffFiles(repo, {
+			untracked: true,
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(files.some((f) => f.status === "untracked")).toBe(false);
+	});
+
+	// **참조 이름이 트래킹된 경로와 같을 때.** `docs`·`src`·`test` 같은 이름은
+	// 흔한데, `git diff <base> <ref>`에 `--`가 없으면 git이 rev인지 path인지
+	// 못 정해 `ambiguous argument`로 죽는다. 그 실패는 `2>/dev/null` +
+	// `.nothrow()`가 빈 문자열로 삼켜 **에러 없는 "변경 없음"** 이 된다 —
+	// 사용자는 피커에서 그 브랜치를 고르기만 해도 이 상태에 들어간다.
+	// 기존 픽스처의 `feat`/`main`은 원리적으로 이 결함을 못 잡는다.
+	test("a branch named like a tracked directory still diffs", async () => {
+		await $`git -C ${repo} branch -M main`;
+		mkdirSync(join(repo, "docs"));
+		writeFileSync(join(repo, "docs", "a.md"), "on main\n");
+		await $`git -C ${repo} add docs`;
+		await $`git -C ${repo} commit -qm docs`;
+		await $`git -C ${repo} checkout -qb docs`;
+		writeFileSync(join(repo, "docs", "b.md"), "on the branch\n");
+		await $`git -C ${repo} add docs`;
+		await $`git -C ${repo} commit -qm "more docs"`;
+		await $`git -C ${repo} checkout -q main`;
+
+		const files = await getDiffFiles(repo, {
+			mode: "base",
+			ref: "main",
+			head: "docs",
+		});
+		expect(files.map((f) => f.name)).toEqual(["docs/b.md"]);
+	});
+
+	// 이미지 카드가 텍스트 diff와 다른 축을 보면 안 된다.
+	test("getFileBytes reads the new side from the head revision", async () => {
+		await branchOffAndAdvanceMain();
+		writeFileSync(join(repo, "a.txt"), "one\nuncommitted\n");
+
+		const bytes = await getFileBytes(repo, "a.txt", "new", {
+			mode: "base",
+			ref: "main",
+			head: "feat",
+		});
+		expect(new TextDecoder().decode(bytes ?? new Uint8Array())).toBe(
+			"one\ntwo\n",
+		);
 	});
 });

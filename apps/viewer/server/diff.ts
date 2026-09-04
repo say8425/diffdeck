@@ -160,13 +160,19 @@ const buildFile = async (
 	status: DiffFileStatus,
 	name: string,
 	oldName?: string,
+	/** new 쪽 리비전. 없으면 워킹트리(디스크의 지금 파일)를 읽는다. */
+	head?: string,
 ): Promise<DiffFile> => {
 	const oldBytes =
 		status === "added" || status === "untracked"
 			? new Uint8Array()
 			: await showBytes(repo, base, oldName ?? name);
 	const newBytes =
-		status === "deleted" ? new Uint8Array() : readWorkingBytes(repo, name);
+		status === "deleted"
+			? new Uint8Array()
+			: head
+				? await showBytes(repo, head, name)
+				: readWorkingBytes(repo, name);
 	const binary = oldBytes.includes(0) || newBytes.includes(0);
 	const decoder = new TextDecoder();
 	const contentVersion = `${Bun.hash(oldBytes).toString(36)}.${Bun.hash(newBytes).toString(36)}`;
@@ -222,15 +228,20 @@ const parseNameStatusZ = (
 
 export const resolveDiffBaseRev = async (
 	repo: string,
-	opts: { mode?: "working" | "base"; ref?: string },
-): Promise<string> =>
-	opts.mode === "base" && opts.ref
-		? (
-				await $`git -C ${repo} merge-base ${opts.ref} HEAD 2>/dev/null`
-					.nothrow()
-					.text()
-			).trim()
-		: "HEAD";
+	opts: { mode?: "working" | "base"; ref?: string; head?: string },
+): Promise<string> => {
+	// 갈림점은 **head 기준**으로 잡는다. `merge-base(ref, HEAD)`로 두면 브랜치를
+	// head로 볼 때 지금 워크트리의 HEAD와 갈림점을 재게 되는데, 그 둘은 아무
+	// 관계도 없다 — 남의 브랜치를 보면서 내 위치를 기준 삼는 셈이다.
+	const headRev = opts.head ?? "HEAD";
+	if (opts.mode !== "base" || !opts.ref)
+		return headRev === "HEAD" ? "HEAD" : headRev;
+	return (
+		await $`git -C ${repo} merge-base ${opts.ref} ${headRev} 2>/dev/null`
+			.nothrow()
+			.text()
+	).trim();
+};
 
 /**
  * 이미지 diff용 원본 바이트 조회. side=new는 워킹트리, side=old는 base
@@ -241,7 +252,7 @@ export const getFileBytes = async (
 	repo: string,
 	path: string,
 	side: "old" | "new",
-	opts: { mode?: "working" | "base"; ref?: string } = {},
+	opts: { mode?: "working" | "base"; ref?: string; head?: string } = {},
 ): Promise<Uint8Array<ArrayBuffer> | null> => {
 	const root = resolve(repo);
 	const target = resolve(root, path);
@@ -254,7 +265,11 @@ export const getFileBytes = async (
 		return null;
 	}
 	if (side === "new") {
-		const bytes = readWorkingBytes(repo, path);
+		// 텍스트 diff와 같은 축을 봐야 한다 — 예전에 라우트마다 기준이 갈려
+		// 이미지 카드가 텍스트와 다른 비교를 보여준 적이 있다.
+		const bytes = opts.head
+			? await showBytes(repo, opts.head, path)
+			: readWorkingBytes(repo, path);
 		return bytes.length > 0 ? bytes : null;
 	}
 	const base = await resolveDiffBaseRev(repo, opts);
@@ -265,25 +280,49 @@ export const getFileBytes = async (
 
 export const getDiffFiles = async (
 	repo: string,
-	opts: { untracked?: boolean; mode?: "working" | "base"; ref?: string } = {},
+	opts: {
+		untracked?: boolean;
+		mode?: "working" | "base";
+		ref?: string;
+		/** new 쪽 리비전. 없으면 워킹트리를 본다. */
+		head?: string;
+	} = {},
 ): Promise<DiffFile[]> => {
 	const base = await resolveDiffBaseRev(repo, opts);
 	const files: DiffFile[] = [];
 	if (base) {
-		const nameStatus =
-			await $`git -C ${repo} diff --name-status -z ${base} 2>/dev/null`
-				.nothrow()
-				.text();
+		// head가 있으면 리비전 둘을 준다(rev→rev). 없으면 리비전 하나 —
+		// 그때만 오른쪽이 워킹트리가 되어 미커밋 변경이 함께 실린다.
+		//
+		// **끝의 `--`가 계약이다.** 참조 이름이 트래킹된 경로와 같으면(흔하다:
+		// `docs`·`src`·`test`) git이 rev인지 path인지 못 정해 `ambiguous
+		// argument`로 죽는데, `2>/dev/null` + `.nothrow()`가 그 실패를 빈
+		// 문자열로 삼켜 **에러 없는 "변경 없음" 화면**이 된다(실측). 피커가
+		// `%(refname:short)`를 그대로 넘기므로 사용자는 목록에서 고르기만
+		// 해도 이 상태에 들어간다. head 축이 사용자 ref 이름을 `git diff`의
+		// 위치 인자로 처음 통과시키면서 열린 노출이다 — 예전엔 언제나
+		// `HEAD` 아니면 merge-base OID였다. `merge-base`·`rev-list`·
+		// `rev-parse`·`show <rev>:<path>`는 rev만 받아 영향이 없다(실측).
+		const nameStatus = opts.head
+			? await $`git -C ${repo} diff --name-status -z ${base} ${opts.head} -- 2>/dev/null`
+					.nothrow()
+					.text()
+			: await $`git -C ${repo} diff --name-status -z ${base} -- 2>/dev/null`
+					.nothrow()
+					.text();
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
 		const specs = parseNameStatusZ(nameStatus);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
-				buildFile(repo, base, spec.status, spec.name, spec.oldName),
+				buildFile(repo, base, spec.status, spec.name, spec.oldName, opts.head),
 			)),
 		);
 	}
-	if (opts.untracked) {
+	// 커밋된 리비전에는 untracked가 없다 — 토글이 켜져 있어도 붙일 것이
+	// 없으므로 건너뛴다(디스크를 훑어 봐야 그건 워킹트리의 사실이지 이 뷰의
+	// 사실이 아니다).
+	if (opts.untracked && !opts.head) {
 		const listed =
 			await $`git -C ${repo} ls-files --others --exclude-standard -z 2>/dev/null`
 				.nothrow()

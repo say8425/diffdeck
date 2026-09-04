@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { buildBaseRows, filterBaseRows } from "../browser/refPicker/model.ts";
-import type { RefRecord } from "../server/refs.ts";
+import { buildHeadRows, filterPickerRows } from "../browser/refPicker/model.ts";
+import type { RefRecord, WorktreeRecord } from "../server/refs.ts";
 
 const ref = (name: string, kind: "local" | "remote" = "local"): RefRecord => ({
 	name,
@@ -8,141 +8,200 @@ const ref = (name: string, kind: "local" | "remote" = "local"): RefRecord => ({
 	worktreePath: null,
 });
 
-describe("buildBaseRows", () => {
-	test("offers the working tree first, before any branch", () => {
-		const rows = buildBaseRows([ref("main")], null, null);
-		expect(rows[0]).toEqual({
-			value: "HEAD",
-			label: "Working tree",
-			kind: "working",
-			section: "uncommitted",
-			tag: null,
-			note: null,
+const wt = (path: string, branch: string | null): WorktreeRecord => ({
+	path,
+	branch,
+	head: "abc1234",
+	detached: branch === null,
+});
+
+const MAIN_WT = wt("/w/repo", "main");
+const FEAT_WT = wt("/w/repo/.claude/worktrees/feat", "feat");
+
+describe("buildHeadRows — worktrees", () => {
+	// 고를 것이 없으면 구역 자체가 없다. 제목만 남기고 목록을 비우면
+	// "뭔가 있어야 하는데 없다"로 읽힌다.
+	test("omits the worktree section when there is nothing to choose", () => {
+		const rows = buildHeadRows([MAIN_WT], [ref("main")], "main", {
+			repo: "/w/repo",
+			head: null,
 		});
+		expect(rows.some((r) => r.section === "worktrees")).toBe(false);
 	});
 
-	// merge-base(HEAD, HEAD) === HEAD라서 이 값이 오늘의 워킹트리 뷰와 같다.
-	test("the working tree row carries HEAD as its wire value", () => {
-		expect(buildBaseRows([], null, null)[0]?.value).toBe("HEAD");
+	// 숨김은 "고를 것이 없을 때"의 규칙이다. 브랜치를 head로 보고 있으면
+	// 워크트리는 지금 보고 있지 않은 것이므로 고를 대상이고, 숨기면 워크트리가
+	// 하나뿐인 리포에서 브랜치 뷰에 갇혀 돌아올 길이 사라진다.
+	test("keeps the section while a branch head is active, to get back", () => {
+		const rows = buildHeadRows([MAIN_WT], [ref("dev")], "main", {
+			repo: "/w/repo",
+			head: "dev",
+		});
+		expect(rows.filter((r) => r.section === "worktrees")).toHaveLength(1);
+	});
+
+	test("shows the section as soon as a second worktree exists", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
+			repo: "/w/repo",
+			head: null,
+		});
+		expect(rows.filter((r) => r.section === "worktrees")).toHaveLength(2);
+	});
+
+	// 어느 브랜치를 물고 있는지 행 자체가 말해야 한다.
+	test("each worktree names the branch it holds", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
+			repo: "/w/repo",
+			head: null,
+		});
+		const feat = rows.find((r) => r.label === "feat");
+		expect(feat?.note).toBe("feat");
+	});
+
+	// default 브랜치를 물고 있는 워크트리가 맨 위 — 브랜치 구역과 같은 규칙.
+	test("puts the worktree holding the default branch first", () => {
+		const rows = buildHeadRows([FEAT_WT, MAIN_WT], [], "main", {
+			repo: "/w/repo/.claude/worktrees/feat",
+			head: null,
+		});
+		const worktrees = rows.filter((r) => r.section === "worktrees");
+		expect(worktrees[0]?.label).toBe("repo");
+		expect(worktrees[0]?.note).toBe("main · default");
+	});
+
+	test("the worktree being viewed is the selected row", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
+			repo: "/w/repo/.claude/worktrees/feat",
+			head: null,
+		});
+		expect(rows.find((r) => r.selected)?.label).toBe("feat");
+	});
+
+	// repo는 기동 시점의 cwd라 리포 루트라는 보장이 없다. repoLabel의
+	// findWorktree와 **같은 판정**을 써야 답이 앱 안에 하나만 남는다.
+	test("matches the viewed worktree from a subdirectory", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
+			repo: "/w/repo/.claude/worktrees/feat/src",
+			head: null,
+		});
+		expect(rows.find((r) => r.selected)?.label).toBe("feat");
+	});
+
+	// 브랜치를 head로 보고 있으면 워크트리는 어느 것도 선택 상태가 아니다.
+	test("no worktree is selected while a branch is the head", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [ref("dev")], "main", {
+			repo: "/w/repo",
+			head: "dev",
+		});
+		expect(rows.filter((r) => r.section === "worktrees" && r.selected)).toEqual(
+			[],
+		);
+	});
+
+	test("carries the worktree path as its value — that is what navigates", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
+			repo: "/w/repo",
+			head: null,
+		});
+		expect(rows.find((r) => r.label === "feat")?.value).toBe(FEAT_WT.path);
+	});
+
+	test("a detached worktree still lists, with no branch to name", () => {
+		const rows = buildHeadRows([MAIN_WT, wt("/w/other", null)], [], "main", {
+			repo: "/w/repo",
+			head: null,
+		});
+		expect(rows.find((r) => r.label === "other")?.note).toBeNull();
+	});
+});
+
+describe("buildHeadRows — branches", () => {
+	const refs = [
+		ref("aaa"),
+		ref("dev"),
+		ref("main"),
+		ref("origin/main", "remote"),
+	];
+
+	test("default branch first, then the branch being viewed", () => {
+		const rows = buildHeadRows([MAIN_WT], refs, "main", {
+			repo: "/w/repo",
+			head: "dev",
+		});
+		expect(
+			rows.filter((r) => r.section === "branches").map((r) => r.value),
+		).toEqual(["main", "dev", "aaa", "origin/main"]);
 	});
 
 	test("keeps local branches ahead of remote ones", () => {
-		const rows = buildBaseRows(
-			[ref("origin/main", "remote"), ref("develop"), ref("main")],
-			null,
-			null,
-		);
-		expect(rows.slice(1).map((r) => r.kind)).toEqual([
+		const rows = buildHeadRows([MAIN_WT], refs, null, {
+			repo: "/w/repo",
+			head: null,
+		});
+		expect(rows.map((r) => r.kind)).toEqual([
+			"local",
 			"local",
 			"local",
 			"remote",
 		]);
 	});
 
-	test("tags the default branch so the usual choice is findable", () => {
-		const rows = buildBaseRows([ref("main"), ref("develop")], "main", null);
+	test("tags the default branch", () => {
+		const rows = buildHeadRows([MAIN_WT], refs, "main", {
+			repo: "/w/repo",
+			head: null,
+		});
 		expect(rows.find((r) => r.value === "main")?.tag).toBe("default");
-		expect(rows.find((r) => r.value === "develop")?.tag).toBeNull();
+		expect(rows.find((r) => r.value === "dev")?.tag).toBeNull();
 	});
 
-	// 자기 자신과 견주면 언제나 비어 보인다. 막지는 않되 왜 그런지 읽히도록
-	// 표시한다 — 조용한 빈 화면이 이 기능에서 가장 큰 위험이다.
-	test("marks the branch this worktree has checked out", () => {
-		const rows = buildBaseRows(
-			[ref("main"), ref("feature")],
-			"main",
-			"feature",
-		);
-		expect(rows.find((r) => r.value === "feature")?.tag).toBe("HEAD");
+	test("the branch being viewed is the selected row", () => {
+		const rows = buildHeadRows([MAIN_WT], refs, "main", {
+			repo: "/w/repo",
+			head: "dev",
+		});
+		expect(rows.find((r) => r.selected)?.value).toBe("dev");
 	});
 
-	test("prefers the default tag when a branch is both default and checked out", () => {
-		const rows = buildBaseRows([ref("main")], "main", "main");
-		expect(rows.find((r) => r.value === "main")?.tag).toBe("default");
+	test("carries the ref name as its value — that is what head takes", () => {
+		const rows = buildHeadRows([MAIN_WT], refs, "main", {
+			repo: "/w/repo",
+			head: null,
+		});
+		expect(rows.find((r) => r.value === "origin/main")?.kind).toBe("remote");
 	});
 });
 
-describe("filterBaseRows", () => {
-	const rows = buildBaseRows(
-		[ref("main"), ref("feat/grab-popover"), ref("origin/main", "remote")],
+describe("filterPickerRows", () => {
+	const rows = buildHeadRows(
+		[MAIN_WT, FEAT_WT],
+		[ref("main"), ref("feat/grab-popover")],
 		"main",
-		null,
+		{ repo: "/w/repo", head: null },
 	);
 
 	test("an empty query keeps every row", () => {
-		expect(filterBaseRows(rows, "")).toHaveLength(rows.length);
+		expect(filterPickerRows(rows, "")).toHaveLength(rows.length);
 	});
 
-	test("matches anywhere in the name, not just the start", () => {
-		expect(filterBaseRows(rows, "grab").map((r) => r.value)).toEqual([
+	test("matches anywhere in the label, not just the start", () => {
+		expect(filterPickerRows(rows, "grab").map((r) => r.value)).toEqual([
 			"feat/grab-popover",
 		]);
 	});
 
-	test("ignores case so typing is cheap", () => {
-		expect(filterBaseRows(rows, "GRAB")).toHaveLength(1);
-	});
-
-	test("keeps the working tree row reachable by name", () => {
-		expect(filterBaseRows(rows, "work").map((r) => r.kind)).toEqual([
-			"working",
-		]);
+	test("ignores case and surrounding whitespace", () => {
+		expect(filterPickerRows(rows, "  GRAB ")).toHaveLength(1);
 	});
 
 	test("returns nothing when the query matches nothing", () => {
-		expect(filterBaseRows(rows, "zzz")).toEqual([]);
+		expect(filterPickerRows(rows, "zzz")).toEqual([]);
 	});
 
-	test("trims surrounding whitespace before matching", () => {
-		expect(filterBaseRows(rows, "  grab  ")).toHaveLength(1);
-	});
-});
-
-describe("buildBaseRows sections", () => {
-	test("puts the working tree in its own section, branches in another", () => {
-		const rows = buildBaseRows([ref("main"), ref("o/m", "remote")], null, null);
-		expect(rows.map((r) => r.section)).toEqual([
-			"uncommitted",
-			"branches",
-			"branches",
-		]);
-	});
-});
-
-describe("buildBaseRows notes", () => {
-	// 목록에서 미리 보여야 "골랐더니 비어 있더라"가 안 생긴다.
-	test("says the working tree is empty before you pick it", () => {
-		const rows = buildBaseRows([], null, null, { working: 0, base: null });
-		expect(rows[0]?.note).toBe("nothing yet");
-	});
-
-	test("counts uncommitted files when there are some", () => {
-		const rows = buildBaseRows([], null, null, { working: 3, base: null });
-		expect(rows[0]?.note).toBe("3 file(s)");
-	});
-
-	test("says nothing when the count is unknown", () => {
-		expect(buildBaseRows([], null, null)[0]?.note).toBeNull();
-	});
-
-	// 개수는 공짜인 자리에만 붙는다 — 서버가 이미 아는 그 비교 하나다.
-	// 브랜치마다 붙이려면 브랜치당 git 호출이 하나씩 더 든다.
-	test("attaches the known count only to the branch it was measured against", () => {
-		const rows = buildBaseRows([ref("main"), ref("develop")], "main", null, {
-			working: 0,
-			base: { name: "main", files: 30 },
-		});
-		expect(rows.find((r) => r.value === "main")?.note).toBe(
-			"default · 30 file(s)",
-		);
-		expect(rows.find((r) => r.value === "develop")?.note).toBeNull();
-	});
-
-	test("keeps the HEAD tag when no count is known for that branch", () => {
-		const rows = buildBaseRows([ref("feature")], null, "feature", {
-			working: 0,
-			base: { name: "main", files: 30 },
-		});
-		expect(rows.find((r) => r.value === "feature")?.note).toBe("HEAD");
+	// 워크트리 행의 **브랜치 이름**은 label이 아니라 note에 산다. label만 보면
+	// 이 목록에서 가장 자연스러운 검색어(브랜치명)로 워크트리를 못 찾는다.
+	test("finds a worktree by the branch it holds", () => {
+		const held = filterPickerRows(rows, "feat").map((r) => r.value);
+		expect(held).toContain("/w/repo/.claude/worktrees/feat");
 	});
 });

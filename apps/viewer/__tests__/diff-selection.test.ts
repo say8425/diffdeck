@@ -146,3 +146,95 @@ describe("selectionCacheKey with an explicit base", () => {
 		);
 	});
 });
+
+describe("parseSelection with an explicit head", () => {
+	test("head is the working tree unless asked otherwise", () => {
+		expect(parseSelection(new URLSearchParams("repo=/r")).head).toEqual({
+			kind: "worktree",
+		});
+	});
+
+	test("an empty head falls back to the working tree", () => {
+		expect(parseSelection(new URLSearchParams("repo=/r&head=")).head).toEqual({
+			kind: "worktree",
+		});
+	});
+
+	// 브랜치를 head로 보면 워킹트리를 거치지 않으므로 커밋된 것만 보인다.
+	test("head names a ref to view instead of the working tree", () => {
+		expect(
+			parseSelection(new URLSearchParams("repo=/r&head=feature/x")).head,
+		).toEqual({ kind: "ref", ref: "feature/x" });
+	});
+
+	// base와 달리 HEAD를 정규화하지 않는다. base=HEAD는 "커밋 안 한 것만"이라
+	// 워킹트리 뷰와 같지만, head=HEAD는 **커밋된 HEAD**를 보는 것이라 워킹트리
+	// 뷰와 다르다(미커밋 변경이 빠진다). 둘을 합치면 그 구분이 사라진다.
+	test("head=HEAD stays a ref — it is not the working tree", () => {
+		expect(
+			parseSelection(new URLSearchParams("repo=/r&head=HEAD")).head,
+		).toEqual({ kind: "ref", ref: "HEAD" });
+	});
+
+	test("head and base are independent axes", () => {
+		const sel = parseSelection(
+			new URLSearchParams("repo=/r&base=main&head=dev"),
+		);
+		expect(sel.base).toEqual({ kind: "ref", ref: "main" });
+		expect(sel.head).toEqual({ kind: "ref", ref: "dev" });
+	});
+});
+
+describe("selectionCacheKey with an explicit head", () => {
+	const sel = (query: string) => parseSelection(new URLSearchParams(query));
+
+	// 계약: 키는 flight 클로저가 읽는 모든 입력의 전함수여야 한다. head가
+	// 빠지면 워킹트리 뷰와 브랜치 뷰가 같은 슬롯에 합류해 한쪽이 남의 diff를
+	// 받는다 — 예전에 해석된 base ref가 빠져 있어 실제로 겪은 그 버그다.
+	test("separates a worktree head from a ref head", () => {
+		expect(selectionCacheKey(sel("repo=/r"), null)).not.toBe(
+			selectionCacheKey(sel("repo=/r&head=dev"), null),
+		);
+	});
+
+	test("separates two different ref heads", () => {
+		expect(selectionCacheKey(sel("repo=/r&head=dev"), null)).not.toBe(
+			selectionCacheKey(sel("repo=/r&head=main"), null),
+		);
+	});
+
+	test("the same head lands on the same slot", () => {
+		expect(selectionCacheKey(sel("repo=/r&head=dev"), null)).toBe(
+			selectionCacheKey(sel("repo=/r&head=dev"), null),
+		);
+	});
+
+	// 커밋된 rev에는 "아직 커밋 안 한 것"이 없다. 곧이곧대로 답하면
+	// `git diff <rev> <rev>`가 되어 에러 없이 빈 화면이 되므로, 의미 없는
+	// 조합을 유일하게 말이 되는 해석으로 푼다.
+	test("a rev head with a working-tree base resolves to auto", () => {
+		for (const q of [
+			"head=feat",
+			"head=feat&base=HEAD",
+			"head=feat&mode=working",
+		]) {
+			const sel = parseSelection(new URLSearchParams(q));
+			expect(sel.base).toEqual({ kind: "auto" });
+			expect(sel.head).toEqual({ kind: "ref", ref: "feat" });
+		}
+	});
+
+	// 사용자가 고른 진짜 base는 그대로 둔다 — 정규화는 "빈 화면 조합" 하나만
+	// 건드린다.
+	test("an explicit base ref survives alongside a head", () => {
+		const sel = parseSelection(new URLSearchParams("head=feat&base=develop"));
+		expect(sel.base).toEqual({ kind: "ref", ref: "develop" });
+	});
+
+	// 워킹트리를 보는 기본 뷰는 정규화 대상이 아니다.
+	test("a worktree head keeps the working-tree base", () => {
+		expect(parseSelection(new URLSearchParams("")).base).toEqual({
+			kind: "head",
+		});
+	});
+});

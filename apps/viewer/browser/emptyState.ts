@@ -29,11 +29,20 @@ export const buildEmptyStateModel = (
 	const { base } = summary;
 	// working 모드 헤드라인: 숨겨진 untracked가 있으면 "Working tree clean"은
 	// git 어휘상 거짓(untracked도 워킹트리 상태)이므로 측정한 것만 주장한다.
+	//
+	// **`null`을 `0`으로 접으면 안 된다.** head가 커밋된 rev면 서버가
+	// untracked를 재지 않고 `null`을 주는데(재지 않은 것을 0으로 적으면 그게
+	// 곧 주장이 된다 — summary.ts의 계약), `?? 0`으로 접으면 워킹트리를 보고
+	// 있지도 않은 화면이 "Working tree clean"이라고 그 워킹트리에 대해
+	// 단언한다. 모르면 아무 말도 안 하는 쪽(`No changes`)으로 간다.
+	const untracked = summary.untrackedFiles;
 	const headline =
 		opts.mode === "working"
-			? summary.untrackedFiles > 0
-				? "No tracked changes"
-				: "Working tree clean"
+			? untracked === null
+				? "No changes"
+				: untracked > 0
+					? "No tracked changes"
+					: "Working tree clean"
 			: base
 				? `No changes vs ${base}`
 				: "No changes";
@@ -55,7 +64,7 @@ export const buildEmptyStateModel = (
 			label: `${baseFiles} file(s) changed vs ${base} — view`,
 		});
 	}
-	if (!opts.untrackedShown && summary.untrackedFiles > 0) {
+	if (!opts.untrackedShown && (summary.untrackedFiles ?? 0) > 0) {
 		actions.push({
 			kind: "show-untracked",
 			label: `${summary.untrackedFiles} untracked file(s) hidden — show`,
@@ -117,4 +126,30 @@ export const renderEmptyState = (
 	}
 
 	return root;
+};
+
+/**
+ * 이 빈 화면을 사용자에게 보여주는 대신 base 뷰로 바로 데려갈 것인가.
+ *
+ * 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어서 기본 뷰(미커밋
+ * 변경)가 구조적으로 비어 있다. 워크트리를 팔 때마다 "볼 게 가장 많은 순간에
+ * 빈 화면"을 만나고, 그때마다 카드의 버튼을 한 번씩 눌러 줘야 했다.
+ *
+ * 판정을 새로 세우지 않고 **카드 자신의 액션을 읽는다** — 카드가 전환을
+ * 권할 상황이 곧 전환할 가치가 있는 상황이라, 조건이 두 곳으로 갈라지지
+ * 않는다.
+ *
+ * 두 가지는 반드시 지킨다:
+ * ① 사용자가 고른 적 있으면(URL `base=` 또는 저장된 프리퍼런스) 덮지 않는다.
+ * ② 토글로 감춰졌을 뿐 **이 뷰에도** 볼 것이 있으면(untracked) 데려가지
+ *    않는다 — 카드가 두 선택지를 나란히 보여주는 편이 낫다. 자동 전환은
+ *    "이 뷰에 정말 아무것도 없을 때"로 한정한다.
+ */
+export const shouldAutoViewBase = (
+	model: EmptyStateModel,
+	opts: { hasExplicitBase: boolean; alreadyTried: boolean },
+): boolean => {
+	if (opts.hasExplicitBase || opts.alreadyTried) return false;
+	const kinds = new Set(model.actions.map((a) => a.kind));
+	return kinds.has("switch-mode") && !kinds.has("show-untracked");
 };

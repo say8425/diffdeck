@@ -170,6 +170,29 @@ const createHandler = (cfg: {
 		}
 		return awaitFlight(resolveBaseCached(repo));
 	};
+
+	/**
+	 * 사용자가 고른 head 참조를 검증한다. base와 **같은 보안 경계**를 탄다 —
+	 * `verifyBaseRef`가 첫 글자 `-`를 먼저 끊는 이유(옵션 주입)는 어느 축이든
+	 * 똑같이 유효하고, 이제 그 값이 `git diff`의 **두 번째** 인자로도 간다.
+	 *
+	 * 표식을 base와 가르는 이유는 클라이언트의 자가복구가 다르기 때문이다:
+	 * 사라진 base는 저장된 프리퍼런스를 지우면 되지만, 사라진 head는 URL의
+	 * 축을 되돌려야 한다.
+	 */
+	const resolveSelectionHead = async (
+		repo: string,
+		sel: Selection,
+	): Promise<{ head: string | undefined } | Response> => {
+		if (sel.head.kind !== "ref") return { head: undefined };
+		const verified = await verifyBaseRef(repo, sel.head.ref);
+		return verified
+			? { head: verified.ref }
+			: new Response(`unknown head ref: ${sel.head.ref}`, {
+					status: 400,
+					headers: { "x-diff-error": "unknown-head" },
+				});
+	};
 	const getRefsCached = (repo: string): Promise<RefsResult> =>
 		refsFlight(repo, async () => {
 			const now = Date.now();
@@ -240,6 +263,9 @@ const createHandler = (cfg: {
 			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
+			const headResult = await resolveSelectionHead(repo, sel);
+			if (headResult instanceof Response) return headResult;
+			const { head } = headResult;
 			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
 			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
 			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
@@ -251,6 +277,7 @@ const createHandler = (cfg: {
 						untracked,
 						mode,
 						ref: mode === "base" ? (ref ?? undefined) : undefined,
+						head,
 					});
 					const cached = diffCache.get(cacheKey, fingerprint);
 					if (cached) return cached;
@@ -260,8 +287,9 @@ const createHandler = (cfg: {
 									untracked,
 									mode: "base",
 									ref: ref ?? undefined,
+									head,
 								})
-							: await getDiffFiles(repo, { untracked });
+							: await getDiffFiles(repo, { untracked, head });
 					const fresh = {
 						fingerprint,
 						etag: payloadEtag(files),
@@ -306,7 +334,15 @@ const createHandler = (cfg: {
 			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
-			const summary = await getRepoSummary(repo, { base, ref });
+			// 카드가 diff와 **다른 축**을 설명하면 안 된다 — head를 빼면
+			// 브랜치를 보고 있는데 카드는 워크트리를 설명한다.
+			const headResult = await resolveSelectionHead(repo, sel);
+			if (headResult instanceof Response) return headResult;
+			const summary = await getRepoSummary(repo, {
+				base,
+				ref,
+				head: headResult.head,
+			});
 			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
 			return new Response(JSON.stringify(summary), {
 				headers: { "content-type": "application/json; charset=utf-8" },
@@ -353,12 +389,12 @@ const createHandler = (cfg: {
 				if (baseResult instanceof Response) return baseResult;
 				ref = baseResult.ref;
 			}
-			const bytes = await getFileBytes(
-				repo,
-				path,
-				side,
-				mode === "base" && ref ? { mode, ref } : {},
-			);
+			const headResult = await resolveSelectionHead(repo, sel);
+			if (headResult instanceof Response) return headResult;
+			const bytes = await getFileBytes(repo, path, side, {
+				...(mode === "base" && ref ? { mode, ref } : {}),
+				...(headResult.head ? { head: headResult.head } : {}),
+			});
 			if (!bytes) return new Response("not found", { status: 404 });
 			// no-store: 워킹트리 이미지는 저장할 때마다 바뀌므로 항상 새로 읽는다
 			// (변경 감지는 blobVersion 캐시버스터가 담당).

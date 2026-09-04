@@ -49,8 +49,67 @@
 				align-items: center;
 				gap: 8px;
 			}
+			/* 오른쪽은 **조작만** 산다. 툴바가 두 축으로 갈리기 때문이다: 왼쪽은
+			   "지금 무엇을 보고 있는가"를 한 문장으로 말하고(트리거 · 견줄 기준 ·
+			   개수 · 변경량), 오른쪽은 화면을 다룬다. 예전엔 뷰 모드와
+			   새로고침이 왼쪽 한복판에 앉아 그 문장을 두 동강 냈다.
+
+			   **순서 자체가 계약이다** — `찾기 · 새로고침 │ Unified/Split · 트리 │ ⋯`:
+			   ① **찾기가 맨 앞이어야 한다(실측).** find 바는 돋보기 자리에서
+			      340px로 펼쳐지는데, 이 그룹은 오른쪽 끝에 고정돼 있어 바가
+			      자라면 **그 왼쪽 이웃만** 밀린다. 찾기가 첫 자리면 밀릴 이웃이
+			      없다 — 실측: 찾기 우선이면 바를 열어도 모든 컨트롤 이동량 0px,
+			      세그먼트를 앞에 두면 −285px 점프.
+			   ② 가운데 셋은 **순간 동작 / 상태 토글**로 갈랐다. 찾기·새로고침은
+			      눌러도 흔적이 없고, Unified/Split·트리 토글은 지금 어떤지를
+			      상시로 말한다. 118px 세그먼트가 두 무리 사이에 놓여 축의 경계와
+			      시각적 경계가 겹친다.
+			   ③ 트리 토글이 ⋯ 바로 옆인 것은 메뉴의 `Hide file tree`가 **같은
+			      토글**이기 때문이고, 레이아웃 짝이 ⋯ 에 붙는 것은 메뉴 여섯 중
+			      넷이 레이아웃이기 때문이다(Flatten · Tree on right ·
+			      Hide file tree · Fold with tree). ⋯ 가 마지막인 건 관례다 —
+			      메뉴는 툴바 아래로 떨어져 이웃을 가리지 않으므로 기계적 제약은
+			      아니지만, "자리를 못 얻은 나머지 전부"는 줄을 닫는 쪽이 맞다. */
 			.tb-right {
 				margin-left: auto;
+			}
+			/* 좁은 창에서 왼쪽 그룹이 오그라들 수 있어야 한다. flex item의 기본
+			   min-width:auto가 min-content 아래로 줄어드는 것을 막는데, 라벨이
+			   붙으면 그 min-content가 최대 260px 늘어 .tb-right(찾기·트리토글·⋯)를
+			   화면 밖으로 밀어낸다 — 실측: 라벨 없이는 460px에서도 멀쩡하던 툴바가
+			   560px에서 이탈했다. */
+			.tb-left {
+				min-width: 0;
+			}
+			/* 줄어드는 몫은 전부 트리거가 진다. 뒤따르는 세 마디(견줄 기준 · 개수 ·
+			   변경량)는 짧고 고정폭에 가까운데 트리거만 브랜치명만큼 길어지기
+			   때문이고, 이 규칙이 없으면 #status가 두 줄로 접혀 툴바 높이가
+			   43 → 49px로 뛴다(실측).
+
+			   예외는 아래 `#toolbar .tb-picker`가 되돌려 받는다. **특이도로**
+			   이긴다(0,1,1 대 0,1,0) — 예전엔 `.tb-picker`라 둘 다 (0,1,0)이고
+			   소스 순서로만 이겼는데, 그러면 피커 규칙을 한곳으로 모으는
+			   평범한 정리가 트리거를 조용히 `flex: none`으로 되돌린다. */
+			.tb-left > * {
+				flex: none;
+			}
+			/* 견줄 기준 표식 — 조작이 아니라 정보다. #status와 같은 종(種)이라
+			   상자가 없고(배경·테두리·radius 없음), 툴바의 13px·시스템 스택을
+			   그대로 상속하므로 font 선언 자체를 두지 않는다. */
+			#base-label {
+				color: var(--vd-fg-muted);
+			}
+			/* 전체 변경량 — 파일 헤더 배지와 같은 add·del 어휘를 쓴다. 앱에 이미
+			   있는 두 색이라 새 값을 만들지 않는다: --vd-success는 grab 보내기의
+			   ok 상태가, #f85149는 fail 상태가 쓰는 바로 그 값이고, 둘이 diff의
+			   add·del 쌍이라는 것은 .grab-l-side 주석이 이미 적고 있다. 엔진의
+			   --diffs-addition-base를 쓸 수는 없다 — 그 토큰은 shadow root
+			   안에만 살아서 툴바에서는 해석되지 않는다. */
+			#change-add {
+				color: var(--vd-success);
+			}
+			#change-del {
+				color: #f85149;
 			}
 			/* One control height for every toolbar widget — without it, line-height:
      normal + differing paddings yield 25/26/26.5/27px mismatches. */
@@ -345,14 +404,45 @@
 			.tb-picker {
 				position: relative;
 			}
+			/* 트리거는 조작이자 **정보 표출**이다 — 지금 보고 있는 리포·워크트리·
+			   브랜치를 통째로 말하므로 상한을 두지 않는다. 폭을 붙드는 기제는
+			   flex shrink 하나뿐이고, 그건 옛 라벨에서 이미 실측으로 확인했다
+			   (161자 브랜치에서도 툴바가 넘치지 않았다).
+
+			   **display:flex가 여기서 계약이다.** 블록이면 안쪽 inline-flex
+			   버튼이 flex item이 아니라서 줄어드는 몫을 물려받지 못하고 제
+			   자연폭 그대로 상자를 넘쳐, 트리거가 아무리 좁아져도 라벨은
+			   한 번도 잘리지 않는다(실측: scrollWidth == clientWidth). */
+			#toolbar .tb-picker {
+				display: flex;
+				flex: 0 1 auto;
+				min-width: 0;
+			}
+			/* **`min-width: 0`은 위 `display: flex`와 한 짝이다.** `.tb-picker`가
+			   flex 컨테이너가 된 순간 이 버튼은 flex item이고, 기본
+			   `min-width: auto`가 콘텐츠 기반 최소 크기 — 즉 `nowrap` 라벨의
+			   텍스트 전체 폭 — 으로 풀린다. 라벨 자신의 `overflow: hidden`은
+			   라벨의 자동 최소값만 0으로 만들 뿐 버튼의 min-content 기여를
+			   줄이지 못하므로, 이 줄이 빠지면 `display: flex`를 지웠을 때와
+			   **똑같이** 라벨이 한 번도 안 잘린다. 이 줄은 옛 `max-width: 260px`을
+			   대체하며 들어왔으니 "상한을 없앴으니 잉여"로 읽고 지우지 말 것. */
 			#toolbar #ref-picker-btn {
 				gap: 8px;
-				max-width: 260px;
+				min-width: 0;
+			}
+			/* 줄어드는 몫은 라벨만 진다 — 셰브론이 눌리면 컨트롤로 안 읽힌다. */
+			#toolbar #ref-picker-btn > svg {
+				flex: none;
 			}
 			#ref-picker-label {
 				overflow: hidden;
 				text-overflow: ellipsis;
 				white-space: nowrap;
+				/* 구별되는 조각 하나만 밝힌다 — 나머지는 맥락이다. */
+				color: var(--vd-fg-muted);
+			}
+			#picker-name {
+				color: var(--vd-fg);
 			}
 			#ref-picker {
 				position: absolute;
@@ -747,7 +837,10 @@
 							aria-expanded="false"
 							aria-controls="ref-picker"
 						>
-							<span id="ref-picker-label">Working tree</span>
+							<span id="ref-picker-label"
+								><span id="picker-scope"></span><span id="picker-name"></span
+								><span id="picker-branch"></span
+							></span>
 							<svg
 								width="12"
 								height="12"
@@ -766,8 +859,8 @@
 							<input
 								id="ref-picker-search"
 								type="text"
-								placeholder="Filter branches"
-								aria-label="Filter branches"
+								placeholder="Filter worktrees and branches"
+								aria-label="Filter worktrees and branches"
 								role="combobox"
 								aria-expanded="true"
 								aria-controls="ref-picker-list"
@@ -778,44 +871,21 @@
 							<div
 								id="ref-picker-list"
 								role="listbox"
-								aria-label="Compare against"
+								aria-label="What to view"
 							></div>
 						</div>
 					</div>
-					<fieldset
-						class="tb-seg"
-						id="diff-style-group"
-						aria-label="Diff style"
-					>
-						<button type="button" data-style="unified" aria-pressed="true">
-							Unified
-						</button>
-						<button type="button" data-style="split" aria-pressed="false">
-							Split
-						</button>
-					</fieldset>
-					<button
-						id="refresh"
-						type="button"
-						aria-label="Refresh"
-						title="Refresh"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<polyline points="23 4 23 10 17 10" />
-							<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-						</svg>
-					</button>
+					<!-- 견줄 기준. 트리거가 "무엇을 보는가"(head)를 말하므로 여기는
+					     겹치지 않는 다른 축만 말한다 — 예전엔 둘이 같은 말을 했다. -->
+					<span id="base-label"></span>
 					<span id="status"></span>
+					<!-- 전체 변경량. 개수만으로는 규모를 못 읽는다 — 176 file(s)가
+					     한 줄씩 고친 것인지 통째로 새로 쓴 것인지 갈린다. 조각
+					     사이에 공백 텍스트 노드가 생기면 안 된다(#change-del이
+					     구분자를 품고 온다). -->
+					<span id="change-totals"
+						><span id="change-add"></span><span id="change-del"></span
+					></span>
 				</div>
 				<div class="tb-right">
 					<button
@@ -874,6 +944,43 @@
 							✕
 						</button>
 					</search>
+					<!-- 순간 동작(찾기·새로고침)과 상태 토글(렌더 방식·트리 보임)이
+					     여기서 갈린다. 새로고침이 찾기 바로 뒤인 것은 두 번째
+					     제약 때문이다 — 찾기가 첫 자리를 못 내주므로(바로 아래
+					     주석) 정보 사슬에 가장 가까이 설 수 있는 자리가 여기다. -->
+					<button
+						id="refresh"
+						type="button"
+						aria-label="Refresh"
+						title="Refresh"
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<polyline points="23 4 23 10 17 10" />
+							<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+						</svg>
+					</button>
+					<fieldset
+						class="tb-seg"
+						id="diff-style-group"
+						aria-label="Diff style"
+					>
+						<button type="button" data-style="unified" aria-pressed="true">
+							Unified
+						</button>
+						<button type="button" data-style="split" aria-pressed="false">
+							Split
+						</button>
+					</fieldset>
 					<button
 						id="tree-toggle-btn"
 						type="button"
