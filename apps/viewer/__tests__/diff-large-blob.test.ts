@@ -8,8 +8,9 @@ import { getDiffFiles } from "../server/diff.ts";
 /**
  * 64KB 파이프 버퍼를 넘는 old 쪽 blob 여럿을 한 번에 읽는 경로의 회귀망.
  *
- * Bun 1.3.x(1.3.12·1.3.14 실측)의 `$`는 64KB를 넘는 stdout을 받는 호출이
- * 겹치면 자식이 이미 끝났는데도 promise가 영영 settle하지 않는다.
+ * Bun 1.3.x(1.3.12·1.3.14 실측)의 `$`는 64KB를 넘는 stdout을 받는 호출에서
+ * 자식이 이미 끝났는데도 promise가 영영 settle하지 않을 수 있다 — 겹치면
+ * 거의 확정이고, 완전 순차여도 결국 걸린다(200KB × 32를 하나씩 읽어 14라운드째).
  * `getDiffFiles`의 8-way `showBytes` 버스트가 정확히 그 모양이라 큰 diff의
  * `/api/diff`가 45초 flight 타임아웃 → 503으로 떨어졌다(실측: 556파일 리포에서
  * 매번). 200KB 파일 12개면 첫 호출에서 죽고, 60KB(버퍼 미만)는 멀쩡하다.

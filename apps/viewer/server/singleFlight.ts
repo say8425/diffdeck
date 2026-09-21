@@ -3,12 +3,14 @@
  * 콜드 상태에서 프리워밍·첫 화면·watch 폴이 겹쳐도 diff 파이프라인(파일당
  * git 서브프로세스)과 base 해석(gh pr view)이 중복 실행되지 않게 한다.
  *
- * fn()이 settle하지 않는 경로가 실측됐다 — Bun 1.3.12의 `$`(ShellPromise)가,
- * diff.ts의 BUILD_CONCURRENCY=8 git 서브프로세스 버스트가 외부 프로세스 생성
- * 경합과 겹치면 resolve도 reject도 없이 영구히 pending 상태가 된다(자식은
- * 시스템에서 사라지고 좀비도 없고 이벤트 루프도 정상인데 프라미스만 안
- * 끝난다). ShellPromise엔 `.timeout()`/`.kill()`이 없어 Promise.race가 유일한
- * 레버다. 타임아웃이 뜨면 이 슬롯을 reject해 `.finally()`가 키를 지우게
+ * fn()이 settle하지 않는 경로가 실측됐다 — Bun 1.3.x의 `$`(ShellPromise)는
+ * 64KB를 넘는 stdout을 받는 호출에서 resolve도 reject도 없이 영구히 pending
+ * 상태가 될 수 있다(겹치면 거의 확정이고 순차여도 결국 걸린다, 업스트림은
+ * 1.4.0에서 수정). 자식은 시스템에서 사라지고 좀비도 없고 이벤트 루프도
+ * 정상인데 프라미스만 안 끝난다. 그 버스트의 주인이던 diff.ts `showBytes`는
+ * `Bun.spawn`으로 옮겼지만 출력이 클 수 있는 `$`가 남아 있어 이 타임아웃은
+ * 그대로 필요하다. ShellPromise엔 `.timeout()`/`.kill()`이 없어 Promise.race가
+ * 유일한 레버다. 타임아웃이 뜨면 이 슬롯을 reject해 `.finally()`가 키를 지우게
  * 하고, 그래야 "다음" 호출이 죽은 프라미스에 합류하지 않고 새로 시작한다 —
  * 버려진 원래 fn()은 백그라운드에서 계속 pending인 채로 남지만 더는 아무도
  * 기다리지 않는다.
