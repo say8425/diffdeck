@@ -48,7 +48,7 @@ jobs:
   # 지원 하한이 1.4 이상이 되면(`engines.bun` 도입 등) 이 잡은 지운다.
   test-bun13:
     runs-on: ubuntu-latest
-    # 회귀하면 테스트가 스스로 10초 타임아웃으로 끝나지만, Bun 다운로드나 러너가
+    # 회귀하면 테스트가 스스로 타임아웃(케이스당 10~15초)으로 끝나지만, Bun 다운로드나 러너가
     # 매달리는 경우까지 GHA 기본값(6시간)을 태우지 않게 상한을 둔다.
     timeout-minutes: 10
     steps:
@@ -66,6 +66,7 @@ jobs:
           bun test
           apps/viewer/__tests__/diff-large-blob.test.ts
           apps/viewer/__tests__/git-output.test.ts
+          apps/viewer/__tests__/git-large-output.test.ts
 
   coverage:
     runs-on: ubuntu-latest
