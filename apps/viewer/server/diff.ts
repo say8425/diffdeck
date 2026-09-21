@@ -132,14 +132,27 @@ export interface DiffFile {
 
 // Uint8Array<ArrayBuffer>로 명시: fetch Response body(BodyInit)는
 // SharedArrayBuffer 기반 뷰를 받지 않으므로 넓은 ArrayBufferLike면 안 된다.
+//
+// `$`가 아니라 `Bun.spawn`이다. Bun 1.3.x의 `$`는 64KB를 넘는 stdout을 받는
+// 호출에서 자식이 이미 끝났는데도 promise가 영영 settle하지 않을 수 있다 —
+// 호출이 겹치면 거의 확정이고 완전 순차여도 결국 걸린다(1.3.12·1.3.14 실측,
+// 업스트림은 1.4.0에서 수정). 여기가 `getDiffFiles`의 8-way 버스트라 큰 blob이
+// 섞인 diff는 통째로 45초 flight 타임아웃 → 503이 됐다. 같은 작업을
+// `Bun.spawn`으로는 수천 번 돌려도 걸리지 않았다.
+// 동작은 `$ … 2>/dev/null` + `.nothrow()`와 같다: 종료 코드를 보지 않고
+// stdout만 읽고(없는 rev:path는 빈 바이트), 스폰 자체가 실패하면(cwd 삭제)
+// 둘 다 throw한다. 회귀망: `diff-large-blob.test.ts`.
 const showBytes = async (
 	repo: string,
 	rev: string,
 	path: string,
 ): Promise<Uint8Array<ArrayBuffer>> => {
-	const buf = await $`git -C ${repo} show ${`${rev}:${path}`} 2>/dev/null`
-		.nothrow()
-		.arrayBuffer();
+	const proc = Bun.spawn(["git", "-C", repo, "show", `${rev}:${path}`], {
+		stdout: "pipe",
+		stderr: "ignore",
+	});
+	const buf = await new Response(proc.stdout).arrayBuffer();
+	await proc.exited;
 	return new Uint8Array(buf);
 };
 
