@@ -38,23 +38,29 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun test
 
-  # 위아래 잡들은 setup-bun 기본값(최신 Bun)으로 돈다. 그런데 Bun 1.3.x의 `$`는
+  # 위아래 잡들은 setup-bun 기본값으로 돈다 — 루트 package.json에 `packageManager`·
+  # `engines.bun`이 없으므로 최신 Bun이다. 그런데 Bun 1.3.x의 `$`는
   # 64KB를 넘는 stdout을 받는 호출에서 영영 settle하지 않을 수 있고(업스트림은
   # 1.4.0에서 수정), 최신 Bun에서는 그 회귀가 원리적으로 안 보인다 — showBytes를
   # `$`로 되돌려도 `test` 잡은 초록이다. `bunx` 사용자는 자기 Bun을 쓰므로 1.3.x도
   # 여전히 대상이라, 그 결함의 회귀망만 1.3.x 마지막 판으로 고정해 따로 돌린다.
   # 전량은 `test` 잡이 이미 돈다 — 여기엔 버전에 따라 판별력이 갈리는 것만 싣는다.
+  # 지원 하한이 1.4 이상이 되면(`engines.bun` 도입 등) 이 잡은 지운다.
   test-bun13:
     runs-on: ubuntu-latest
-    # 회귀하면 테스트가 스스로 10초 타임아웃으로 끝나지만, 설치가 매달리는
-    # 경우까지 GHA 기본값(6시간)을 태우지 않게 상한을 둔다.
+    # 회귀하면 테스트가 스스로 10초 타임아웃으로 끝나지만, Bun 다운로드나 러너가
+    # 매달리는 경우까지 GHA 기본값(6시간)을 태우지 않게 상한을 둔다.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
+          bun-version: '1.3.14'
+      # `bun install`은 일부러 없다. 이 회귀망은 Bun·Node 내장과 로컬 파일만 쓰므로
+      # 의존성이 필요 없고(설치 없이 1.3.14에서 통과·되돌리면 실패, 둘 다 실측),
+      # 설치를 넣으면 최신 Bun이 lockfile 포맷을 바꾸는 날 1.3.14가 그걸 못 읽어
+      # 이 잡이 회귀와 무관하게 빨개진다 — 그때 쉬운 오답은 고정 판을 올리는 것이고,
+      # 그러면 이 잡의 존재 이유가 사라진다.
       - name: Bun 1.3.x `$` never-settle regression
         run: bun test apps/viewer/__tests__/diff-large-blob.test.ts
 
