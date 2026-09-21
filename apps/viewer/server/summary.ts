@@ -1,5 +1,5 @@
-import { $ } from "bun";
 import { resolveDiffBaseRev } from "./diff.ts";
+import { gitText } from "./gitOutput.ts";
 
 /**
  * 빈 diff 화면의 정보형 빈 상태 전용 경량 요약. diff가 0건일 때만 lazy하게
@@ -40,31 +40,28 @@ export const getRepoSummary = async (
 	// 워크트리의 브랜치를 말하면 보고 있지도 않은 곳을 가리킨다.
 	const branch = opts.head
 		? opts.head
-		: (
-				await $`git -C ${repo} branch --show-current 2>/dev/null`
-					.nothrow()
-					.text()
-			).trim();
+		: (await gitText(["-C", repo, "branch", "--show-current"])).trim();
 	const head = (
-		await $`git -C ${repo} rev-parse --short ${opts.head ?? "HEAD"} 2>/dev/null`
-			.nothrow()
-			.text()
+		await gitText(["-C", repo, "rev-parse", "--short", opts.head ?? "HEAD"])
 	).trim();
 	// 커밋된 리비전에는 미커밋 변경도 untracked도 없다. 0이 아니라 null인
 	// 이유는 위 필드 주석에 있다 — 재지 않은 것을 0으로 적으면 주장이 된다.
 	const workingFiles = opts.head
 		? null
 		: countZ(
-				await $`git -C ${repo} diff --name-only -z HEAD -- 2>/dev/null`
-					.nothrow()
-					.text(),
+				await gitText(["-C", repo, "diff", "--name-only", "-z", "HEAD", "--"]),
 			);
 	const untrackedFiles = opts.head
 		? null
 		: countZ(
-				await $`git -C ${repo} ls-files --others --exclude-standard -z 2>/dev/null`
-					.nothrow()
-					.text(),
+				await gitText([
+					"-C",
+					repo,
+					"ls-files",
+					"--others",
+					"--exclude-standard",
+					"-z",
+				]),
 			);
 	let baseFiles: number | null = null;
 	let aheadCommits: number | null = null;
@@ -79,18 +76,29 @@ export const getRepoSummary = async (
 			// 끝의 `--`는 diff.ts의 같은 이유다 — 참조 이름이 경로와 겹치면
 			// `ambiguous argument`가 나고 nothrow가 그것을 0으로 삼킨다.
 			baseFiles = countZ(
-				opts.head
-					? await $`git -C ${repo} diff --name-only -z ${mergeBase} ${opts.head} -- 2>/dev/null`
-							.nothrow()
-							.text()
-					: await $`git -C ${repo} diff --name-only -z ${mergeBase} -- 2>/dev/null`
-							.nothrow()
-							.text(),
+				await gitText(
+					opts.head
+						? [
+								"-C",
+								repo,
+								"diff",
+								"--name-only",
+								"-z",
+								mergeBase,
+								opts.head,
+								"--",
+							]
+						: ["-C", repo, "diff", "--name-only", "-z", mergeBase, "--"],
+				),
 			);
 			const ahead = (
-				await $`git -C ${repo} rev-list --count ${`${mergeBase}..${opts.head ?? "HEAD"}`} 2>/dev/null`
-					.nothrow()
-					.text()
+				await gitText([
+					"-C",
+					repo,
+					"rev-list",
+					"--count",
+					`${mergeBase}..${opts.head ?? "HEAD"}`,
+				])
 			).trim();
 			aheadCommits = /^\d+$/.test(ahead) ? Number(ahead) : null;
 		}
