@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { $ } from "bun";
-import { gitBytes } from "./gitOutput.ts";
+import { gitBytes, gitText } from "./gitOutput.ts";
 import { mapWithLimit } from "./mapLimit.ts";
 
 // buildFile 병렬 실행 상한 — 파일당 git 서브프로세스가 뜨므로 무제한이면
@@ -304,13 +304,18 @@ export const getDiffFiles = async (
 		// 위치 인자로 처음 통과시키면서 열린 노출이다 — 예전엔 언제나
 		// `HEAD` 아니면 merge-base OID였다. `merge-base`·`rev-list`·
 		// `rev-parse`·`show <rev>:<path>`는 rev만 받아 영향이 없다(실측).
-		const nameStatus = opts.head
-			? await $`git -C ${repo} diff --name-status -z ${base} ${opts.head} -- 2>/dev/null`
-					.nothrow()
-					.text()
-			: await $`git -C ${repo} diff --name-status -z ${base} -- 2>/dev/null`
-					.nothrow()
-					.text();
+		//
+		// `$`가 아니라 `gitText`다 — 큰 diff에서 출력이 64KB를 넘는다.
+		const nameStatus = await gitText([
+			"-C",
+			repo,
+			"diff",
+			"--name-status",
+			"-z",
+			base,
+			...(opts.head ? [opts.head] : []),
+			"--",
+		]);
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
 		const specs = parseNameStatusZ(nameStatus);
@@ -324,10 +329,14 @@ export const getDiffFiles = async (
 	// 없으므로 건너뛴다(디스크를 훑어 봐야 그건 워킹트리의 사실이지 이 뷰의
 	// 사실이 아니다).
 	if (opts.untracked && !opts.head) {
-		const listed =
-			await $`git -C ${repo} ls-files --others --exclude-standard -z 2>/dev/null`
-				.nothrow()
-				.text();
+		const listed = await gitText([
+			"-C",
+			repo,
+			"ls-files",
+			"--others",
+			"--exclude-standard",
+			"-z",
+		]);
 		const paths = listed.split("\0").filter((s) => s !== "");
 		files.push(
 			...(await mapWithLimit(paths, BUILD_CONCURRENCY, (path) =>

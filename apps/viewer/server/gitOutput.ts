@@ -1,7 +1,8 @@
 /**
  * git을 `$`가 아니라 `Bun.spawn`으로 부르고 stdout을 끝까지 읽는다. 출력이
- * 64KB를 넘을 수 있는 **새** git 호출은 여기를 탄다 — 아직 `$`로 남은 호출은
- * CLAUDE.md "Loading…" 항목에 있다.
+ * 64KB를 넘을 수 있는 서버의 git 호출은 전부 여기를 탄다 — 남은 `$`는
+ * `rev-parse`·`merge-base`·`gh pr view`·`worktree list`처럼 출력이 작은 호출뿐이고,
+ * 새 호출도 출력이 클 수 있으면 여기를 탄다.
  *
  * Bun 1.3.x의 `$`는 64KB를 넘는 stdout을 받는 호출에서 자식이 이미 끝났는데도
  * promise가 영영 settle하지 않을 수 있다 — 호출이 겹치면 거의 확정이고 완전
@@ -17,7 +18,7 @@
  * 기대지 않는다.
  * 인자는 셸을 거치지 않고 argv로 그대로 간다(옵션 꼴 참조를 막는 건 여전히
  * 호출자 몫이다 — `verifyBaseRef`). 회귀망: `git-output.test.ts`,
- * `diff-large-blob.test.ts`.
+ * `diff-large-blob.test.ts`, `git-large-output.test.ts`(호출처별).
  */
 export const gitBytes = async (
 	args: readonly string[],

@@ -7,13 +7,12 @@ import { gitText } from "../server/gitOutput.ts";
 import { mapWithLimit } from "../server/mapLimit.ts";
 
 /**
- * `gitText`(와 그 아래 `gitBytes`)의 회귀망. 출력이 64KB를 넘을 수 있는 새 git
- * 호출은 이 헬퍼를 탄다(아직 `$`로 남은 호출은 CLAUDE.md "Loading…" 항목) — Bun
- * 1.3.x의 `$`는 그런 호출에서 자식이 끝났는데도 promise가 영영 settle하지 않을
- * 수 있기 때문이다(업스트림은 1.4.0에서 수정). 실제 호출처(예: `summary.ts`의
- * `diff --name-only`)는 걸리는 빈도가 낮아 결정론적으로 재현되지 않으므로,
- * 확실히 걸리는 모양 — 200KB `git show` 12개를 8-way로 — 으로 헬퍼 자체를
- * 찌른다.
+ * `gitText`(와 그 아래 `gitBytes`)의 회귀망. 출력이 64KB를 넘을 수 있는 서버의
+ * git 호출은 전부 이 헬퍼를 탄다 — Bun 1.3.x의 `$`는 그런 호출에서 자식이
+ * 끝났는데도 promise가 영영 settle하지 않을 수 있기 때문이다(업스트림은 1.4.0에서
+ * 수정). 호출처별 회귀망은 `git-large-output.test.ts`인데 거기서도 결정론적으로
+ * 재현되지 않는 호출처가 있어(`summary.ts`의 순차 호출, `for-each-ref`), 확실히
+ * 걸리는 모양 — 200KB `git show` 12개를 8-way로 — 으로 헬퍼 자체를 찌른다.
  *
  * 판별력은 `diff-large-blob.test.ts`와 같다: 행업 단언은 1.3.x에서만 갈리므로
  * CI의 `test-bun13` 잡이 이 파일도 Bun 1.3.14로 돌린다. 내용 단언은 버전 무관.

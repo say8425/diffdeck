@@ -6,6 +6,7 @@
  * 그것을 물고 있는 워크트리를 알려준다.
  */
 import { $ } from "bun";
+import { gitText } from "./gitOutput.ts";
 
 export interface WorktreeRecord {
 	path: string;
@@ -159,10 +160,16 @@ export const getRefs = async (repo: string): Promise<RefsResult> => {
 	// 찾는 것이고, 기본(refname) 순서면 충분하다.
 	const [wtRaw, refRaw] = await Promise.all([
 		$`git -C ${repo} worktree list --porcelain -z`.nothrow().quiet().text(),
-		$`git -C ${repo} for-each-ref ${REF_FORMAT} refs/heads refs/remotes`
-			.nothrow()
-			.quiet()
-			.text(),
+		// `$`가 아니라 `gitText` — 원격 브랜치가 수천 개인 리포면 출력이 64KB를
+		// 넘는다. 작은 `worktree list`는 `$`로 둔다.
+		gitText([
+			"-C",
+			repo,
+			"for-each-ref",
+			REF_FORMAT,
+			"refs/heads",
+			"refs/remotes",
+		]),
 	]);
 	const worktrees = parseWorktreeList(wtRaw);
 	const live = new Set(worktrees.map((w) => w.path));
