@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { $ } from "bun";
-import { gitBytes, gitText } from "./gitOutput.ts";
+import type { BlobCache } from "./blobCache.ts";
+import { gitBytes, gitRun, gitText } from "./gitOutput.ts";
 import { mapWithLimit } from "./mapLimit.ts";
 
 // buildFile 병렬 실행 상한 — 파일당 git 서브프로세스가 뜨므로 무제한이면
@@ -144,6 +145,34 @@ const showBytes = (
 ): Promise<Uint8Array<ArrayBuffer>> =>
 	gitBytes(["-C", repo, "show", `${rev}:${path}`]);
 
+// blob 하나를 읽되, OID와 캐시가 있으면 캐시를 먼저 본다. miss 경로는
+// `showBytes`와 같은 `git show <rev>:<path>`라 캐시가 비어 있을 때 출력이
+// 지금과 바이트 단위로 같다. **종료 코드가 0일 때만 저장한다** — 잠깐 못 읽은
+// 결과(빈 바이트, 예: 부분 클론의 지연 페치 실패)를 저장하면 그 빈 내용이
+// 영구히 눌러앉는다(지금은 그 빌드에만 비고 다음 재빌드에서 회복된다). 워킹트리
+// 비교에선 old blob이 없으면 목록(`git diff --raw`)이 먼저 죽으므로, 이 가드가
+// 실제로 지키는 곳은 목록이 blob을 읽지 않는 head 모드(커밋 대 커밋)다(실측).
+const readBlob = async (
+	repo: string,
+	rev: string,
+	path: string,
+	oid: string | null,
+	blobs?: BlobCache,
+): Promise<Uint8Array<ArrayBuffer>> => {
+	if (oid && blobs) {
+		const hit = blobs.get(oid);
+		if (hit !== undefined) return hit;
+	}
+	const { stdout, exitCode } = await gitRun([
+		"-C",
+		repo,
+		"show",
+		`${rev}:${path}`,
+	]);
+	if (oid && blobs && exitCode === 0) blobs.set(oid, stdout);
+	return stdout;
+};
+
 const readWorkingBytes = (
 	repo: string,
 	path: string,
@@ -161,17 +190,21 @@ const buildFile = async (
 	spec: FileSpec,
 	/** new 쪽 리비전. 없으면 워킹트리(디스크의 지금 파일)를 읽는다. */
 	head?: string,
+	blobs?: BlobCache,
 ): Promise<DiffFile> => {
 	const { status, name, oldName } = spec;
+	// old 쪽을 읽을지는 상태가 정한다 — OID는 캐시 키로만 쓴다.
 	const oldBytes =
 		status === "added" || status === "untracked"
 			? new Uint8Array()
-			: await showBytes(repo, base, oldName ?? name);
+			: await readBlob(repo, base, oldName ?? name, spec.oldOid, blobs);
+	// 워킹트리 new 쪽은 캐시하지 않는다 — 디스크가 진실이고, 전부 새로 읽어도
+	// 176파일에 4.3ms다(실측).
 	const newBytes =
 		status === "deleted"
 			? new Uint8Array()
 			: head
-				? await showBytes(repo, head, name)
+				? await readBlob(repo, head, name, spec.newOid, blobs)
 				: readWorkingBytes(repo, name);
 	const binary = oldBytes.includes(0) || newBytes.includes(0);
 	const decoder = new TextDecoder();
@@ -307,6 +340,8 @@ export const getDiffFiles = async (
 		/** new 쪽 리비전. 없으면 워킹트리를 본다. */
 		head?: string;
 	} = {},
+	/** 변경 폴에서 바뀌지 않은 blob의 `git show`를 건너뛴다. 없으면 지금과 같다. */
+	blobs?: BlobCache,
 ): Promise<DiffFile[]> => {
 	const base = await resolveDiffBaseRev(repo, opts);
 	const files: DiffFile[] = [];
@@ -341,7 +376,7 @@ export const getDiffFiles = async (
 		const specs = parseRawZ(raw);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
-				buildFile(repo, base, spec, opts.head),
+				buildFile(repo, base, spec, opts.head, blobs),
 			)),
 		);
 	}
