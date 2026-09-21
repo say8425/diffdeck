@@ -21,17 +21,30 @@
  * 호출자 몫이다 — `verifyBaseRef`). 회귀망: `git-output.test.ts`,
  * `diff-large-blob.test.ts`, `git-large-output.test.ts`(호출처별).
  */
-export const gitBytes = async (
+export interface GitRunResult {
+	stdout: Uint8Array<ArrayBuffer>;
+	exitCode: number;
+}
+
+/**
+ * `gitBytes`와 같되 종료 코드를 함께 준다. 결과를 저장하는 호출자(blob 캐시)가
+ * 실패한 읽기를 굳히지 않으려면 빈 출력이 "빈 파일"인지 "실패"인지 갈라야 한다.
+ */
+export const gitRun = async (
 	args: readonly string[],
-): Promise<Uint8Array<ArrayBuffer>> => {
+): Promise<GitRunResult> => {
 	const proc = Bun.spawn(["git", ...args], {
 		stdout: "pipe",
 		stderr: "ignore",
 	});
 	const buf = await new Response(proc.stdout).arrayBuffer();
-	await proc.exited;
-	return new Uint8Array(buf);
+	const exitCode = await proc.exited;
+	return { stdout: new Uint8Array(buf), exitCode };
 };
+
+export const gitBytes = async (
+	args: readonly string[],
+): Promise<Uint8Array<ArrayBuffer>> => (await gitRun(args)).stdout;
 
 export const gitText = async (args: readonly string[]): Promise<string> =>
 	new TextDecoder().decode(await gitBytes(args));

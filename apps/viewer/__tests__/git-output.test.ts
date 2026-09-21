@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import { gitText } from "../server/gitOutput.ts";
+import { gitRun, gitText } from "../server/gitOutput.ts";
 import { mapWithLimit } from "../server/mapLimit.ts";
 
 /**
@@ -92,4 +92,26 @@ test("decodes stdout as UTF-8", async () => {
 
 test("ignores the exit code: a missing rev:path yields an empty string", async () => {
 	expect(await gitText(["-C", repo, "show", "HEAD:nope.txt"])).toBe("");
+});
+
+test("gitRun reports exit code 0 with the bytes on success", async () => {
+	const { stdout, exitCode } = await gitRun([
+		"-C",
+		repo,
+		"show",
+		"HEAD:한글.txt",
+	]);
+	expect(exitCode).toBe(0);
+	expect(new TextDecoder().decode(stdout)).toBe("안녕 — 세계\n");
+});
+
+test("gitRun reports a non-zero exit code when git fails", async () => {
+	const { stdout, exitCode } = await gitRun([
+		"-C",
+		repo,
+		"show",
+		"HEAD:nope.txt",
+	]);
+	expect(exitCode).not.toBe(0);
+	expect(stdout.byteLength).toBe(0);
 });
