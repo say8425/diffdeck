@@ -14,7 +14,6 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import { $ } from "bun";
-import { gitText } from "./gitOutput.ts";
 
 export const repoFingerprint = async (
 	repo: string,
@@ -30,7 +29,9 @@ export const repoFingerprint = async (
 	const [status, head, baseRev, headRev] = await Promise.all([
 		// `$`가 아니라 `gitText` — untracked를 켜면 출력이 64KB를 쉽게 넘고, watch가
 		// 2초마다 부르는 자리라 Bun 1.3.x `$`의 never-settle에 가장 오래 노출된다.
-		gitText(["-C", repo, "status", "--porcelain", "-z", untrackedFlag]),
+		$`git -C ${repo} status --porcelain -z ${untrackedFlag} 2>/dev/null`
+			.nothrow()
+			.text(),
 		$`git -C ${repo} rev-parse HEAD 2>/dev/null`.nothrow().text(),
 		opts.mode === "base" && opts.ref
 			? $`git -C ${repo} rev-parse ${opts.ref} 2>/dev/null`.nothrow().text()
