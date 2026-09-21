@@ -147,12 +147,9 @@ const showBytes = async (
 	rev: string,
 	path: string,
 ): Promise<Uint8Array<ArrayBuffer>> => {
-	const proc = Bun.spawn(["git", "-C", repo, "show", `${rev}:${path}`], {
-		stdout: "pipe",
-		stderr: "ignore",
-	});
-	const buf = await new Response(proc.stdout).arrayBuffer();
-	await proc.exited;
+	const buf = await $`git -C ${repo} show ${`${rev}:${path}`} 2>/dev/null`
+		.nothrow()
+		.arrayBuffer();
 	return new Uint8Array(buf);
 };
 
