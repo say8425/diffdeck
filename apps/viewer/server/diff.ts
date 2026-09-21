@@ -158,12 +158,11 @@ const readWorkingBytes = (
 const buildFile = async (
 	repo: string,
 	base: string,
-	status: DiffFileStatus,
-	name: string,
-	oldName?: string,
+	spec: FileSpec,
 	/** new 쪽 리비전. 없으면 워킹트리(디스크의 지금 파일)를 읽는다. */
 	head?: string,
 ): Promise<DiffFile> => {
+	const { status, name, oldName } = spec;
 	const oldBytes =
 		status === "added" || status === "untracked"
 			? new Uint8Array()
@@ -189,30 +188,50 @@ const buildFile = async (
 	};
 };
 
-// git의 기본값(core.quotePath=true)에서는 -z 없는 출력이 비-ASCII/특수문자
-// 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다. 그 인용 문자열을 그대로
-// 경로로 쓰면 git show/readFileSync가 못 찾아 조용히 빈 내용이 된다. -z는
-// NUL로 레코드를 구분하고 경로를 인용 없이 그대로 낸다(fingerprint.ts와 동일
-// 전략). rename/copy(R/C, 유사도 점수 접미) 레코드만 경로 필드가 2개(old, new).
-const parseNameStatusZ = (
-	output: string,
-): Array<{ status: DiffFileStatus; name: string; oldName?: string }> => {
-	const tokens = output.split("\0").filter((t) => t !== "");
-	const specs: Array<{
-		status: DiffFileStatus;
-		name: string;
-		oldName?: string;
-	}> = [];
+export interface FileSpec {
+	status: DiffFileStatus;
+	name: string;
+	oldName?: string;
+	/** 0이 아닌 전체 blob OID. 없으면 null — 캐시를 거치지 않는다. */
+	oldOid: string | null;
+	newOid: string | null;
+}
+
+const oidOrNull = (s: string): string | null =>
+	/^[0-9a-f]+$/.test(s) && !/^0+$/.test(s) ? s : null;
+
+// `git diff --raw -z --no-abbrev`의 레코드: `:<oldmode> <newmode> <oldoid>
+// <newoid> <status>\0<path>\0`. rename/copy(R/C, 유사도 점수 접미)만 경로가
+// 둘(`<old>\0<new>\0`)이다.
+//
+// **`-z`가 계약이다.** git의 기본값(core.quotePath=true)에서는 -z 없는 출력이
+// 비-ASCII/특수문자 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다. 그 인용
+// 문자열을 그대로 경로로 쓰면 git show/readFileSync가 못 찾아 조용히 빈 내용이
+// 된다. -z는 NUL로 레코드를 구분하고 경로를 인용 없이 그대로 낸다
+// (fingerprint.ts와 동일 전략).
+//
+// **`--no-abbrev`도 계약이다.** `--full-index`는 패치의 index 줄에만 작용해 여기선
+// 7자 약어가 나온다(실측) — 약어를 blob 캐시 키로 쓰면 큰 리포에서 충돌한다.
+// 없는 쪽 OID(추가된 파일의 old, 삭제된 파일의 new, 워킹트리에서 stat이 바뀐
+// 파일의 new)는 전부 0이라 null로 둔다. 상태 매핑은 예전 `--name-status` 파서와
+// 같다.
+export const parseRawZ = (output: string): FileSpec[] => {
+	const tokens = output.split("\0");
+	const specs: FileSpec[] = [];
 	for (let i = 0; i < tokens.length;) {
-		const code = tokens[i] ?? "";
+		const meta = tokens[i] ?? "";
 		i++;
+		if (!meta.startsWith(":")) continue;
+		const [, , oldRaw = "", newRaw = "", code = ""] = meta.slice(1).split(" ");
+		const oldOid = oidOrNull(oldRaw);
+		const newOid = oidOrNull(newRaw);
 		if (/^[RC]/.test(code)) {
-			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한(현재 미사용) git이
-			// 내지 않아 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
-			const oldName = tokens[i];
+			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한 git이 내지 않아
+			// 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
+			const oldName = tokens[i] ?? "";
 			const name = tokens[i + 1] ?? "";
 			i += 2;
-			specs.push({ status: "renamed", name, oldName });
+			specs.push({ status: "renamed", name, oldName, oldOid, newOid });
 		} else {
 			const name = tokens[i] ?? "";
 			i++;
@@ -221,7 +240,7 @@ const parseNameStatusZ = (
 				: code.startsWith("D")
 					? "deleted"
 					: "modified";
-			specs.push({ status, name });
+			specs.push({ status, name, oldOid, newOid });
 		}
 	}
 	return specs;
@@ -306,22 +325,23 @@ export const getDiffFiles = async (
 		// `rev-parse`·`show <rev>:<path>`는 rev만 받아 영향이 없다(실측).
 		//
 		// `$`가 아니라 `gitText`다 — 큰 diff에서 출력이 64KB를 넘는다.
-		const nameStatus = await gitText([
+		const raw = await gitText([
 			"-C",
 			repo,
 			"diff",
-			"--name-status",
+			"--raw",
 			"-z",
+			"--no-abbrev",
 			base,
 			...(opts.head ? [opts.head] : []),
 			"--",
 		]);
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
-		const specs = parseNameStatusZ(nameStatus);
+		const specs = parseRawZ(raw);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
-				buildFile(repo, base, spec.status, spec.name, spec.oldName, opts.head),
+				buildFile(repo, base, spec, opts.head),
 			)),
 		);
 	}
@@ -340,7 +360,12 @@ export const getDiffFiles = async (
 		const paths = listed.split("\0").filter((s) => s !== "");
 		files.push(
 			...(await mapWithLimit(paths, BUILD_CONCURRENCY, (path) =>
-				buildFile(repo, base, "untracked", path),
+				buildFile(repo, base, {
+					status: "untracked",
+					name: path,
+					oldOid: null,
+					newOid: null,
+				}),
 			)),
 		);
 	}

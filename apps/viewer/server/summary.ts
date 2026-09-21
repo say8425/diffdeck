@@ -4,7 +4,7 @@ import { gitText } from "./gitOutput.ts";
 /**
  * 빈 diff 화면의 정보형 빈 상태 전용 경량 요약. diff가 0건일 때만 lazy하게
  * 호출되므로 캐시 없음. 개수 파싱은 전부 -z + NUL 분할 (비-ASCII/개행
- * 파일명 안전 — parseNameStatusZ와 같은 이유).
+ * 파일명 안전 — parseRawZ와 같은 이유).
  */
 export interface RepoSummary {
 	branch: string | null;
