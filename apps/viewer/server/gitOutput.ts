@@ -1,13 +1,14 @@
 /**
  * git을 `$`가 아니라 `Bun.spawn`으로 부르고 stdout을 끝까지 읽는다. 출력이
  * 64KB를 넘을 수 있는 서버의 git 호출은 전부 여기를 탄다 — 남은 `$`는
- * `rev-parse`·`merge-base`·`gh pr view`·`worktree list`처럼 출력이 작은 호출뿐이고,
- * 새 호출도 출력이 클 수 있으면 여기를 탄다.
+ * `rev-parse`·`merge-base`·`gh pr view`처럼 출력 크기가 리포 규모와 무관한
+ * 호출뿐이고, 새 호출도 출력이 클 수 있으면 여기를 탄다.
  *
  * Bun 1.3.x의 `$`는 64KB를 넘는 stdout을 받는 호출에서 자식이 이미 끝났는데도
  * promise가 영영 settle하지 않을 수 있다 — 호출이 겹치면 거의 확정이고 완전
  * 순차여도 결국 걸린다(1.3.12·1.3.14 실측, macOS·Linux 모두; 업스트림은 1.4.0에서
- * 수정). `getDiffFiles`의 8-way `showBytes` 버스트가 그 모양이라 큰 blob이 섞인
+ * 수정). 크기는 필요조건일 뿐이다 — 같은 크기라도 호출에 따라 안 멈추기도 한다
+ * (`worktree list` 110KB는 한 번도 안 멈췄다). `getDiffFiles`의 8-way `showBytes` 버스트가 그 모양이라 큰 blob이 섞인
  * diff가 통째로 45초 flight 타임아웃 → 503이 됐고, 같은 작업을 `Bun.spawn`으로는
  * 수천 번 돌려도 걸리지 않았다.
  *

@@ -18,11 +18,15 @@ import { getRefs } from "../server/refs.ts";
  * 셋은 `$`로 돌아가면 첫 라운드에 확정적으로 죽는다(1.3.12, 각 3/3 실측 —
  * `ls-files` 케이스는 `name-status`도 거치므로 그걸 되돌려도 함께 죽는다).
  *
- * **`for-each-ref` 케이스만 확률적이다.** 이 호출의 멈춤은 좁은 구간에서만
- * 나고(8-way에서 참조 600~800개 ≈ 180~240KB — 400개 이하나 2000개에서는 30라운드
- * 동안 한 번도 안 멈췄다), 그 구간에서도 라운드마다 확률이다. 그래서 800개로
- * 라운드를 늘려 돌린다 — 그래도 되돌린 코드를 5번 중 3번만 잡았으니(1.3.12)
- * 이 케이스의 초록을 증거로 받지 말 것.
+ * **`for-each-ref` 케이스만 16-way다.** 이 호출의 멈춤은 좁은 구간에서만 난다
+ * (8-way에서 참조 600~800개 ≈ 180~240KB — 400개 이하나 2000개에서는 30라운드 동안
+ * 한 번도 안 멈췄다). 8-way로는 20라운드를 돌려도 되돌린 코드를 5번 중 3번만
+ * 잡았고, 16-way로 겹침을 늘리자 첫 라운드에 11번 중 11번 잡혔다(1.3.12, macOS).
+ *
+ * 같은 `getRefs`의 `worktree list`도 `gitText`로 옮겼지만 **여기서 지키지 않는다**:
+ * 죽은 워크트리 등록 400개로 110KB를 내게 해도 `$`가 8·16-way로 10라운드씩
+ * 8번 동안 한 번도 안 멈춰(1.3.12) 판별할 모양을 못 찾았다. 멈춤은 출력 크기만으로
+ * 정해지지 않는다.
  *
  * 판별력은 `diff-large-blob.test.ts`와 같다: 행업 단언은 1.3.x에서만 갈리므로 CI의
  * `test-bun13` 잡이 이 파일도 Bun 1.3.14로 돌린다. 개수 단언은 버전 무관. 그 잡은
@@ -35,9 +39,11 @@ const LOOSE = 1000; // → ls-files --others ~157KB, status -uall은 둘을 합�
 const BRANCHES = 800; // → for-each-ref ~256KB
 const CALLS = 8;
 const ROUNDS = 2;
-const REF_ROUNDS = 20; // getRefs만 — 위 docblock 참고
+const REF_CALLS = 16; // getRefs만 — 위 docblock 참고
+const REF_ROUNDS = 5;
 const SETTLE_MS = 15_000;
-const TIMEOUT = ROUNDS * SETTLE_MS + 5_000;
+/** 라운드마다 `settleWithin`이 먼저 터지도록 테스트 상한을 라운드 수에 맞춘다. */
+const timeoutFor = (rounds: number): number => rounds * SETTLE_MS + 5_000;
 
 const longName = (prefix: string, i: number): string =>
 	`${prefix}-${String(i).padStart(4, "0")}-${"x".repeat(140)}`;
@@ -79,7 +85,7 @@ beforeAll(() => {
 		(_, i) => `create refs/heads/${longName("b", i)} HEAD\n`,
 	).join("");
 	git(repo, ["update-ref", "--stdin"], lines);
-});
+}, 60_000); // 훅의 기본 상한 5초는 부하가 걸리면 넘는다(평소 1.2~1.8초, 한 번 넘는 것을 실측)
 
 afterAll(() => {
 	rmSync(repo, { recursive: true, force: true });
@@ -101,15 +107,15 @@ const settleWithin = async <T>(work: Promise<T>, what: string): Promise<T> => {
 	}
 };
 
-/** `fn`을 `CALLS`번 동시에 부르는 라운드를 `rounds`번 돌려 모든 결과를 모은다. */
+/** `fn`을 `calls`번 동시에 부르는 라운드를 `rounds`번 돌려 모든 결과를 모은다. */
 const concurrently = async <T>(
 	what: string,
 	fn: () => Promise<T>,
-	rounds = ROUNDS,
+	{ calls = CALLS, rounds = ROUNDS } = {},
 ): Promise<T[]> => {
 	const all: T[] = [];
 	for (let round = 0; round < rounds; round++) {
-		const batch = Array.from({ length: CALLS }, fn);
+		const batch = Array.from({ length: calls }, fn);
 		all.push(...(await settleWithin(Promise.all(batch), what)));
 	}
 	return all;
@@ -124,7 +130,7 @@ test(
 		expect(prints).toHaveLength(CALLS * ROUNDS);
 		expect(new Set(prints).size).toBe(1);
 	},
-	TIMEOUT,
+	timeoutFor(ROUNDS),
 );
 
 test(
@@ -138,7 +144,7 @@ test(
 			expect(files.every((f) => f.status === "added")).toBe(true);
 		}
 	},
-	TIMEOUT,
+	timeoutFor(ROUNDS),
 );
 
 test(
@@ -152,21 +158,20 @@ test(
 			expect(files.filter((f) => f.status === "untracked")).toHaveLength(LOOSE);
 		}
 	},
-	TIMEOUT,
+	timeoutFor(ROUNDS),
 );
 
 test(
 	"getRefs settles under concurrent calls when `for-each-ref` exceeds 64KB",
 	async () => {
-		const results = await concurrently(
-			"getRefs",
-			() => getRefs(repo),
-			REF_ROUNDS,
-		);
+		const results = await concurrently("getRefs", () => getRefs(repo), {
+			calls: REF_CALLS,
+			rounds: REF_ROUNDS,
+		});
 		for (const { refs } of results) {
 			// 만든 브랜치 800개 + main
 			expect(refs.filter((r) => r.kind === "local")).toHaveLength(BRANCHES + 1);
 		}
 	},
-	TIMEOUT,
+	timeoutFor(REF_ROUNDS),
 );

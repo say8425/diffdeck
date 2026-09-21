@@ -5,7 +5,6 @@
  * 개념이 아니라 git이 이미 갖고 있는 관계다: `%(worktreepath)`가 브랜치마다
  * 그것을 물고 있는 워크트리를 알려준다.
  */
-import { $ } from "bun";
 import { gitText } from "./gitOutput.ts";
 
 export interface WorktreeRecord {
@@ -159,9 +158,10 @@ export const getRefs = async (repo: string): Promise<RefsResult> => {
 	// 읽게 만들어 브랜치가 많은 리포에서 비용을 지배한다 — 목록은 검색으로
 	// 찾는 것이고, 기본(refname) 순서면 충분하다.
 	const [wtRaw, refRaw] = await Promise.all([
-		$`git -C ${repo} worktree list --porcelain -z`.nothrow().quiet().text(),
-		// `$`가 아니라 `gitText` — 원격 브랜치가 수천 개인 리포면 출력이 64KB를
-		// 넘는다. 작은 `worktree list`는 `$`로 둔다.
+		// 둘 다 `$`가 아니라 `gitText` — 출력이 참조 수·등록된 워크트리 수에
+		// 비례해 64KB를 넘을 수 있다(워크트리는 디렉토리가 지워져도 prunable로
+		// 등록이 남으므로 약 300개면 넘는다).
+		gitText(["-C", repo, "worktree", "list", "--porcelain", "-z"]),
 		gitText([
 			"-C",
 			repo,
