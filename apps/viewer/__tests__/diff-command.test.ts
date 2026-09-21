@@ -127,7 +127,7 @@ describe("getDiffFiles", () => {
 });
 
 describe("getDiffFiles non-ASCII and special filenames", () => {
-	// git의 기본값(core.quotePath=true)에서는 -z 없는 --name-status/ls-files가
+	// git의 기본값(core.quotePath=true)에서는 -z 없는 diff 목록(--raw/--name-status)·ls-files가
 	// 비-ASCII·특수문자 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다
 	// (예: 한글.txt → "\355\225\234\352\270\200.txt"). 그 인용 문자열을 그대로
 	// 경로로 쓰면 git show/readFileSync가 못 찾아 내용이 빈 채로 렌더된다.

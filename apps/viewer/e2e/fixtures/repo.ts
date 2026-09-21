@@ -60,8 +60,8 @@ export interface FixtureRepoOptions {
 	/**
 	 * Opt-in: commit `src/한글파일.ts` and edit it in the working tree, so specs
 	 * can assert a non-ASCII filename actually renders diff content (regression
-	 * guard for the `git diff --name-status`/`ls-files` C-quoting bug — see
-	 * apps/viewer/server/diff.ts's `parseNameStatusZ`).
+	 * guard for the `git diff --raw`/`ls-files` C-quoting bug — see
+	 * apps/viewer/server/diff.ts's `parseRawZ`).
 	 */
 	koreanFilename?: boolean;
 	/**

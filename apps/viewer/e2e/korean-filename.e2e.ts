@@ -4,7 +4,8 @@
 //    `git diff --name-status`/`git ls-files`가 비-ASCII 경로를 큰따옴표+8진
 //    이스케이프로 인용해서 낸다. 그 인용 문자열을 그대로 파일 경로로 쓰면
 //    git show/readFileSync가 못 찾아 조용히 빈 diff가 렌더됐다
-//    (apps/viewer/server/diff.ts의 `parseNameStatusZ` 도입 전 실제 재현).
+//    (apps/viewer/server/diff.ts의 `parseNameStatusZ` — 지금의 `parseRawZ` — 도입 전
+//    실제 재현).
 // 2) 클라이언트: 서버가 이미 올바른 이름을 내려줘도, vendored
 //    parseDiffFromFile(@diffdeck/diffs)이 npm `diff`의 createTwoFilesPatch로
 //    유니파이드 diff 텍스트를 만든 뒤 그 텍스트의 `--- `/`+++ ` 헤더 줄을

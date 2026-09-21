@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { $ } from "bun";
-import { gitBytes, gitText } from "./gitOutput.ts";
+import type { BlobCache } from "./blobCache.ts";
+import { gitBytes, gitRun, gitText } from "./gitOutput.ts";
 import { mapWithLimit } from "./mapLimit.ts";
 
 // buildFile 병렬 실행 상한 — 파일당 git 서브프로세스가 뜨므로 무제한이면
@@ -134,15 +135,50 @@ export interface DiffFile {
 // Uint8Array<ArrayBuffer>로 명시: fetch Response body(BodyInit)는
 // SharedArrayBuffer 기반 뷰를 받지 않으므로 넓은 ArrayBufferLike면 안 된다.
 //
-// `$`가 아니라 `gitBytes`(Bun.spawn)다 — 여기가 `getDiffFiles`의 8-way 버스트라
-// Bun 1.3.x `$`의 never-settle을 가장 확실하게 밟던 자리다(근거와 동작 계약은
-// gitOutput.ts). 회귀망: `diff-large-blob.test.ts`.
+// `/api/blob`(이미지)의 읽기다. `getDiffFiles`의 파일별 버스트는 이제 `readBlob`이
+// 맡는다. 둘 다 `$`가 아니라 `Bun.spawn`이다(근거와 동작 계약은 gitOutput.ts).
 const showBytes = (
 	repo: string,
 	rev: string,
 	path: string,
 ): Promise<Uint8Array<ArrayBuffer>> =>
 	gitBytes(["-C", repo, "show", `${rev}:${path}`]);
+
+// blob 하나를 읽되, OID와 캐시가 있으면 캐시를 먼저 본다. 파일별 `git` 버스트는
+// 여기(`gitRun` — `$`가 아니라 `Bun.spawn`)를 탄다.
+//
+// **OID가 있으면 이름이 아니라 OID로 읽는다 — 이게 캐시 계약의 절반이다.** 키는
+// 목록(`git diff --raw`)이 준 OID인데 값을 `git show HEAD:<path>`처럼 이름으로 읽으면,
+// 목록과 읽기 사이에 ref가 움직일 때(watch 중의 커밋·체크아웃·리베이스, head로 보는
+// 브랜치의 전진) 새 커밋의 내용이 옛 OID 아래 저장되고 세션 내내 남는다 — 캐시 전엔
+// 다음 폴에 저절로 회복되던 경합이 영구 오염이 된다(리뷰에서 결정론적으로 재현).
+// OID로 읽으면 목록이 본 바로 그 내용을 읽는다. 출력은 `git show <rev>:<path>`와
+// 바이트 단위로 같다(textconv·`eol`·필터가 걸린 경로에서도 md5 동일 — 실측). OID는
+// `oidOrNull`이 16진수만 통과시키므로 옵션 꼴이 git에 닿을 수 없다.
+//
+// **종료 코드가 0일 때만 저장한다** — 잠깐 못 읽은 결과(빈 바이트, 예: 부분
+// 클론의 지연 페치 실패)를 저장하면 그 빈 내용이 영구히 눌러앉는다(캐시 전엔 그
+// 빌드에만 비고 다음 재빌드에서 회복됐다).
+const readBlob = async (
+	repo: string,
+	rev: string,
+	path: string,
+	oid: string | null,
+	blobs?: BlobCache,
+): Promise<Uint8Array<ArrayBuffer>> => {
+	if (oid && blobs) {
+		const hit = blobs.get(oid);
+		if (hit !== undefined) return hit;
+	}
+	const { stdout, exitCode } = await gitRun([
+		"-C",
+		repo,
+		"show",
+		oid ?? `${rev}:${path}`,
+	]);
+	if (oid && blobs && exitCode === 0) blobs.set(oid, stdout);
+	return stdout;
+};
 
 const readWorkingBytes = (
 	repo: string,
@@ -158,21 +194,24 @@ const readWorkingBytes = (
 const buildFile = async (
 	repo: string,
 	base: string,
-	status: DiffFileStatus,
-	name: string,
-	oldName?: string,
+	spec: FileSpec,
 	/** new 쪽 리비전. 없으면 워킹트리(디스크의 지금 파일)를 읽는다. */
 	head?: string,
+	blobs?: BlobCache,
 ): Promise<DiffFile> => {
+	const { status, name, oldName } = spec;
+	// old 쪽을 읽을지는 상태가 정한다 — OID는 캐시 키로만 쓴다.
 	const oldBytes =
 		status === "added" || status === "untracked"
 			? new Uint8Array()
-			: await showBytes(repo, base, oldName ?? name);
+			: await readBlob(repo, base, oldName ?? name, spec.oldOid, blobs);
+	// 워킹트리 new 쪽은 캐시하지 않는다 — 디스크가 진실이고, 전부 새로 읽어도
+	// 176파일에 4.3ms다(실측).
 	const newBytes =
 		status === "deleted"
 			? new Uint8Array()
 			: head
-				? await showBytes(repo, head, name)
+				? await readBlob(repo, head, name, spec.newOid, blobs)
 				: readWorkingBytes(repo, name);
 	const binary = oldBytes.includes(0) || newBytes.includes(0);
 	const decoder = new TextDecoder();
@@ -189,30 +228,57 @@ const buildFile = async (
 	};
 };
 
-// git의 기본값(core.quotePath=true)에서는 -z 없는 출력이 비-ASCII/특수문자
-// 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다. 그 인용 문자열을 그대로
-// 경로로 쓰면 git show/readFileSync가 못 찾아 조용히 빈 내용이 된다. -z는
-// NUL로 레코드를 구분하고 경로를 인용 없이 그대로 낸다(fingerprint.ts와 동일
-// 전략). rename/copy(R/C, 유사도 점수 접미) 레코드만 경로 필드가 2개(old, new).
-const parseNameStatusZ = (
-	output: string,
-): Array<{ status: DiffFileStatus; name: string; oldName?: string }> => {
-	const tokens = output.split("\0").filter((t) => t !== "");
-	const specs: Array<{
-		status: DiffFileStatus;
-		name: string;
-		oldName?: string;
-	}> = [];
+export interface FileSpec {
+	status: DiffFileStatus;
+	name: string;
+	oldName?: string;
+	/** 0이 아닌 전체 blob OID. 없으면 null — 캐시를 거치지 않는다. */
+	oldOid: string | null;
+	newOid: string | null;
+}
+
+const oidOrNull = (s: string): string | null =>
+	/^[0-9a-f]+$/.test(s) && !/^0+$/.test(s) ? s : null;
+
+// 서브모듈(gitlink)의 OID는 blob이 아니라 서브모듈 쪽 커밋이다 — `git show <커밋>`의
+// 출력은 git 설정(로그 형식)에 따라 달라지고 대개 로컬에 그 객체가 없다. 키로 쓰지
+// 않고 지금처럼 이름으로 읽는다.
+const GITLINK_MODE = "160000";
+
+// `git diff --raw -z --no-abbrev`의 레코드: `:<oldmode> <newmode> <oldoid>
+// <newoid> <status>\0<path>\0`. rename/copy(R/C, 유사도 점수 접미)만 경로가
+// 둘(`<old>\0<new>\0`)이다.
+//
+// **`-z`가 계약이다.** git의 기본값(core.quotePath=true)에서는 -z 없는 출력이
+// 비-ASCII/특수문자 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다. 그 인용
+// 문자열을 그대로 경로로 쓰면 git show/readFileSync가 못 찾아 조용히 빈 내용이
+// 된다. -z는 NUL로 레코드를 구분하고 경로를 인용 없이 그대로 낸다
+// (fingerprint.ts와 동일 전략).
+//
+// **`--no-abbrev`도 계약이다.** `--full-index`는 패치의 index 줄에만 작용해 여기선
+// 7자 약어가 나온다(실측) — 약어를 blob 캐시 키로 쓰면 큰 리포에서 충돌한다.
+// 없는 쪽 OID(추가된 파일의 old, 삭제된 파일의 new, 워킹트리에서 stat이 바뀐
+// 파일의 new)는 전부 0이라 null로 둔다. 상태 매핑은 예전 `--name-status` 파서와
+// 같다.
+export const parseRawZ = (output: string): FileSpec[] => {
+	const tokens = output.split("\0");
+	const specs: FileSpec[] = [];
 	for (let i = 0; i < tokens.length;) {
-		const code = tokens[i] ?? "";
+		const meta = tokens[i] ?? "";
 		i++;
+		if (!meta.startsWith(":")) continue;
+		const [oldMode, newMode, oldRaw = "", newRaw = "", code = ""] = meta
+			.slice(1)
+			.split(" ");
+		const oldOid = oldMode === GITLINK_MODE ? null : oidOrNull(oldRaw);
+		const newOid = newMode === GITLINK_MODE ? null : oidOrNull(newRaw);
 		if (/^[RC]/.test(code)) {
-			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한(현재 미사용) git이
-			// 내지 않아 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
-			const oldName = tokens[i];
+			// C(copy)는 기본 설정에선 안 나오지만 사용자가 `diff.renames=copies`를
+			// 켜 두면 -C 없이도 나온다 — rename처럼 두 경로를 읽는다.
+			const oldName = tokens[i] ?? "";
 			const name = tokens[i + 1] ?? "";
 			i += 2;
-			specs.push({ status: "renamed", name, oldName });
+			specs.push({ status: "renamed", name, oldName, oldOid, newOid });
 		} else {
 			const name = tokens[i] ?? "";
 			i++;
@@ -221,7 +287,7 @@ const parseNameStatusZ = (
 				: code.startsWith("D")
 					? "deleted"
 					: "modified";
-			specs.push({ status, name });
+			specs.push({ status, name, oldOid, newOid });
 		}
 	}
 	return specs;
@@ -288,6 +354,8 @@ export const getDiffFiles = async (
 		/** new 쪽 리비전. 없으면 워킹트리를 본다. */
 		head?: string;
 	} = {},
+	/** 변경 폴에서 바뀌지 않은 blob의 `git show`를 건너뛴다. 없으면 지금과 같다. */
+	blobs?: BlobCache,
 ): Promise<DiffFile[]> => {
 	const base = await resolveDiffBaseRev(repo, opts);
 	const files: DiffFile[] = [];
@@ -306,22 +374,23 @@ export const getDiffFiles = async (
 		// `rev-parse`·`show <rev>:<path>`는 rev만 받아 영향이 없다(실측).
 		//
 		// `$`가 아니라 `gitText`다 — 큰 diff에서 출력이 64KB를 넘는다.
-		const nameStatus = await gitText([
+		const raw = await gitText([
 			"-C",
 			repo,
 			"diff",
-			"--name-status",
+			"--raw",
 			"-z",
+			"--no-abbrev",
 			base,
 			...(opts.head ? [opts.head] : []),
 			"--",
 		]);
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
-		const specs = parseNameStatusZ(nameStatus);
+		const specs = parseRawZ(raw);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
-				buildFile(repo, base, spec.status, spec.name, spec.oldName, opts.head),
+				buildFile(repo, base, spec, opts.head, blobs),
 			)),
 		);
 	}
@@ -340,7 +409,12 @@ export const getDiffFiles = async (
 		const paths = listed.split("\0").filter((s) => s !== "");
 		files.push(
 			...(await mapWithLimit(paths, BUILD_CONCURRENCY, (path) =>
-				buildFile(repo, base, "untracked", path),
+				buildFile(repo, base, {
+					status: "untracked",
+					name: path,
+					oldOid: null,
+					newOid: null,
+				}),
 			)),
 		);
 	}

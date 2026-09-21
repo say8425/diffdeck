@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Server } from "bun";
 import packageJson from "../package.json";
+import { type BlobCache, createBlobCache } from "./blobCache.ts";
 import { type CwdDeps, isCwdAlive } from "./cwd.ts";
 import {
 	getDiffFiles,
@@ -114,9 +115,15 @@ const createHandler = (cfg: {
 	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
 	// flightTimeoutMs와 같은 패턴이다.
 	cwdDeps?: CwdDeps;
+	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 핸들러가 자기 캐시를
+	// 만든다. flightTimeoutMs와 같은 패턴이다.
+	blobCache?: BlobCache;
 }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
+	// 변경 폴의 재빌드가 바뀌지 않은 blob을 다시 `git show`하지 않게 한다.
+	// diffCache와 같이 핸들러마다 하나 — prewarm과 /api/diff가 공유한다.
+	const blobs = cfg.blobCache ?? createBlobCache();
 	// 동시 콜드 요청(프리워밍 + 첫 화면 + 폴)이 gh pr view를 중복 실행하지
 	// 않게 single-flight로 합류시킨다. diffFlight와 마찬가지로 핸들러
 	// 인스턴스마다 새로 만든다 — flightTimeoutMs를 인스턴스별로 다르게 줄
@@ -283,13 +290,12 @@ const createHandler = (cfg: {
 					if (cached) return cached;
 					const files =
 						mode === "base"
-							? await getDiffFiles(repo, {
-									untracked,
-									mode: "base",
-									ref: ref ?? undefined,
-									head,
-								})
-							: await getDiffFiles(repo, { untracked, head });
+							? await getDiffFiles(
+									repo,
+									{ untracked, mode: "base", ref: ref ?? undefined, head },
+									blobs,
+								)
+							: await getDiffFiles(repo, { untracked, head }, blobs);
 					const fresh = {
 						fingerprint,
 						etag: payloadEtag(files),
@@ -434,6 +440,8 @@ export const startDiffServer = (opts: {
 	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
 	// flightTimeoutMs와 같은 패턴이다.
 	cwdDeps?: CwdDeps;
+	// 테스트 전용 훅 — createHandler의 같은 이름 필드로 그대로 흘러간다.
+	blobCache?: BlobCache;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	// Mint the token but don't write it yet — Bun.serve throws if the port is
@@ -448,6 +456,7 @@ export const startDiffServer = (opts: {
 		flightTimeoutMs: opts.flightTimeoutMs,
 		repairCwd: opts.repairCwd,
 		cwdDeps: opts.cwdDeps,
+		blobCache: opts.blobCache,
 	});
 	const server = Bun.serve({
 		hostname: "127.0.0.1",

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
 import packageJson from "../package.json";
+import { createBlobCache } from "../server/blobCache.ts";
 import { startDiffServer } from "../server/server.ts";
 import {
 	generateToken,
@@ -47,6 +48,49 @@ afterEach(() => {
 });
 
 describe("diff server", () => {
+	test("rebuilds after an edit reuse cached blobs", async () => {
+		const blobCache = createBlobCache();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			blobCache,
+		});
+		try {
+			const url = `http://127.0.0.1:${h.server.port}/api/diff?repo=${encodeURIComponent(repo)}&token=${h.token}`;
+			expect((await fetch(url)).status).toBe(200);
+			// 크기가 바뀌어 지문이 달라진다 → 재빌드
+			writeFileSync(join(repo, "a.txt"), "three\n");
+			expect((await fetch(url)).status).toBe(200);
+			expect(blobCache.stats().hits).toBe(1);
+		} finally {
+			h.stop();
+		}
+	});
+
+	test("base-mode rebuilds after an edit reuse cached blobs too", async () => {
+		// 위 테스트는 기본(워킹트리 모드) 호출만 지나간다 — base 모드는 서버에서
+		// 별도의 getDiffFiles 호출이라 따로 찌른다. 목록에 있는 참조여야 400이
+		// 아니므로 브랜치를 하나 세운다.
+		await $`git -C ${repo} branch basepoint`;
+		const blobCache = createBlobCache();
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			blobCache,
+		});
+		try {
+			const url = `http://127.0.0.1:${h.server.port}/api/diff?repo=${encodeURIComponent(repo)}&token=${h.token}&base=basepoint`;
+			expect((await fetch(url)).status).toBe(200);
+			writeFileSync(join(repo, "a.txt"), "three\n");
+			expect((await fetch(url)).status).toBe(200);
+			expect(blobCache.stats().hits).toBe(1);
+		} finally {
+			h.stop();
+		}
+	});
+
 	test("ping returns 204 with marker header", async () => {
 		const res = await fetch(`${base}/api/ping`);
 		expect(res.status).toBe(204);

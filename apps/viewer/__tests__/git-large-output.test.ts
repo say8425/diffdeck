@@ -14,9 +14,10 @@ import { getRefs } from "../server/refs.ts";
  * flight 키로 겹친다.
  *
  * 한 케이스가 한 호출처를 지킨다: 지문의 `status -uall`, `getDiffFiles`의
- * `diff --name-status`와 `ls-files --others`, `getRefs`의 `for-each-ref`. 앞의
+ * `diff --raw`와 `ls-files --others`, `getRefs`의 `for-each-ref`. 앞의
  * 셋은 `$`로 돌아가면 첫 라운드에 확정적으로 죽는다(1.3.12, 각 3/3 실측 —
- * `ls-files` 케이스는 `name-status`도 거치므로 그걸 되돌려도 함께 죽는다).
+ * `ls-files` 케이스는 `diff --raw`도 거치므로 그걸 되돌려도 함께 죽는다 — 측정은
+ * 목록이 `--name-status`이던 시절에 했고, 지금의 `--raw` 출력은 더 크다).
  *
  * **`for-each-ref` 케이스만 16-way다.** 이 호출의 멈춤은 좁은 구간에서만 난다
  * (8-way에서 참조 600~800개 ≈ 180~240KB — 400개 이하나 2000개에서는 30라운드 동안
@@ -34,7 +35,7 @@ import { getRefs } from "../server/refs.ts";
  * 먼저 멈추면 무엇을 재는지 흐려진다.
  */
 
-const STAGED = 1000; // 이름 150자 × 1000 → name-status ~160KB
+const STAGED = 1000; // 이름 150자 × 1000 → diff --raw ~250KB
 const LOOSE = 1000; // → ls-files --others ~157KB, status -uall은 둘을 합쳐 ~320KB
 const BRANCHES = 800; // → for-each-ref ~256KB
 const CALLS = 8;
@@ -134,9 +135,9 @@ test(
 );
 
 test(
-	"getDiffFiles settles under concurrent calls when `diff --name-status` exceeds 64KB",
+	"getDiffFiles settles under concurrent calls when `diff --raw` exceeds 64KB",
 	async () => {
-		const results = await concurrently("getDiffFiles(name-status)", () =>
+		const results = await concurrently("getDiffFiles(diff --raw)", () =>
 			getDiffFiles(repo),
 		);
 		for (const files of results) {
