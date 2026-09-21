@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import { createBlobCache } from "../server/blobCache.ts";
+import { type BlobCache, createBlobCache } from "../server/blobCache.ts";
 import { getDiffFiles } from "../server/diff.ts";
 
 /**
@@ -12,7 +12,10 @@ import { getDiffFiles } from "../server/diff.ts";
  * ② 이름(`HEAD`, 경로)으로 키를 잡아 커밋 직후 옛 내용을 내는 구현,
  * ③ 실패한 `git show`(빈 출력)를 저장해 빈 old 쪽이 눌러앉는 구현(head 모드에서만
  *   재현된다 — 해당 테스트 주석 참고),
- * ④ 캐시 경로가 다른 바이트를 내거나 head 모드 new 쪽을 캐시하지 않는 구현.
+ * ④ 캐시 경로가 다른 바이트를 내거나 head 모드 new 쪽을 캐시하지 않는 구현,
+ * ⑤ 키는 OID로 잡고 값은 이름(`HEAD:path`)으로 읽어, 목록과 읽기 사이에 ref가
+ *   움직이면 새 내용을 옛 OID 아래 영구히 저장하는 구현,
+ * ⑥ 약어 OID를 키로 쓰는 구현(`--no-abbrev` 누락).
  */
 
 let repo: string;
@@ -106,4 +109,71 @@ test("head mode reads both sides through the cache and matches the uncached resu
 	// a.txt: old·new 두 blob, c.txt: new 하나(추가라 old 없음) → 3개 저장,
 	// 두 번째 빌드에서 셋 다 hit.
 	expect(blobs.stats()).toMatchObject({ entries: 3, hits: 3 });
+});
+
+// get()이 처음 miss할 때 한 번 `onMiss`를 부르는 캐시. `getDiffFiles`는 목록
+// (`git diff --raw`)을 뽑은 뒤 파일마다 캐시를 보고 miss면 읽으므로, 여기서 ref를
+// 움직이면 "목록과 읽기 사이에 ref가 움직인" 경합을 결정론적으로 만든다.
+const racingCache = (onMiss: () => void): BlobCache => {
+	const inner = createBlobCache();
+	let fired = false;
+	return {
+		get(oid) {
+			const hit = inner.get(oid);
+			if (hit === undefined && !fired) {
+				fired = true;
+				onMiss();
+			}
+			return hit;
+		},
+		set: (oid, bytes) => inner.set(oid, bytes),
+		stats: () => inner.stats(),
+	};
+};
+
+const gitSync = (args: string[]): void => {
+	const r = Bun.spawnSync(["git", "-C", repo, ...args], { stderr: "pipe" });
+	if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+};
+
+const revParse = async (spec: string): Promise<string> =>
+	(await $`git -C ${repo} rev-parse ${spec}`.text()).trim();
+
+const text = (bytes: Uint8Array | undefined): string | undefined =>
+	bytes === undefined ? undefined : new TextDecoder().decode(bytes);
+
+test("HEAD moving between listing and reading does not store the new content under the old id", async () => {
+	writeFileSync(join(repo, "a.txt"), "v2\n");
+	const v1 = await revParse("HEAD:a.txt");
+	// 목록은 HEAD=v1을 보고, 읽기 직전에 v2가 커밋된다.
+	const blobs = racingCache(() => gitSync(["commit", "-qam", "v2"]));
+	const [file] = await getDiffFiles(repo, {}, blobs);
+	expect(file?.oldContents).toBe("v1\n");
+	expect(text(blobs.get(v1))).toBe("v1\n");
+});
+
+test("a head branch moving between listing and reading does not poison the cache", async () => {
+	await branchFeat();
+	const featA = await revParse("feat:a.txt");
+	// 목록은 feat의 a.txt="feat"를 보고, 읽기 사이에 feat가 한 커밋 전진한다.
+	const blobs = racingCache(() => {
+		gitSync(["checkout", "-q", "feat"]);
+		writeFileSync(join(repo, "a.txt"), "feat moved on\n");
+		gitSync(["commit", "-qam", "advance"]);
+		gitSync(["checkout", "-q", "main"]);
+	});
+	const file = (await getDiffFiles(repo, HEAD_OPTS, blobs)).find(
+		(f) => f.name === "a.txt",
+	);
+	expect(file?.newContents).toBe("feat\n");
+	expect(text(blobs.get(featA))).toBe("feat\n");
+});
+
+test("keys entries by the full object id", async () => {
+	writeFileSync(join(repo, "a.txt"), "v2\n");
+	const blobs = createBlobCache();
+	await getDiffFiles(repo, {}, blobs);
+	const full = await revParse("HEAD:a.txt");
+	expect(full).toHaveLength(40);
+	expect(text(blobs.get(full))).toBe("v1\n");
 });

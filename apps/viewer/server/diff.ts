@@ -145,13 +145,21 @@ const showBytes = (
 ): Promise<Uint8Array<ArrayBuffer>> =>
 	gitBytes(["-C", repo, "show", `${rev}:${path}`]);
 
-// blob 하나를 읽되, OID와 캐시가 있으면 캐시를 먼저 본다. miss 경로는
-// `showBytes`와 같은 `git show <rev>:<path>`라 캐시가 비어 있을 때 출력이
-// 지금과 바이트 단위로 같다. **종료 코드가 0일 때만 저장한다** — 잠깐 못 읽은
-// 결과(빈 바이트, 예: 부분 클론의 지연 페치 실패)를 저장하면 그 빈 내용이
-// 영구히 눌러앉는다(지금은 그 빌드에만 비고 다음 재빌드에서 회복된다). 워킹트리
-// 비교에선 old blob이 없으면 목록(`git diff --raw`)이 먼저 죽으므로, 이 가드가
-// 실제로 지키는 곳은 목록이 blob을 읽지 않는 head 모드(커밋 대 커밋)다(실측).
+// blob 하나를 읽되, OID와 캐시가 있으면 캐시를 먼저 본다. 파일별 `git` 버스트는
+// 여기(`gitRun` — `$`가 아니라 `Bun.spawn`)를 탄다.
+//
+// **OID가 있으면 이름이 아니라 OID로 읽는다 — 이게 캐시 계약의 절반이다.** 키는
+// 목록(`git diff --raw`)이 준 OID인데 값을 `git show HEAD:<path>`처럼 이름으로 읽으면,
+// 목록과 읽기 사이에 ref가 움직일 때(watch 중의 커밋·체크아웃·리베이스, head로 보는
+// 브랜치의 전진) 새 커밋의 내용이 옛 OID 아래 저장되고 세션 내내 남는다 — 캐시 전엔
+// 다음 폴에 저절로 회복되던 경합이 영구 오염이 된다(리뷰에서 결정론적으로 재현).
+// OID로 읽으면 목록이 본 바로 그 내용을 읽는다. 출력은 `git show <rev>:<path>`와
+// 바이트 단위로 같다(textconv·`eol`·필터가 걸린 경로에서도 md5 동일 — 실측). OID는
+// `oidOrNull`이 16진수만 통과시키므로 옵션 꼴이 git에 닿을 수 없다.
+//
+// **종료 코드가 0일 때만 저장한다** — 잠깐 못 읽은 결과(빈 바이트, 예: 부분
+// 클론의 지연 페치 실패)를 저장하면 그 빈 내용이 영구히 눌러앉는다(캐시 전엔 그
+// 빌드에만 비고 다음 재빌드에서 회복됐다).
 const readBlob = async (
 	repo: string,
 	rev: string,
@@ -167,7 +175,7 @@ const readBlob = async (
 		"-C",
 		repo,
 		"show",
-		`${rev}:${path}`,
+		oid ?? `${rev}:${path}`,
 	]);
 	if (oid && blobs && exitCode === 0) blobs.set(oid, stdout);
 	return stdout;
@@ -233,6 +241,11 @@ export interface FileSpec {
 const oidOrNull = (s: string): string | null =>
 	/^[0-9a-f]+$/.test(s) && !/^0+$/.test(s) ? s : null;
 
+// 서브모듈(gitlink)의 OID는 blob이 아니라 서브모듈 쪽 커밋이다 — `git show <커밋>`의
+// 출력은 git 설정(로그 형식)에 따라 달라지고 대개 로컬에 그 객체가 없다. 키로 쓰지
+// 않고 지금처럼 이름으로 읽는다.
+const GITLINK_MODE = "160000";
+
 // `git diff --raw -z --no-abbrev`의 레코드: `:<oldmode> <newmode> <oldoid>
 // <newoid> <status>\0<path>\0`. rename/copy(R/C, 유사도 점수 접미)만 경로가
 // 둘(`<old>\0<new>\0`)이다.
@@ -255,9 +268,11 @@ export const parseRawZ = (output: string): FileSpec[] => {
 		const meta = tokens[i] ?? "";
 		i++;
 		if (!meta.startsWith(":")) continue;
-		const [, , oldRaw = "", newRaw = "", code = ""] = meta.slice(1).split(" ");
-		const oldOid = oidOrNull(oldRaw);
-		const newOid = oidOrNull(newRaw);
+		const [oldMode, newMode, oldRaw = "", newRaw = "", code = ""] = meta
+			.slice(1)
+			.split(" ");
+		const oldOid = oldMode === GITLINK_MODE ? null : oidOrNull(oldRaw);
+		const newOid = newMode === GITLINK_MODE ? null : oidOrNull(newRaw);
 		if (/^[RC]/.test(code)) {
 			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한 git이 내지 않아
 			// 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.

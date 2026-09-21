@@ -82,3 +82,11 @@ test("an unmerged record has no object ids and still maps to modified", () => {
 test("returns nothing for empty output", () => {
 	expect(parseRawZ("")).toEqual([]);
 });
+
+test("a submodule (gitlink) record carries no cache key — its id names a commit, not a blob", () => {
+	const c1 = "a".repeat(40);
+	const c2 = "b".repeat(40);
+	expect(parseRawZ(`:160000 160000 ${c1} ${c2} M\0sub\0`)).toEqual([
+		{ status: "modified", name: "sub", oldOid: null, newOid: null },
+	]);
+});
