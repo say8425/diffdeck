@@ -38,6 +38,26 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun test
 
+  # 위아래 잡들은 setup-bun 기본값(최신 Bun)으로 돈다. 그런데 Bun 1.3.x의 `$`는
+  # 64KB를 넘는 stdout을 받는 호출에서 영영 settle하지 않을 수 있고(업스트림은
+  # 1.4.0에서 수정), 최신 Bun에서는 그 회귀가 원리적으로 안 보인다 — showBytes를
+  # `$`로 되돌려도 `test` 잡은 초록이다. `bunx` 사용자는 자기 Bun을 쓰므로 1.3.x도
+  # 여전히 대상이라, 그 결함의 회귀망만 1.3.x 마지막 판으로 고정해 따로 돌린다.
+  # 전량은 `test` 잡이 이미 돈다 — 여기엔 버전에 따라 판별력이 갈리는 것만 싣는다.
+  test-bun13:
+    runs-on: ubuntu-latest
+    # 회귀하면 테스트가 스스로 10초 타임아웃으로 끝나지만, 설치가 매달리는
+    # 경우까지 GHA 기본값(6시간)을 태우지 않게 상한을 둔다.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: Bun 1.3.x `$` never-settle regression
+        run: bun test apps/viewer/__tests__/diff-large-blob.test.ts
+
   coverage:
     runs-on: ubuntu-latest
     steps:
