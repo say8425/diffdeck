@@ -135,9 +135,8 @@ export interface DiffFile {
 // Uint8Array<ArrayBuffer>로 명시: fetch Response body(BodyInit)는
 // SharedArrayBuffer 기반 뷰를 받지 않으므로 넓은 ArrayBufferLike면 안 된다.
 //
-// `$`가 아니라 `gitBytes`(Bun.spawn)다 — 여기가 `getDiffFiles`의 8-way 버스트라
-// Bun 1.3.x `$`의 never-settle을 가장 확실하게 밟던 자리다(근거와 동작 계약은
-// gitOutput.ts). 회귀망: `diff-large-blob.test.ts`.
+// `/api/blob`(이미지)의 읽기다. `getDiffFiles`의 파일별 버스트는 이제 `readBlob`이
+// 맡는다. 둘 다 `$`가 아니라 `Bun.spawn`이다(근거와 동작 계약은 gitOutput.ts).
 const showBytes = (
 	repo: string,
 	rev: string,
@@ -274,8 +273,8 @@ export const parseRawZ = (output: string): FileSpec[] => {
 		const oldOid = oldMode === GITLINK_MODE ? null : oidOrNull(oldRaw);
 		const newOid = newMode === GITLINK_MODE ? null : oidOrNull(newRaw);
 		if (/^[RC]/.test(code)) {
-			// C(copy)는 이 호출이 -C/--find-copies 없이 도는 한 git이 내지 않아
-			// 실제로는 미도달 — 나중에 copy 감지를 켜면 이 분기가 살아난다.
+			// C(copy)는 기본 설정에선 안 나오지만 사용자가 `diff.renames=copies`를
+			// 켜 두면 -C 없이도 나온다 — rename처럼 두 경로를 읽는다.
 			const oldName = tokens[i] ?? "";
 			const name = tokens[i + 1] ?? "";
 			i += 2;

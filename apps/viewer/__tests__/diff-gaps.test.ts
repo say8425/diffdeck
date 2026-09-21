@@ -53,7 +53,7 @@ describe("defaultBranchName", () => {
 	});
 });
 
-describe("getDiffFiles name-status parsing", () => {
+describe("getDiffFiles --raw listing parsing", () => {
 	test("classifies renamed/added/deleted/modified/untracked from a real fixture", async () => {
 		const repo = mkRepo("dd-gaps-repo-");
 		await $`git -C ${repo} init -q`;

@@ -10,8 +10,8 @@ import { getDiffFiles } from "../server/diff.ts";
  * `getDiffFiles`가 blob OID 캐시를 거칠 때의 정확성 계약. 각 테스트가 잡는 깨짐:
  * ① 캐시를 안 거치거나(hit 0) 워킹트리 new 쪽까지 캐시해 편집이 안 보이는 구현,
  * ② 이름(`HEAD`, 경로)으로 키를 잡아 커밋 직후 옛 내용을 내는 구현,
- * ③ 실패한 `git show`(빈 출력)를 저장해 빈 old 쪽이 눌러앉는 구현(head 모드에서만
- *   재현된다 — 해당 테스트 주석 참고),
+ * ③ 실패한 `git show`(빈 출력)를 저장해 빈 old 쪽이 눌러앉는 구현(head 모드에서
+ *   재현한다 — 해당 테스트 주석 참고),
  * ④ 캐시 경로가 다른 바이트를 내거나 head 모드 new 쪽을 캐시하지 않는 구현,
  * ⑤ 키는 OID로 잡고 값은 이름(`HEAD:path`)으로 읽어, 목록과 읽기 사이에 ref가
  *   움직이면 새 내용을 옛 OID 아래 영구히 저장하는 구현,
@@ -74,9 +74,10 @@ const HEAD_OPTS = { mode: "base" as const, ref: "main", head: "feat" };
 
 test("a failed git show is not cached", async () => {
 	// `git show`만 실패시키려면 목록이 그 blob을 읽지 않아야 한다. 워킹트리와
-	// 비교하는 `git diff <rev>`는 old blob이 없으면 목록 단계에서 먼저 죽는다
-	// (`fatal: unable to read …`, 실측). 커밋끼리 비교하는 head 모드는 트리의
-	// OID만 보므로 목록은 나오고 `git show`만 실패한다.
+	// 비교하는 `git diff <rev>`는 stat이 바뀐 파일이면 old blob을 읽어서, 그게
+	// 없으면 목록 단계에서 먼저 죽는다(`fatal: unable to read …`, 실측 — stat이
+	// 깨끗한 항목은 목록에 나온다). 커밋끼리 비교하는 head 모드는 트리의 OID만
+	// 보므로 늘 목록이 나오고 `git show`만 실패한다.
 	await branchFeat();
 	const oid = (await $`git -C ${repo} rev-parse main:a.txt`.text()).trim();
 	const loose = join(repo, ".git", "objects", oid.slice(0, 2), oid.slice(2));
@@ -133,7 +134,8 @@ const racingCache = (onMiss: () => void): BlobCache => {
 
 const gitSync = (args: string[]): void => {
 	const r = Bun.spawnSync(["git", "-C", repo, ...args], { stderr: "pipe" });
-	if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+	if (r.exitCode !== 0)
+		throw new Error(`git ${args.join(" ")}: ${r.stderr.toString()}`);
 };
 
 const revParse = async (spec: string): Promise<string> =>
