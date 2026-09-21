@@ -62,7 +62,10 @@ jobs:
       # 이 잡이 회귀와 무관하게 빨개진다 — 그때 쉬운 오답은 고정 판을 올리는 것이고,
       # 그러면 이 잡의 존재 이유가 사라진다.
       - name: Bun 1.3.x `$` never-settle regression
-        run: bun test apps/viewer/__tests__/diff-large-blob.test.ts
+        run: >-
+          bun test
+          apps/viewer/__tests__/diff-large-blob.test.ts
+          apps/viewer/__tests__/git-output.test.ts
 
   coverage:
     runs-on: ubuntu-latest
