@@ -113,35 +113,70 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		expect(expandGapMs).toBeLessThan(150);
 
 		// Phase 2: 전체 문서 스크롤 — 나머지 파일들(bulk-*.ts/hello.ts 등)의
-		// 첫 진입도 같은 150ms 상한을 지키는지 훑는다.
-		const scrollGapMs = await page.evaluate(
-			() =>
-				new Promise<number>((resolve) => {
-					const scroller = document.getElementById("diff") as HTMLElement;
-					let maxGap = 0;
-					let last = performance.now();
-					let frames = 0;
-					const tick = (): void => {
-						const now = performance.now();
-						maxGap = Math.max(maxGap, now - last);
-						last = now;
-						frames++;
-						// 900px/frame × 240 frames ≈ 216k px — 전체 문서를 통과하며
-						// 모든 파일의 "최초 진입"을 유발한다.
-						scroller.scrollTop += 900;
-						if (frames < 240) requestAnimationFrame(tick);
-						else resolve(maxGap);
-					};
-					requestAnimationFrame(tick);
-				}),
-		);
+		// 첫 진입도 훑는다.
+		//
+		// **스크롤은 휠 입력으로 한다 — JS의 `scrollTop` 대입으로 하지 말 것.** 한때
+		// rAF 콜백 안에서 `scrollTop += 900`을 했는데, CI(Linux 헤드리스 Chrome)에서
+		// 약 9%(120회 중 11회) 확률로 메인 스레드가 수십~수백 초 멈췄다. Chrome
+		// 트레이스로 잡은 멈춘 스택은 `FireAnimationFrame > ScrollableArea::SetScrollOffset
+		// > ScrollLayer > LayerTreeHost::WaitForCommitCompletion` — JS의 스크롤 대입이
+		// 컴포지터 커밋 완료를 **동기로** 기다리는데 커밋이 끝나지 않았다(GPU 메인
+		// 스레드는 27초째 유휴). JS가 아니라 네이티브에서 막혀 V8 프로파일러도 못
+		// 끼어들었고, 로컬(macOS)에선 CPU 12배 스로틀로도 재현되지 않았다. 앱 버그가
+		// 아니다 — 실제 사용자의 휠 스크롤은 컴포지터가 처리해 이 대기를 거치지
+		// 않는다. 같은 조건에서 휠 입력은 40회 중 0회 멈췄다(`scrollTop` 방식은 같은
+		// 시각 40회 중 4회). 두 번째 실패 모양(아래 색 폴이 30초 동안 false)도 같은
+		// 멈춤이다 — 프레임이 안 오면 엔진이 rAF에서 하는 렌더도 안 돌아 워커 결과가
+		// DOM에 반영되지 않는다.
+		//
+		// 상한이 1단계(150ms)보다 느슨한 이유: 휠 입력은 프레임 간격 자체가 크다(CI
+		// 40회: 중앙값 120, 90% 145, 최대 165ms). 이 단계는 원래 회귀를 가려내지
+		// 못한다(위 머리 주석 ① — bulk 파일은 문법이 이미 데워져 동기 경로로도 150ms를
+		// 못 넘는다). 회귀를 잡는 것은 1단계이고, 여기는 "첫 진입이 프레임을 수백 ms
+		// 얼리지 않는다"는 넓은 가드다 — 그래서 CI 최댓값의 약 두 배를 둔다.
+		await page.evaluate(() => {
+			const w = window as unknown as {
+				__gaps: { max: number; frames: number; stop: boolean };
+			};
+			w.__gaps = { max: 0, frames: 0, stop: false };
+			let last = performance.now();
+			const tick = (): void => {
+				const now = performance.now();
+				w.__gaps.max = Math.max(w.__gaps.max, now - last);
+				last = now;
+				w.__gaps.frames++;
+				if (!w.__gaps.stop) requestAnimationFrame(tick);
+			};
+			requestAnimationFrame(tick);
+		});
+		const box = await page.locator("#diff").boundingBox();
+		if (!box) throw new Error("#diff has no box");
+		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+		// 900px × 240 ≈ 216k px — 전체 문서를 통과하며 모든 파일의 "최초 진입"을 유발한다.
+		for (let i = 0; i < 240; i++) {
+			await page.mouse.wheel(0, 900);
+			await page.waitForTimeout(16);
+		}
+		const { scrollGapMs, scrolledTo } = await page.evaluate(() => {
+			const w = window as unknown as {
+				__gaps: { max: number; frames: number; stop: boolean };
+			};
+			w.__gaps.stop = true;
+			return {
+				scrollGapMs: w.__gaps.max,
+				scrolledTo: (document.getElementById("diff") as HTMLElement).scrollTop,
+			};
+		});
+		// 가짜 통과 방지: 휠이 실제로 문서를 끝까지 훑었는지(휠이 씹히면 아무 파일도
+		// 새로 진입하지 않아 갭이 작게 나온다).
+		expect(scrolledTo).toBeGreaterThan(150_000);
 
 		// 가짜 통과 방지: 파일들이 실제로 마운트됐는지.
 		const mounted = await page.evaluate(
 			() => document.querySelectorAll("diffs-container").length,
 		);
 		expect(mounted).toBeGreaterThan(0);
-		expect(scrollGapMs).toBeLessThan(150);
+		expect(scrollGapMs).toBeLessThan(300);
 
 		// plain → 색 전이: 컨테이너들에 하이라이트가 "결국" 적용된다 (워커
 		// 옵션 정합이 깨지면 여기서 영영 실패한다 — Global Constraints의
