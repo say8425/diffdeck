@@ -112,28 +112,36 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		// 차원이 다른 150ms 상한.
 		expect(expandGapMs).toBeLessThan(150);
 
-		// Phase 2: 전체 문서 스크롤 — 나머지 파일들(bulk-*.ts/hello.ts 등)의
-		// 첫 진입도 훑는다.
+		// Phase 2: 문서를 216k px 훑는다 — big.ts를 지나 bulk-0..7이 처음 진입한다
+		// (big.ts가 약 159k까지 차지하고 bulk-7은 약 215k에서 마운트된다 — 실측. 문서
+		// 끝(약 256k)의 bulk-8..11은 닿지 않는다).
 		//
 		// **스크롤은 휠 입력으로 한다 — JS의 `scrollTop` 대입으로 하지 말 것.** 한때
 		// rAF 콜백 안에서 `scrollTop += 900`을 했는데, CI(Linux 헤드리스 Chrome)에서
-		// 약 9%(120회 중 11회) 확률로 메인 스레드가 수십~수백 초 멈췄다. Chrome
-		// 트레이스로 잡은 멈춘 스택은 `FireAnimationFrame > ScrollableArea::SetScrollOffset
-		// > ScrollLayer > LayerTreeHost::WaitForCommitCompletion` — JS의 스크롤 대입이
-		// 컴포지터 커밋 완료를 **동기로** 기다리는데 커밋이 끝나지 않았다(GPU 메인
-		// 스레드는 27초째 유휴). JS가 아니라 네이티브에서 막혀 V8 프로파일러도 못
-		// 끼어들었고, 로컬(macOS)에선 CPU 12배 스로틀로도 재현되지 않았다. 앱 버그가
-		// 아니다 — 실제 사용자의 휠 스크롤은 컴포지터가 처리해 이 대기를 거치지
-		// 않는다. 같은 조건에서 휠 입력은 40회 중 0회 멈췄다(`scrollTop` 방식은 같은
-		// 시각 40회 중 4회). 두 번째 실패 모양(아래 색 폴이 30초 동안 false)도 같은
-		// 멈춤이다 — 프레임이 안 오면 엔진이 rAF에서 하는 렌더도 안 돌아 워커 결과가
-		// DOM에 반영되지 않는다.
+		// 가끔 메인 스레드가 수십~수백 초 멈췄다(단독 반복 120회 중 스크롤이 끝내 안
+		// 끝난 것 8회 ≈ 7%, 스크롤 뒤 잠깐 무응답 4회). Chrome 트레이스로 잡은 멈춘
+		// 스택은 `FireAnimationFrame > ScrollableArea::SetScrollOffset > ScrollLayer >
+		// LayerTreeHost::WaitForCommitCompletion` — 메인 스레드의 스크롤 대입이 컴포지터
+		// 커밋 완료를 **동기로** 기다리는데 커밋이 끝나지 않았다(GPU 메인 스레드는
+		// 27초째 유휴). 네이티브에서 막혀 V8 프로파일러도 못 끼어들었고, 로컬(macOS)에선
+		// CPU 12배 스로틀로도 재현되지 않았다. Linux 헤드리스 Chrome의 문제이고, 그걸
+		// 건드리는 건 **프레임 안에서의 메인 스레드 스크롤 대입**이다 — 옛 스펙은 한
+		// 번에 240번 했다. 앱도 원리적으로 면역은 아니다(엔진이 스크롤 앵커를 보정할
+		// 때 렌더 경로에서 `scrollTo`를 부른다 — `CodeView.ts`), 다만 드물게 탈 뿐이다.
+		// 휠 입력은 컴포지터가 처리해 그 동기 대기를 거치지 않는다. 같은 시각 A/B(각
+		// 40회)에서 휠은 0회, `scrollTop`은 끝내 멈춤 3회(+짧은 무응답 1회) — 이 수치만으로는
+		// 통계적으로 갈리지 않는다(p≈0.12). 이 선택의 근거는 수치보다 **기제**다: 멈춘
+		// 스택이 스크롤 대입 안에 있었고 휠은 그 경로를 안 탄다. 두 번째 실패 모양(아래
+		// 색 폴이 끝내 false)도 같은 멈춤이다 — 프레임이 안 오면 엔진이 rAF에서 하는
+		// 렌더도 안 돌아 워커 결과가 DOM에 반영되지 않는다.
 		//
-		// 상한이 1단계(150ms)보다 느슨한 이유: 휠 입력은 프레임 간격 자체가 크다(CI
-		// 40회: 중앙값 120, 90% 145, 최대 165ms). 이 단계는 원래 회귀를 가려내지
-		// 못한다(위 머리 주석 ① — bulk 파일은 문법이 이미 데워져 동기 경로로도 150ms를
-		// 못 넘는다). 회귀를 잡는 것은 1단계이고, 여기는 "첫 진입이 프레임을 수백 ms
-		// 얼리지 않는다"는 넓은 가드다 — 그래서 CI 최댓값의 약 두 배를 둔다.
+		// 상한이 1단계(150ms)보다 느슨한 이유: 휠 스윕에서 회차별 **최악** 프레임 간격이
+		// 더 크다(CI 40회: 중앙값 120, 90% 145, 최대 165ms — 보통 프레임은 여전히 약
+		// 17ms다. 스윕이 두 배 길어져 워커 결과 도착과 겹치는 탓으로 보이나 확정하지
+		// 않았다). 이 단계는 원래 회귀를 가려내지 못한다(위 머리 주석 ① — bulk 파일은
+		// 문법이 이미 데워져 동기 경로로도 150ms를 못 넘는다). 회귀를 잡는 것은 1단계이고
+		// (워커 경로를 끄면 1단계가 4,652ms로 죽는다 — 뮤테이션 확인), 여기는 "첫 진입이
+		// 프레임을 수백 ms 얼리지 않는다"는 넓은 가드다 — 그래서 CI 최댓값의 약 두 배를 둔다.
 		await page.evaluate(() => {
 			const w = window as unknown as {
 				__gaps: { max: number; frames: number; stop: boolean };
@@ -152,9 +160,10 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		const box = await page.locator("#diff").boundingBox();
 		if (!box) throw new Error("#diff has no box");
 		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-		// 900px × 240 ≈ 216k px — 전체 문서를 통과하며 모든 파일의 "최초 진입"을 유발한다.
-		for (let i = 0; i < 240; i++) {
-			await page.mouse.wheel(0, 900);
+		const STEPS = 240;
+		const STEP_PX = 900;
+		for (let i = 0; i < STEPS; i++) {
+			await page.mouse.wheel(0, STEP_PX);
 			await page.waitForTimeout(16);
 		}
 		const { scrollGapMs, scrolledTo } = await page.evaluate(() => {
@@ -167,9 +176,10 @@ test("first entry into the overscan window must not freeze the frame", async ({
 				scrolledTo: (document.getElementById("diff") as HTMLElement).scrollTop,
 			};
 		});
-		// 가짜 통과 방지: 휠이 실제로 문서를 끝까지 훑었는지(휠이 씹히면 아무 파일도
-		// 새로 진입하지 않아 갭이 작게 나온다).
-		expect(scrolledTo).toBeGreaterThan(150_000);
+		// 가짜 통과 방지: 휠 입력이 **하나도 빠짐없이** 스크롤로 이어졌는지. 휠이 씹히면
+		// 파일이 새로 진입하지 않아 갭이 작게 나온다 — 150k 같은 느슨한 하한은 big.ts만
+		// 지나도(bulk 진입 0개) 참이 된다. CI 40회·로컬 모두 정확히 216,000에 닿았다.
+		expect(scrolledTo).toBe(STEPS * STEP_PX);
 
 		// 가짜 통과 방지: 파일들이 실제로 마운트됐는지.
 		const mounted = await page.evaluate(
@@ -193,12 +203,13 @@ test("first entry into the overscan window must not freeze the frame", async ({
 						),
 					),
 				// liveness 폴이다 — "색이 결국 입혀지는가"만 본다. 이 테스트의
-				// 하드 예산 단언은 위의 scrollGapMs(150ms)이고 그건 그대로다.
+				// 하드 예산 단언은 위의 expandGapMs(150ms)와 scrollGapMs(300ms)다.
 				//
-				// 값이 30초인 건 예산 계산의 결과다. 이 폴 앞 구간이 실측상
-				// 9.6~17.6초 걸리고(CI green 5런) 테스트 타임아웃은 60초이므로
-				// 17.6 + 30 = 47.6 < 60으로 여유가 12.4초 남는다. 40초로 잡으면
-				// 57.6이 되어 여유가 2.4초뿐이고, 테스트 타임아웃이 먼저 터지면
+				// 값이 25초인 건 예산 계산의 결과다. 휠 스윕으로 바꾼 뒤 이 폴 앞
+				// 구간이 길어졌다(CI 전체 스위트에서 스펙 총 23.9초, 단독 A/B
+				// 중앙값 17.8초 — 예전 `scrollTop` 방식은 9.6~17.6초). 테스트
+				// 타임아웃은 60초이므로 24 + 25 = 49 < 60으로 여유가 11초 남는다
+				// (30초로 두면 54라 여유가 6초뿐이다). 테스트 타임아웃이 먼저 터지면
 				// 세 가지를 잃는다: 상한이 무의미해지고, 폴 전용 실패 메시지가
 				// 일반 타임아웃으로 퇴화하며, Playwright가 테스트를 잘라 finally의
 				// viewer.stop()이 stderr를 못 찍는다. **이 두 숫자는 서로를 알고
@@ -208,7 +219,7 @@ test("first entry into the overscan window must not freeze the frame", async ({
 				// 초과했다(테스트 총 37.6초, pre-poll 17.6초). 그 실행은 요청 7건이
 				// 전부 200이라 서버 결함은 아니었다 — 다만 원인이 단순 감속인지
 				// 하이라이트 경로의 stall인지는 확정하지 못했다.
-				{ timeout: 30_000 },
+				{ timeout: 25_000 },
 			)
 			.toBe(true);
 	} finally {
