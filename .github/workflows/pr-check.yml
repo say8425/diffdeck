@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        chrome_args: ['', '--disable-gpu']
+        wheel: ['0', '1']
     # globalSetup(build.ts 실행)과 fixtures의 readUrlFromStdout에는 자체 타이머가
     # 없고 Playwright의 per-test timeout도 그 둘을 덮지 않는다. 잡 타임아웃이
     # 없으면 GHA 기본값이 6시간이라, 한 번 매달리면 러너를 그만큼 태운다
@@ -113,7 +113,7 @@ jobs:
       - name: worker-highlight alone, repeated
         continue-on-error: true
         env:
-          PW_CHROME_ARGS: ${{ matrix.chrome_args }}
+          DIAG_WHEEL: ${{ matrix.wheel }}
         working-directory: apps/viewer
         run: bunx playwright test e2e/worker-highlight.e2e.ts -g "first entry" --repeat-each=40 --output=test-results-repeat --reporter=list
       - name: Upload diagnostics

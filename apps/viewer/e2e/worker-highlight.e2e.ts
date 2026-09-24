@@ -164,7 +164,44 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		}
 		let done = false;
 		let scroll: unknown;
-		void page
+		const wheel = process.env.DIAG_WHEEL === "1";
+		if (wheel) {
+			// 휠 입력으로 스크롤한다 — 컴포지터 스레드가 처리하므로 JS의 scrollTop 대입이
+			// 부르는 동기 커밋 대기(LayerTreeHost::WaitForCommitCompletion)를 거치지 않는다.
+			await page.evaluate(() => {
+				const w = window as unknown as { __gap: { max: number; frames: number; stop: boolean } };
+				w.__gap = { max: 0, frames: 0, stop: false };
+				let last = performance.now();
+				const tick = (): void => {
+					const now = performance.now();
+					w.__gap.max = Math.max(w.__gap.max, now - last);
+					last = now;
+					w.__gap.frames++;
+					if (!w.__gap.stop) requestAnimationFrame(tick);
+				};
+				requestAnimationFrame(tick);
+			});
+			const box = await page.locator("#diff").boundingBox();
+			if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+			void (async () => {
+				const t = Date.now();
+				try {
+					for (let i = 0; i < 240; i++) {
+						await page.mouse.wheel(0, 900);
+						await new Promise((r) => setTimeout(r, 16));
+					}
+					scroll = await page.evaluate(() => {
+						const w = window as unknown as { __gap: { max: number; frames: number; stop: boolean } };
+						w.__gap.stop = true;
+						return { frames: w.__gap.frames, maxGap: Math.round(w.__gap.max), ms: 0, wheel: true };
+					});
+					(scroll as { ms: number }).ms = Date.now() - t;
+				} catch (e) {
+					scroll = `ERR ${String(e).slice(0, 200)}`;
+				}
+				done = true;
+			})();
+		} else void page
 			.evaluate(
 				() =>
 					new Promise((resolve) => {
