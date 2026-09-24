@@ -17,6 +17,12 @@ export interface BlobCacheStats {
 
 export interface BlobCache {
 	get(oid: string): Uint8Array<ArrayBuffer> | undefined;
+	/**
+	 * 들어 있는지만 본다 — hit/miss를 세지 않고 최근성도 올리지 않는다. 한 번에
+	 * 읽을 OID를 모으는 쪽(`getDiffFiles`의 선읽기)이 쓰며, 그 확인이 통계와 LRU
+	 * 순서를 흔들면 뒤이은 실제 `get`의 의미가 흐려진다.
+	 */
+	has(oid: string): boolean;
 	set(oid: string, bytes: Uint8Array<ArrayBuffer>): void;
 	/** 서버 배선이 실제로 쓰이는지 테스트가 확인하는 용도. */
 	stats(): BlobCacheStats;
@@ -46,6 +52,7 @@ export const createBlobCache = ({
 			entries.set(oid, hit);
 			return hit;
 		},
+		has: (oid) => entries.has(oid),
 		set(oid, value) {
 			// 한 항목 때문에 나머지를 다 비우지 않는다.
 			if (value.byteLength > maxBytes) return;

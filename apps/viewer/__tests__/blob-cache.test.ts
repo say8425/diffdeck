@@ -56,3 +56,16 @@ test("defaults to a 64MB cap", () => {
 	expect(cache.stats().entries).toBe(1);
 	expect(DEFAULT_BLOB_CACHE_BYTES).toBe(64 * 1024 * 1024);
 });
+
+test("has() answers without counting a hit or a miss and without touching recency", () => {
+	const cache = createBlobCache({ maxBytes: 100 });
+	cache.set("a", bytes(40));
+	cache.set("b", bytes(40));
+	expect(cache.has("a")).toBe(true);
+	expect(cache.has("zzz")).toBe(false);
+	expect(cache.stats()).toMatchObject({ hits: 0, misses: 0 });
+	// has("a")가 최근성을 올렸다면 다음 퇴출 대상은 b였을 것이다 — a가 버려져야 한다.
+	cache.set("c", bytes(40));
+	expect(cache.has("a")).toBe(false);
+	expect(cache.has("b")).toBe(true);
+});
