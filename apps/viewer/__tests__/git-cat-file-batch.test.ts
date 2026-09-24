@@ -5,7 +5,9 @@ import { join } from "node:path";
 import {
 	gitBytes,
 	gitCatFileBatch,
+	gitCatFileSizes,
 	parseCatFileBatch,
+	parseCatFileSizes,
 } from "../server/gitOutput.ts";
 
 /**
@@ -160,3 +162,30 @@ test(
 	},
 	ROUNDS * SETTLE_MS + 5_000,
 );
+
+test("drops a record whose declared size runs past the end of the output", () => {
+	const out = concat(enc(`${A} blob 2\nok\n`), enc(`${B} blob 99\ncut short`));
+	const blobs = parseCatFileBatch(out);
+	expect([...blobs.keys()]).toEqual([A]);
+	expect(dec(blobs.get(A))).toBe("ok");
+});
+
+test("parseCatFileSizes reads sizes and leaves missing objects out", () => {
+	const out = `${A} blob 12\n${M} missing\n${C} blob 0\n${B} tree 40\n`;
+	expect(parseCatFileSizes(out)).toEqual(
+		new Map([
+			[A, 12],
+			[C, 0],
+		]),
+	);
+});
+
+test("gitCatFileSizes reports real blob sizes", async () => {
+	const oid = git(["rev-parse", "HEAD:text.txt"]);
+	const absent = "0123456789abcdef0123456789abcdef01234567";
+	const sizes = await gitCatFileSizes(repo, [oid, absent]);
+	expect(sizes).toEqual(
+		new Map([[oid, new TextEncoder().encode("안녕\nworld\n").byteLength]]),
+	);
+	expect((await gitCatFileSizes(repo, [])).size).toBe(0);
+});

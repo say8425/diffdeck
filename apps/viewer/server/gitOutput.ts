@@ -81,22 +81,30 @@ export const parseCatFileBatch = (
 };
 
 /**
- * blob 여럿을 `git cat-file --batch` **한 프로세스**로 읽는다. 파일마다
- * `git show`를 띄우면 프로세스 생성이 첫 로드를 지배했다(raycast-extensions
- * 150파일: `git show` 8-way 387ms → 이 배치 37ms, 실측). 없는 객체는 결과에서
- * 빠지고, 호출자가 파일별 `git show`로 떨어져 지금과 같은 방식으로 실패한다.
- *
- * stdout 읽기를 먼저 걸고 stdin을 쓴다 — 지금 Bun은 파이프를 선제 버퍼링해
- * 반대 순서도 교착하지 않지만(1.3.12, OID 20,000개·출력 41MB까지 실측) 그
- * 구현 세부에 기대지 않는다. OID는 argv가 아니라 stdin으로 가므로
- * 옵션으로 해석될 수 없다. `$`가 아니라 `Bun.spawn`이다(위 `gitBytes`와 같은 이유).
+ * `git cat-file --batch-check` 출력(`<oid> <type> <size>`, 없으면 `<oid> missing`)을
+ * OID → 크기로 푼다. blob만 담는다.
  */
-export const gitCatFileBatch = async (
+export const parseCatFileSizes = (out: string): Map<string, number> => {
+	const sizes = new Map<string, number>();
+	for (const line of out.split("\n")) {
+		const [oid = "", type = "", sizeText] = line.split(" ");
+		const size = Number(sizeText);
+		if (type === "blob" && Number.isInteger(size)) sizes.set(oid, size);
+	}
+	return sizes;
+};
+
+// OID 목록을 stdin으로 넘겨 `git cat-file <mode>`를 한 프로세스로 돌리고 stdout을
+// 통째로 받는다. stdout 읽기를 먼저 걸고 stdin을 쓴다 — 지금 Bun은 파이프를 선제
+// 버퍼링해 반대 순서도 교착하지 않지만(1.3.12, OID 20,000개·출력 41MB까지 실측)
+// 그 구현 세부에 기대지 않는다. OID는 argv가 아니라 stdin으로 가므로 옵션으로
+// 해석될 수 없다. `$`가 아니라 `Bun.spawn`이다(위 `gitBytes`와 같은 이유).
+const catFile = async (
 	repo: string,
+	mode: "--batch" | "--batch-check",
 	oids: readonly string[],
-): Promise<Map<string, Uint8Array<ArrayBuffer>>> => {
-	if (oids.length === 0) return new Map();
-	const proc = Bun.spawn(["git", "-C", repo, "cat-file", "--batch"], {
+): Promise<Uint8Array> => {
+	const proc = Bun.spawn(["git", "-C", repo, "cat-file", mode], {
 		stdin: "pipe",
 		stdout: "pipe",
 		stderr: "ignore",
@@ -106,5 +114,33 @@ export const gitCatFileBatch = async (
 	await proc.stdin.end();
 	const buf = await out;
 	await proc.exited;
-	return parseCatFileBatch(new Uint8Array(buf));
+	return new Uint8Array(buf);
+};
+
+/** blob 여럿의 크기를 `git cat-file --batch-check` 한 프로세스로 잰다. 없는 객체는 빠진다. */
+export const gitCatFileSizes = async (
+	repo: string,
+	oids: readonly string[],
+): Promise<Map<string, number>> =>
+	oids.length === 0
+		? new Map()
+		: parseCatFileSizes(
+				new TextDecoder().decode(await catFile(repo, "--batch-check", oids)),
+			);
+
+/**
+ * blob 여럿을 `git cat-file --batch` **한 프로세스**로 읽는다. 파일마다
+ * `git show`를 띄우면 프로세스 생성이 첫 로드를 지배했다(raycast-extensions
+ * 150파일: `git show` 8-way 387ms → 이 배치 37ms, 실측). 없는 객체는 결과에서
+ * 빠지고, 호출자가 파일별 `git show`로 떨어져 지금과 같은 방식으로 실패한다.
+ *
+ * **작은 blob에만 쓴다** — 출력 전체가 한 버퍼에 오르므로 큰 blob까지 담으면
+ * 메모리가 diff 크기를 따라간다. 무엇을 담을지는 호출자(`pickForBatch`)가 정한다.
+ */
+export const gitCatFileBatch = async (
+	repo: string,
+	oids: readonly string[],
+): Promise<Map<string, Uint8Array<ArrayBuffer>>> => {
+	if (oids.length === 0) return new Map();
+	return parseCatFileBatch(await catFile(repo, "--batch", oids));
 };

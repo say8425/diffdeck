@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { $ } from "bun";
 import type { BlobCache } from "./blobCache.ts";
-import { gitBytes, gitCatFileBatch, gitRun, gitText } from "./gitOutput.ts";
+import {
+	gitBytes,
+	gitCatFileBatch,
+	gitCatFileSizes,
+	gitRun,
+	gitText,
+} from "./gitOutput.ts";
 import { mapWithLimit } from "./mapLimit.ts";
 
 // buildFile 병렬 실행 상한 — 파일당 git 서브프로세스가 뜨므로 무제한이면
@@ -180,8 +186,10 @@ const readBlob = async (
 		if (oid && blobs) blobs.set(oid, pre);
 		return pre;
 	}
-	// 배치가 못 읽은 OID(예: 부분 클론에서 아직 없는 객체)만 여기로 온다 — 그때도
-	// 이름이 아니라 OID로 읽는다(위 주석의 경합).
+	// 여기로 오는 것: 배치에 담지 않은 큰 blob, 배치가 못 읽은 OID(예: 부분 클론에서
+	// 아직 없는 객체), 그리고 `blobsToRead`가 `has()`로 "있다"고 본 뒤 읽기 전에 LRU에서
+	// 밀려난 것(이번 빌드의 새 blob이나 동시에 도는 다른 빌드가 64MB를 채울 때). 어느
+	// 경우든 이름이 아니라 OID로 읽는다(위 주석의 경합).
 	const { stdout, exitCode } = await gitRun([
 		"-C",
 		repo,
@@ -333,6 +341,34 @@ const blobsToRead = (
 	return [...wanted];
 };
 
+// 배치가 아끼는 것은 프로세스 생성 비용이라 **작은 blob에서만** 이득이다. 큰 blob은
+// 어차피 I/O가 지배하고, 배치에 담으면 빌드 동안 diff의 모든 blob이 한 버퍼에 올라
+// 메모리 상한이 사라진다(리뷰 실측: 25MB × 20 diff에서 최대 메모리 1GB → 3GB, 시간도
+// 250 → 500ms). 그래서 blob 하나 1MB·합계 32MB까지만 담고, 나머지는 예전처럼
+// `BUILD_CONCURRENCY`로 묶인 파일별 읽기로 간다. 크기를 모르는 것(= 없는 객체)도
+// 파일별 읽기로 떨어져 지금과 같은 방식으로 실패한다.
+export const PREFETCH_LIMITS = {
+	maxBlob: 1024 * 1024,
+	maxTotal: 32 * 1024 * 1024,
+} as const;
+
+export const pickForBatch = (
+	oids: readonly string[],
+	sizes: ReadonlyMap<string, number>,
+	limits: { maxBlob: number; maxTotal: number } = PREFETCH_LIMITS,
+): string[] => {
+	const picked: string[] = [];
+	let total = 0;
+	for (const oid of oids) {
+		const size = sizes.get(oid);
+		if (size === undefined || size > limits.maxBlob) continue;
+		if (total + size > limits.maxTotal) continue;
+		total += size;
+		picked.push(oid);
+	}
+	return picked;
+};
+
 export const resolveDiffBaseRev = async (
 	repo: string,
 	opts: { mode?: "working" | "base"; ref?: string; head?: string },
@@ -428,9 +464,10 @@ export const getDiffFiles = async (
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
 		const specs = parseRawZ(raw);
+		const wanted = blobsToRead(specs, opts.head, blobs);
 		const prefetched = await gitCatFileBatch(
 			repo,
-			blobsToRead(specs, opts.head, blobs),
+			pickForBatch(wanted, await gitCatFileSizes(repo, wanted)),
 		);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import {
 	chmodSync,
+	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -23,6 +24,10 @@ import { join } from "node:path";
  */
 
 const FILES = 12;
+// 배치 상한(blob 하나 1MB)을 넘는 파일 하나 — 이것만 파일별 `git show`로 떨어져야 한다.
+const BIG = "big.txt";
+const bigBody = (tag: string): string =>
+	`${tag}\n${`${"q".repeat(99)}\n`.repeat(12_000)}`; // ~1.2MB
 const here = import.meta.dir;
 let dir: string;
 let repo: string;
@@ -42,6 +47,7 @@ beforeAll(() => {
 	git(["config", "user.name", "test"]);
 	for (let i = 0; i < FILES; i++)
 		writeFileSync(join(repo, `f${i}.txt`), `v1 ${i}\n`);
+	writeFileSync(join(repo, BIG), bigBody("v1"));
 	git(["add", "-A"]);
 	git(["commit", "-qm", "init"]);
 	// head 모드용: 파일을 모두 고친 커밋을 가진 브랜치. main은 움직이지 않는다.
@@ -52,11 +58,12 @@ beforeAll(() => {
 	git(["checkout", "-q", "main"]);
 	for (let i = 0; i < FILES; i++)
 		writeFileSync(join(repo, `f${i}.txt`), `v2 ${i}\n`);
+	writeFileSync(join(repo, BIG), bigBody("v2"));
 
 	const realGit = Bun.which("git");
 	if (!realGit) throw new Error("git not found");
 	const shimDir = join(dir, "shim");
-	Bun.spawnSync(["mkdir", "-p", shimDir]);
+	mkdirSync(shimDir);
 	writeFileSync(
 		join(shimDir, "git"),
 		`#!/bin/sh\necho "$*" >> "$GIT_SHIM_LOG"\nexec "${realGit}" "$@"\n`,
@@ -109,36 +116,39 @@ const calls = (): { cold: string[]; warm: string[]; head: string[] } => {
 };
 const count = (lines: string[], sub: string): number =>
 	lines.filter((l) => l.includes(sub)).length;
+// `cat-file --batch`와 `cat-file --batch-check`를 가른다(부분 문자열로 세면 섞인다).
+const batches = (lines: string[]): number =>
+	lines.filter((l) => l.endsWith("cat-file --batch")).length;
+const sizeChecks = (lines: string[]): number =>
+	lines.filter((l) => l.endsWith("cat-file --batch-check")).length;
 
 test("the shim sees the child's git calls (the test is not vacuous)", () => {
 	expect(count(calls().cold, " diff --raw ")).toBe(1);
 });
 
-test("a cold build reads every old side in one cat-file --batch and no git show", () => {
+test("a cold build reads small old sides in one batch and only the big one by itself", () => {
 	const { cold } = calls();
-	expect(count(cold, " cat-file --batch")).toBe(1);
-	expect(count(cold, " show ")).toBe(0);
-	expect(result.cold).toEqual(
-		Object.fromEntries(
-			Array.from({ length: FILES }, (_, i) => [
-				`f${i}.txt`,
-				`v1 ${i}
-`,
-			]),
+	expect(sizeChecks(cold)).toBe(1);
+	expect(batches(cold)).toBe(1);
+	expect(count(cold, " show ")).toBe(1);
+	expect(result.cold).toEqual({
+		...Object.fromEntries(
+			Array.from({ length: FILES }, (_, i) => [`f${i}.txt`, `v1 ${i}\n`]),
 		),
-	);
+		[BIG]: bigBody("v1"),
+	});
 });
 
 test("a warm build reads no blobs at all", () => {
 	const { warm } = calls();
 	expect(count(warm, " cat-file ")).toBe(0);
 	expect(count(warm, " show ")).toBe(0);
-	expect(result.warm).toBe(FILES);
+	expect(result.warm).toBe(FILES + 1);
 });
 
 test("head mode reads both sides of every file in the one batch too", () => {
 	const { head } = calls();
-	expect(count(head, " cat-file --batch")).toBe(1);
+	expect(batches(head)).toBe(1);
 	expect(count(head, " show ")).toBe(0);
 	expect(result.head.toSorted()).toEqual(
 		Array.from({ length: FILES }, (_, i) => `feat ${i}\n`).toSorted(),
