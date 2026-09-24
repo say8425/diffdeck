@@ -149,6 +149,13 @@ test("first entry into the overscan window must not freeze the frame", async ({
 
 		summary.phase1 = { expandGapMs: Math.round(expandGapMs), sawExpandedBig };
 		summary.beforeScroll = await snap();
+		const browser = page.context().browser();
+		await browser?.startTracing(page, {
+			categories: [
+				"toplevel", "blink", "v8", "devtools.timeline", "cc", "gpu", "viz",
+				"disabled-by-default-devtools.timeline", "loading", "renderer.scheduler",
+			],
+		});
 		await cdp.send("Profiler.enable");
 		await cdp.send("Profiler.setSamplingInterval", { interval: 1000 });
 		await cdp.send("Profiler.start");
@@ -184,10 +191,51 @@ test("first entry into the overscan window must not freeze the frame", async ({
 			);
 		const samples: unknown[] = [];
 		const t0 = Date.now();
-		while (!done && Date.now() - t0 < 105_000) {
+		let silent = 0;
+		while (!done && Date.now() - t0 < 60_000 && silent < 10) {
 			await new Promise((r) => setTimeout(r, 2000));
-			samples.push([Math.round((Date.now() - t0) / 1000), await snap()]);
+			const s = await snap();
+			silent = s === "NO_RESPONSE_1500MS" ? silent + 1 : 0;
+			samples.push([Math.round((Date.now() - t0) / 1000), s]);
 		}
+		const traceBuf = (await Promise.race([
+			browser?.stopTracing(),
+			new Promise((r) => setTimeout(() => r(null), 30_000)),
+		])) as Buffer | null;
+		if (traceBuf) {
+			const raw = JSON.parse(traceBuf.toString("utf8"));
+			const evs: any[] = Array.isArray(raw) ? raw : raw.traceEvents;
+			const names = new Map<string, string>();
+			for (const e of evs)
+				if (e.ph === "M" && e.name === "thread_name") names.set(`${e.pid}:${e.tid}`, e.args?.name);
+			const thr = (e: any) => names.get(`${e.pid}:${e.tid}`) ?? `${e.pid}:${e.tid}`;
+			const long = evs
+				.filter((e) => e.ph === "X" && e.dur > 500_000)
+				.map((e) => [thr(e), e.name, Math.round(e.dur / 1000), e.args?.data?.type ?? ""])
+				.sort((a, b) => (b[2] as number) - (a[2] as number))
+				.slice(0, 25);
+			const open = new Map<string, any[]>();
+			for (const e of [...evs].sort((a, b) => a.ts - b.ts)) {
+				const k = `${e.pid}:${e.tid}`;
+				if (e.ph === "B") (open.get(k) ?? open.set(k, []).get(k))!.push(e);
+				else if (e.ph === "E") open.get(k)?.pop();
+			}
+			const unclosed: any[] = [];
+			for (const [k, st] of open) {
+				const n = names.get(k) ?? k;
+				if (st.length && !/Perfetto/.test(n)) unclosed.push([n, st.map((e) => `${e.name}@${Math.round(e.ts / 1000)}`).join(" > ")]);
+			}
+			const tsMax = evs.reduce((m, e) => Math.max(m, e.ts ?? 0), 0);
+			const lastByThread: any[] = [];
+			for (const [k, n] of names) {
+				if (!/CrRendererMain|Compositor|VizCompositor|CrGpuMain|DedicatedWorker/.test(n ?? "")) continue;
+				const mine = evs.filter((e) => `${e.pid}:${e.tid}` === k && e.ts);
+				const lastEv = mine.reduce((a, b) => (b.ts + (b.dur ?? 0) > (a?.ts ?? 0) + (a?.dur ?? 0) ? b : a), undefined as any);
+				if (lastEv) lastByThread.push([n, lastEv.name, Math.round((tsMax - lastEv.ts - (lastEv.dur ?? 0)) / 1000)]);
+			}
+			summary.trace = { events: evs.length, long, unclosed: unclosed.slice(0, 20), lastByThread };
+			await testInfo.attach("chrome-trace.json", { body: traceBuf, contentType: "application/json" });
+		} else summary.trace = "STOP_TRACING_TIMEOUT";
 		const prof = (await Promise.race([
 			cdp.send("Profiler.stop"),
 			new Promise((r) => setTimeout(() => r(null), 10_000)),
