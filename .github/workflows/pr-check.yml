@@ -89,7 +89,7 @@ jobs:
     # 없으면 GHA 기본값이 6시간이라, 한 번 매달리면 러너를 그만큼 태운다
     # (이 리포엔 실제로 Bun $ never-settle 행업 전례가 있다). 실제 소요는 수 분대라
     # 15분은 넉넉한 상한이다 — 정확한 값은 최근 Actions 런이 답한다.
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -106,13 +106,19 @@ jobs:
         run: bunx playwright install --with-deps chrome
       # globalSetup이 build.ts를 1회 실행해 진짜 dist/cli.js를 만들고,
       # 각 spec은 그걸 실제로 spawn한다.
-      - name: e2e (real browser)
+      - name: e2e (real browser) — full suite, instrumented spec in place
+        continue-on-error: true
         run: bun run test:e2e
-      # 실패 산출물이 없으면 CI 전용 실패를 로컬에서 재현할 단서가 없다.
-      - name: Upload failure artifacts
-        if: failure()
+      - name: worker-highlight alone, repeated
+        continue-on-error: true
+        working-directory: apps/viewer
+        run: bunx playwright test e2e/worker-highlight.e2e.ts -g "first entry" --repeat-each=15 --output=test-results-repeat --reporter=list
+      - name: Upload diagnostics
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-results
-          path: apps/viewer/test-results/
+          name: diag
+          path: |
+            apps/viewer/test-results/
+            apps/viewer/test-results-repeat/
           retention-days: 7

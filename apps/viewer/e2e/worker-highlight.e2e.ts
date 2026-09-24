@@ -27,29 +27,74 @@
 //    다른 파일들의 첫 진입을 훑는다.
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
+// [진단 전용 — 머지 금지] worker-highlight flake 계측판. 원래 스펙과 같은 이름·자리에서
+// 같은 조건을 만들고, 단언 대신 워커 메시지 흐름·long task·메인 스레드 응답·CPU
+// 프로필·색 첫 적용 시각을 기록해 `DIAG {json}` 한 줄로 찍는다.
 test("first entry into the overscan window must not freeze the frame", async ({
 	page,
-}) => {
-	// bigFileLines 4000 = 양쪽 8,000줄. bulk 12개는 문서를 충분히 길게 만들어
-	// 스크롤 스윕이 나머지 파일들의 첫 진입도 훑게 한다.
+}, testInfo) => {
+	test.setTimeout(150_000);
+	await page.addInitScript(() => {
+		const w = window as unknown as { __diag: Record<string, any> };
+		const d = (w.__diag = {
+			workers: 0, posted: 0, received: 0, errors: [] as string[],
+			lastRecv: 0, lastPost: 0, longtasks: [] as number[][], firstColor: 0,
+		});
+		const Orig = window.Worker;
+		window.Worker = class extends Orig {
+			constructor(...a: ConstructorParameters<typeof Worker>) {
+				super(...a);
+				d.workers++;
+				this.addEventListener("message", () => { d.received++; d.lastRecv = performance.now(); });
+				this.addEventListener("error", (e) => d.errors.push(`error:${(e as ErrorEvent).message ?? e.type}`));
+				this.addEventListener("messageerror", () => d.errors.push("messageerror"));
+			}
+			override postMessage(...a: Parameters<Worker["postMessage"]>) {
+				d.posted++; d.lastPost = performance.now();
+				// @ts-expect-error spread into overloads
+				return super.postMessage(...a);
+			}
+		} as typeof Worker;
+		new PerformanceObserver((l) => {
+			for (const e of l.getEntries()) d.longtasks.push([Math.round(e.startTime), Math.round(e.duration)]);
+		}).observe({ type: "longtask", buffered: true });
+		setInterval(() => {
+			if (d.firstColor) return;
+			for (const c of document.querySelectorAll("diffs-container")) {
+				if (c.shadowRoot?.querySelector("pre")?.querySelector("span[style]")) { d.firstColor = Math.round(performance.now()); break; }
+			}
+		}, 250);
+	});
+	const snap = (): Promise<unknown> =>
+		Promise.race([
+			page.evaluate(() => {
+				const d = (window as unknown as { __diag: Record<string, any> }).__diag;
+				const sc = document.getElementById("diff");
+				const now = performance.now();
+				return {
+					t: Math.round(now), vis: document.visibilityState, workers: d.workers,
+					posted: d.posted, received: d.received,
+					lastRecvAgo: d.lastRecv ? Math.round(now - d.lastRecv) : null,
+					lastPostAgo: d.lastPost ? Math.round(now - d.lastPost) : null,
+					errors: d.errors.slice(0, 5), longtasks: d.longtasks.length,
+					ltSum: d.longtasks.reduce((a: number, x: number[]) => a + (x[1] ?? 0), 0),
+					ltLast: d.longtasks.slice(-4), firstColor: d.firstColor,
+					scrollTop: Math.round(sc?.scrollTop ?? -1), scrollH: sc?.scrollHeight,
+					mounted: document.querySelectorAll("diffs-container").length,
+				};
+			}),
+			new Promise((r) => setTimeout(() => r("NO_RESPONSE_1500MS"), 1500)),
+		]);
 	const viewer = await launchViewer([], { bulkFiles: 12, bigFileLines: 4000 });
+	const cdp = await page.context().newCDPSession(page);
+	const summary: Record<string, unknown> = { rep: testInfo.repeatEachIndex };
 	try {
 		await page.goto(viewer.url);
-		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
-			timeout: 15_000,
-		});
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, { timeout: 15_000 });
 		await expect(page.locator("diffs-container").first()).toBeVisible();
 		await page.mouse.move(2, 2);
-		// 초기 렌더·하이라이트가 가라앉을 때까지 대기 — 측정 대상은 이후에
-		// 트리거하는 이벤트들뿐이어야 한다.
 		await page.waitForTimeout(2000);
-
-		// Phase 1: big.ts 펼침 갭 측정. big.ts는 LARGE_FILE_LINE_THRESHOLD
-		// 초과라 이 시점에 이미 collapsed로 마운트돼 있다(비싼 렌더 없음 —
-		// 헤더만). rAF 갭 루프 안에서 헤더를 클릭해 펼쳐 "비싼 non-collapsed
-		// 첫 렌더"를 강제로 측정 윈도우에 넣는다. 스크롤은 하지 않는다 — 위
-		// Global Constraints 주석 ②대로, 스크롤이 겹치면 collapsed의 작은
-		// 높이 때문에 펼침 렌더가 끝나기 전에 recycle될 수 있다.
+		summary.beforePhase1 = await snap();
 		const { expandGapMs, sawExpandedBig } = await page.evaluate(() => {
 			const findBig = (): Element | undefined =>
 				[...document.querySelectorAll("diffs-container")].find(
@@ -102,80 +147,71 @@ test("first entry into the overscan window must not freeze the frame", async ({
 			);
 		});
 
-		// 가짜 통과 방지: big.ts가 실제로 펼쳐져 코드 행이 렌더된 적이 있는지 —
-		// 클릭이 씹혀 collapsed로 남으면 갭이 0이라 그냥 "통과"해버리는 경로를
-		// 막는다(lockfile-freeze.e2e.ts의 textLen 하한 선례와 동일 패턴).
-		expect(sawExpandedBig).toBe(true);
-
-		// 워커 경로의 plain 렌더는 CI 여유를 크게 잡아도 수십 ms. 동기
-		// 토크나이즈(수백 ms~수 초, 프로토타입 실측 non-worker 4,886.5ms)와
-		// 차원이 다른 150ms 상한.
-		expect(expandGapMs).toBeLessThan(150);
-
-		// Phase 2: 전체 문서 스크롤 — 나머지 파일들(bulk-*.ts/hello.ts 등)의
-		// 첫 진입도 같은 150ms 상한을 지키는지 훑는다.
-		const scrollGapMs = await page.evaluate(
-			() =>
-				new Promise<number>((resolve) => {
-					const scroller = document.getElementById("diff") as HTMLElement;
-					let maxGap = 0;
-					let last = performance.now();
-					let frames = 0;
-					const tick = (): void => {
-						const now = performance.now();
-						maxGap = Math.max(maxGap, now - last);
-						last = now;
-						frames++;
-						// 900px/frame × 240 frames ≈ 216k px — 전체 문서를 통과하며
-						// 모든 파일의 "최초 진입"을 유발한다.
-						scroller.scrollTop += 900;
-						if (frames < 240) requestAnimationFrame(tick);
-						else resolve(maxGap);
-					};
-					requestAnimationFrame(tick);
-				}),
-		);
-
-		// 가짜 통과 방지: 파일들이 실제로 마운트됐는지.
-		const mounted = await page.evaluate(
-			() => document.querySelectorAll("diffs-container").length,
-		);
-		expect(mounted).toBeGreaterThan(0);
-		expect(scrollGapMs).toBeLessThan(150);
-
-		// plain → 색 전이: 컨테이너들에 하이라이트가 "결국" 적용된다 (워커
-		// 옵션 정합이 깨지면 여기서 영영 실패한다 — Global Constraints의
-		// 옵션 정합 함정 참조).
-		await expect
-			.poll(
+		summary.phase1 = { expandGapMs: Math.round(expandGapMs), sawExpandedBig };
+		summary.beforeScroll = await snap();
+		await cdp.send("Profiler.enable");
+		await cdp.send("Profiler.setSamplingInterval", { interval: 1000 });
+		await cdp.send("Profiler.start");
+		let done = false;
+		let scroll: unknown;
+		void page
+			.evaluate(
 				() =>
-					page.evaluate(() =>
-						[...document.querySelectorAll("diffs-container")].some(
-							(c) =>
-								c.shadowRoot
-									?.querySelector("pre")
-									?.querySelector("span[style]") != null,
-						),
-					),
-				// liveness 폴이다 — "색이 결국 입혀지는가"만 본다. 이 테스트의
-				// 하드 예산 단언은 위의 scrollGapMs(150ms)이고 그건 그대로다.
-				//
-				// 값이 30초인 건 예산 계산의 결과다. 이 폴 앞 구간이 실측상
-				// 9.6~17.6초 걸리고(CI green 5런) 테스트 타임아웃은 60초이므로
-				// 17.6 + 30 = 47.6 < 60으로 여유가 12.4초 남는다. 40초로 잡으면
-				// 57.6이 되어 여유가 2.4초뿐이고, 테스트 타임아웃이 먼저 터지면
-				// 세 가지를 잃는다: 상한이 무의미해지고, 폴 전용 실패 메시지가
-				// 일반 타임아웃으로 퇴화하며, Playwright가 테스트를 잘라 finally의
-				// viewer.stop()이 stderr를 못 찍는다. **이 두 숫자는 서로를 알고
-				// 있어야 한다** — 한쪽을 바꾸면 다른 쪽을 다시 계산할 것.
-				//
-				// 올린 이유: run 30752383588에서 이 폴이 정확히 20초를 소진하고
-				// 초과했다(테스트 총 37.6초, pre-poll 17.6초). 그 실행은 요청 7건이
-				// 전부 200이라 서버 결함은 아니었다 — 다만 원인이 단순 감속인지
-				// 하이라이트 경로의 stall인지는 확정하지 못했다.
-				{ timeout: 30_000 },
+					new Promise((resolve) => {
+						const scroller = document.getElementById("diff") as HTMLElement;
+						let last = performance.now();
+						const t0 = last;
+						let frames = 0;
+						let maxGap = 0;
+						const gaps: number[] = [];
+						const tick = (): void => {
+							const now = performance.now();
+							const g = now - last;
+							last = now;
+							maxGap = Math.max(maxGap, g);
+							gaps.push(Math.round(g));
+							frames++;
+							scroller.scrollTop += 900;
+							if (frames < 240 && now - t0 < 100_000) requestAnimationFrame(tick);
+							else resolve({ frames, maxGap: Math.round(maxGap), ms: Math.round(now - t0), gaps: gaps.filter((_, i) => i % 5 === 0) });
+						};
+						requestAnimationFrame(tick);
+					}),
 			)
-			.toBe(true);
+			.then(
+				(r) => { scroll = r; done = true; },
+				(e) => { scroll = `ERR ${String(e).slice(0, 200)}`; done = true; },
+			);
+		const samples: unknown[] = [];
+		const t0 = Date.now();
+		while (!done && Date.now() - t0 < 105_000) {
+			await new Promise((r) => setTimeout(r, 2000));
+			samples.push([Math.round((Date.now() - t0) / 1000), await snap()]);
+		}
+		const prof = (await Promise.race([
+			cdp.send("Profiler.stop"),
+			new Promise((r) => setTimeout(() => r(null), 10_000)),
+		])) as { profile?: { nodes: any[]; samples: number[] } } | null;
+		summary.scrollDone = done;
+		summary.scroll = scroll;
+		summary.samples = samples;
+		summary.after = await snap();
+		if (prof?.profile) {
+			const byId = new Map(prof.profile.nodes.map((n: any) => [n.id, n]));
+			const self = new Map<string, number>();
+			for (const id of prof.profile.samples) {
+				const cf = byId.get(id)?.callFrame;
+				const key = `${cf?.functionName || "(anon)"} ${String(cf?.url ?? "").split("/").pop()}:${cf?.lineNumber}:${cf?.columnNumber}`;
+				self.set(key, (self.get(key) ?? 0) + 1);
+			}
+			summary.profileTop = [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+			summary.profileSamples = prof.profile.samples.length;
+		} else summary.profileTop = "PROFILER_STOP_TIMEOUT";
+		console.log(`DIAG ${JSON.stringify(summary)}`);
+		await testInfo.attach("diag.json", {
+			body: JSON.stringify({ summary, profile: prof?.profile ?? null }),
+			contentType: "application/json",
+		});
 	} finally {
 		await viewer.stop();
 	}
