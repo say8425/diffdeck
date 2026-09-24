@@ -84,6 +84,10 @@ jobs:
   # 어느 계약이 깨질지 미리 알 수 없으므로 골라 돌리지 않고 전부 돌린다.
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chrome_args: ['', '--disable-gpu']
     # globalSetup(build.ts 실행)과 fixtures의 readUrlFromStdout에는 자체 타이머가
     # 없고 Playwright의 per-test timeout도 그 둘을 덮지 않는다. 잡 타임아웃이
     # 없으면 GHA 기본값이 6시간이라, 한 번 매달리면 러너를 그만큼 태운다
@@ -108,13 +112,15 @@ jobs:
       # 각 spec은 그걸 실제로 spawn한다.
       - name: worker-highlight alone, repeated
         continue-on-error: true
+        env:
+          PW_CHROME_ARGS: ${{ matrix.chrome_args }}
         working-directory: apps/viewer
-        run: bunx playwright test e2e/worker-highlight.e2e.ts -g "first entry" --repeat-each=25 --output=test-results-repeat --reporter=list
+        run: bunx playwright test e2e/worker-highlight.e2e.ts -g "first entry" --repeat-each=40 --output=test-results-repeat --reporter=list
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: diag
+          name: diag-${{ strategy.job-index }}
           path: |
             apps/viewer/test-results/
             apps/viewer/test-results-repeat/

@@ -149,16 +149,19 @@ test("first entry into the overscan window must not freeze the frame", async ({
 
 		summary.phase1 = { expandGapMs: Math.round(expandGapMs), sawExpandedBig };
 		summary.beforeScroll = await snap();
-		const browser = page.context().browser();
+		const tracing = process.env.DIAG_TRACE === "1";
+		const browser = tracing ? page.context().browser() : null;
 		await browser?.startTracing(page, {
 			categories: [
 				"toplevel", "blink", "v8", "devtools.timeline", "cc", "gpu", "viz",
 				"disabled-by-default-devtools.timeline", "loading", "renderer.scheduler",
 			],
 		});
-		await cdp.send("Profiler.enable");
-		await cdp.send("Profiler.setSamplingInterval", { interval: 1000 });
-		await cdp.send("Profiler.start");
+		if (tracing) {
+			await cdp.send("Profiler.enable");
+			await cdp.send("Profiler.setSamplingInterval", { interval: 1000 });
+			await cdp.send("Profiler.start");
+		}
 		let done = false;
 		let scroll: unknown;
 		void page
@@ -237,7 +240,7 @@ test("first entry into the overscan window must not freeze the frame", async ({
 			await testInfo.attach("chrome-trace.json", { body: traceBuf, contentType: "application/json" });
 		} else summary.trace = "STOP_TRACING_TIMEOUT";
 		const prof = (await Promise.race([
-			cdp.send("Profiler.stop"),
+			tracing ? cdp.send("Profiler.stop") : Promise.resolve(null),
 			new Promise((r) => setTimeout(() => r(null), 10_000)),
 		])) as { profile?: { nodes: any[]; samples: number[] } } | null;
 		summary.scrollDone = done;
