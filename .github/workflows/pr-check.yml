@@ -67,6 +67,7 @@ jobs:
           apps/viewer/__tests__/diff-large-blob.test.ts
           apps/viewer/__tests__/git-output.test.ts
           apps/viewer/__tests__/git-large-output.test.ts
+          apps/viewer/__tests__/git-cat-file-batch.test.ts
 
   coverage:
     runs-on: ubuntu-latest

@@ -8,7 +8,7 @@
  * promise가 영영 settle하지 않을 수 있다 — 호출이 겹치면 거의 확정이고 완전
  * 순차여도 결국 걸린다(1.3.12·1.3.14 실측, macOS·Linux 모두; 업스트림은 1.4.0에서
  * 수정). 크기는 필요조건일 뿐이다 — 같은 크기라도 호출에 따라 안 멈추기도 한다
- * (`worktree list` 110KB는 한 번도 안 멈췄다). `getDiffFiles`의 8-way 파일별 읽기 버스트(지금의 `readBlob`)가 그 모양이라 큰 blob이 섞인
+ * (`worktree list` 110KB는 한 번도 안 멈췄다). 예전 `getDiffFiles`의 8-way 파일별 `git show` 버스트가 그 모양이라(지금은 `cat-file --batch` 한 번이다 — 아래 `gitCatFileBatch`) 큰 blob이 섞인
  * diff가 통째로 45초 flight 타임아웃 → 503이 됐고, 같은 작업을 `Bun.spawn`으로는
  * 수천 번 돌려도 걸리지 않았다.
  *
@@ -102,7 +102,7 @@ export const gitCatFileBatch = async (
 		stderr: "ignore",
 	});
 	const out = new Response(proc.stdout).arrayBuffer();
-	proc.stdin.write(`${oids.join("\n")}\n`);
+	await proc.stdin.write(`${oids.join("\n")}\n`);
 	await proc.stdin.end();
 	const buf = await out;
 	await proc.exited;

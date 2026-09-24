@@ -14,7 +14,15 @@ import {
  * 빈 blob이나 `missing` 레코드에서 한 칸 밀리는 파서, 없는 객체를 빈 바이트로
  * 돌려주는 구현(빈 결과를 성공으로 저장하게 만든다).
  *
- * 설치 없이 돌도록 픽스처는 `Bun.spawnSync`로 만든다(`test-bun13` 잡과 같은 조건).
+ * 설치 없이 돌도록 픽스처는 `Bun.spawnSync`로 만든다 — CI의 `test-bun13` 잡이 이
+ * 파일을 Bun 1.3.14로, `bun install` 없이 돌린다.
+ *
+ * 마지막 테스트는 Bun 1.3.x `$` never-settle의 회귀망이다. 배치가 파일별 버스트를
+ * 한 번의 호출로 바꿨으므로 예전 회귀망(`diff-large-blob.test.ts`)은 이 호출이 `$`로
+ * 돌아가도 잡지 못한다(1.3.12, 3/3 통과 — 실측). 그러나 배치 호출끼리는 실제로
+ * 겹친다(선택이 다른 `/api/diff` 요청·prewarm·watch 폴이 각자 빌드한다). 그래서
+ * 16개를 동시에 부른다 — `$`로 되돌리면 8-way×8라운드로는 8번 중 6번만 멈췄고,
+ * 16-way×5라운드로는 8번 중 8번 멈췄다(대부분 첫 라운드, 1.3.12 실측).
  */
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -60,6 +68,9 @@ test("skips objects that are not blobs", () => {
 });
 
 let repo: string;
+const BIG = 12;
+const bigContent = (i: number): string =>
+	`big${i}\n${`${"y".repeat(99)}\n`.repeat(2000)}`; // 200KB — 64KB 파이프 버퍼의 세 배
 const git = (args: string[]): string => {
 	const r = Bun.spawnSync(["git", "-C", repo, ...args], { stderr: "pipe" });
 	if (r.exitCode !== 0)
@@ -76,6 +87,8 @@ beforeAll(() => {
 	writeFileSync(join(repo, "bin.dat"), new Uint8Array([0, 1, 2, 10, 255, 0]));
 	writeFileSync(join(repo, "empty.txt"), "");
 	writeFileSync(join(repo, "big.txt"), `${"z".repeat(99)}\n`.repeat(2000));
+	for (let i = 0; i < BIG; i++)
+		writeFileSync(join(repo, `big${i}.txt`), bigContent(i));
 	git(["add", "-A"]);
 	git(["commit", "-qm", "init"]);
 });
@@ -105,3 +118,45 @@ test("leaves a missing object out instead of returning empty bytes", async () =>
 test("an empty request returns an empty map", async () => {
 	expect((await gitCatFileBatch(repo, [])).size).toBe(0);
 });
+
+const settleWithin = async <T>(work: Promise<T>, ms: number): Promise<T> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const deadline = new Promise<never>((_, reject) => {
+		timer = setTimeout(
+			() => reject(new Error(`cat-file 배치가 ${ms}ms 안에 settle하지 않았다`)),
+			ms,
+		);
+	});
+	try {
+		return await Promise.race([work, deadline]);
+	} finally {
+		clearTimeout(timer);
+	}
+};
+
+const ROUNDS = 5;
+const WAYS = 16;
+const SETTLE_MS = 10_000;
+
+test(
+	"many concurrent batches with >64KB output all settle and read to the end",
+	async () => {
+		const oids = Array.from({ length: BIG }, (_, i) =>
+			git(["rev-parse", `HEAD:big${i}.txt`]),
+		);
+		for (let round = 0; round < ROUNDS; round++) {
+			const results = await settleWithin(
+				Promise.all(
+					Array.from({ length: WAYS }, () => gitCatFileBatch(repo, oids)),
+				),
+				SETTLE_MS,
+			);
+			for (const blobs of results) {
+				for (const [i, oid] of oids.entries()) {
+					expect(dec(blobs.get(oid))).toBe(bigContent(i));
+				}
+			}
+		}
+	},
+	ROUNDS * SETTLE_MS + 5_000,
+);
