@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { $ } from "bun";
 import type { BlobCache } from "./blobCache.ts";
-import { gitBytes, gitRun, gitText } from "./gitOutput.ts";
+import {
+	gitBytes,
+	gitCatFileBatch,
+	gitCatFileSizes,
+	gitRun,
+	gitText,
+} from "./gitOutput.ts";
 import { mapWithLimit } from "./mapLimit.ts";
 
 // buildFile 병렬 실행 상한 — 파일당 git 서브프로세스가 뜨므로 무제한이면
@@ -135,8 +141,9 @@ export interface DiffFile {
 // Uint8Array<ArrayBuffer>로 명시: fetch Response body(BodyInit)는
 // SharedArrayBuffer 기반 뷰를 받지 않으므로 넓은 ArrayBufferLike면 안 된다.
 //
-// `/api/blob`(이미지)의 읽기다. `getDiffFiles`의 파일별 버스트는 이제 `readBlob`이
-// 맡는다. 둘 다 `$`가 아니라 `Bun.spawn`이다(근거와 동작 계약은 gitOutput.ts).
+// `/api/blob`(이미지)의 읽기다. `getDiffFiles`는 blob을 `cat-file --batch` 한 번으로
+// 미리 읽고(`gitCatFileBatch`), 배치가 못 읽은 것만 `readBlob`이 파일별로 읽는다.
+// 셋 다 `$`가 아니라 `Bun.spawn`이다(근거와 동작 계약은 gitOutput.ts).
 const showBytes = (
 	repo: string,
 	rev: string,
@@ -144,8 +151,8 @@ const showBytes = (
 ): Promise<Uint8Array<ArrayBuffer>> =>
 	gitBytes(["-C", repo, "show", `${rev}:${path}`]);
 
-// blob 하나를 읽되, OID와 캐시가 있으면 캐시를 먼저 본다. 파일별 `git` 버스트는
-// 여기(`gitRun` — `$`가 아니라 `Bun.spawn`)를 탄다.
+// blob 하나를 읽는다: 캐시 → 이번 빌드가 `cat-file --batch`로 미리 읽은 것 → 파일별
+// `git show <oid>`(`gitRun`) 순이다. 마지막은 배치가 못 읽은 OID에서만 온다.
 //
 // **OID가 있으면 이름이 아니라 OID로 읽는다 — 이게 캐시 계약의 절반이다.** 키는
 // 목록(`git diff --raw`)이 준 OID인데 값을 `git show HEAD:<path>`처럼 이름으로 읽으면,
@@ -159,17 +166,30 @@ const showBytes = (
 // **종료 코드가 0일 때만 저장한다** — 잠깐 못 읽은 결과(빈 바이트, 예: 부분
 // 클론의 지연 페치 실패)를 저장하면 그 빈 내용이 영구히 눌러앉는다(캐시 전엔 그
 // 빌드에만 비고 다음 재빌드에서 회복됐다).
+type Prefetched = ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
+
 const readBlob = async (
 	repo: string,
 	rev: string,
 	path: string,
 	oid: string | null,
 	blobs?: BlobCache,
+	/** 이번 빌드가 `cat-file --batch`로 미리 읽어 둔 blob. 쓰는 순간 캐시에 넣는다. */
+	prefetched?: Prefetched,
 ): Promise<Uint8Array<ArrayBuffer>> => {
 	if (oid && blobs) {
 		const hit = blobs.get(oid);
 		if (hit !== undefined) return hit;
 	}
+	const pre = oid ? prefetched?.get(oid) : undefined;
+	if (pre !== undefined) {
+		if (oid && blobs) blobs.set(oid, pre);
+		return pre;
+	}
+	// 여기로 오는 것: 배치에 담지 않은 큰 blob, 배치가 못 읽은 OID(예: 부분 클론에서
+	// 아직 없는 객체), 그리고 `blobsToRead`가 `has()`로 "있다"고 본 뒤 읽기 전에 LRU에서
+	// 밀려난 것(이번 빌드의 새 blob이나 동시에 도는 다른 빌드가 64MB를 채울 때). 어느
+	// 경우든 이름이 아니라 OID로 읽는다(위 주석의 경합).
 	const { stdout, exitCode } = await gitRun([
 		"-C",
 		repo,
@@ -198,20 +218,28 @@ const buildFile = async (
 	/** new 쪽 리비전. 없으면 워킹트리(디스크의 지금 파일)를 읽는다. */
 	head?: string,
 	blobs?: BlobCache,
+	prefetched?: Prefetched,
 ): Promise<DiffFile> => {
 	const { status, name, oldName } = spec;
 	// old 쪽을 읽을지는 상태가 정한다 — OID는 캐시 키로만 쓴다.
 	const oldBytes =
 		status === "added" || status === "untracked"
 			? new Uint8Array()
-			: await readBlob(repo, base, oldName ?? name, spec.oldOid, blobs);
+			: await readBlob(
+					repo,
+					base,
+					oldName ?? name,
+					spec.oldOid,
+					blobs,
+					prefetched,
+				);
 	// 워킹트리 new 쪽은 캐시하지 않는다 — 디스크가 진실이고, 전부 새로 읽어도
 	// 176파일에 4.3ms다(실측).
 	const newBytes =
 		status === "deleted"
 			? new Uint8Array()
 			: head
-				? await readBlob(repo, head, name, spec.newOid, blobs)
+				? await readBlob(repo, head, name, spec.newOid, blobs, prefetched)
 				: readWorkingBytes(repo, name);
 	const binary = oldBytes.includes(0) || newBytes.includes(0);
 	const decoder = new TextDecoder();
@@ -291,6 +319,54 @@ export const parseRawZ = (output: string): FileSpec[] => {
 		}
 	}
 	return specs;
+};
+
+// `buildFile`이 git에서 읽을 blob 중 캐시에 없는 것 — 그 조건은 `buildFile`과
+// 같아야 한다: old 쪽은 추가된 파일이 아니면, new 쪽은 head 모드에서 삭제된 파일이
+// 아니면 읽는다(워킹트리 new 쪽은 디스크에서 읽으므로 빠진다). 캐시 확인은
+// `has`로 한다 — `get`으로 보면 hit/miss 통계와 LRU 순서가 흔들린다.
+const blobsToRead = (
+	specs: readonly FileSpec[],
+	head: string | undefined,
+	blobs?: BlobCache,
+): string[] => {
+	const wanted = new Set<string>();
+	const want = (oid: string | null): void => {
+		if (oid && !blobs?.has(oid)) wanted.add(oid);
+	};
+	for (const spec of specs) {
+		if (spec.status !== "added") want(spec.oldOid);
+		if (head && spec.status !== "deleted") want(spec.newOid);
+	}
+	return [...wanted];
+};
+
+// 배치가 아끼는 것은 프로세스 생성 비용이라 **작은 blob에서만** 이득이다. 큰 blob은
+// 어차피 I/O가 지배하고, 배치에 담으면 빌드 동안 diff의 모든 blob이 한 버퍼에 올라
+// 메모리 상한이 사라진다(리뷰 실측: 25MB × 20 diff에서 최대 메모리 1GB → 3GB, 시간도
+// 250 → 500ms). 그래서 blob 하나 1MB·합계 32MB까지만 담고, 나머지는 예전처럼
+// `BUILD_CONCURRENCY`로 묶인 파일별 읽기로 간다. 크기를 모르는 것(= 없는 객체)도
+// 파일별 읽기로 떨어져 지금과 같은 방식으로 실패한다.
+export const PREFETCH_LIMITS = {
+	maxBlob: 1024 * 1024,
+	maxTotal: 32 * 1024 * 1024,
+} as const;
+
+export const pickForBatch = (
+	oids: readonly string[],
+	sizes: ReadonlyMap<string, number>,
+	limits: { maxBlob: number; maxTotal: number } = PREFETCH_LIMITS,
+): string[] => {
+	const picked: string[] = [];
+	let total = 0;
+	for (const oid of oids) {
+		const size = sizes.get(oid);
+		if (size === undefined || size > limits.maxBlob) continue;
+		if (total + size > limits.maxTotal) continue;
+		total += size;
+		picked.push(oid);
+	}
+	return picked;
 };
 
 export const resolveDiffBaseRev = async (
@@ -388,9 +464,14 @@ export const getDiffFiles = async (
 		// 파일별 git show/워킹트리 읽기는 서로 독립이라 병렬화하되, 대형 diff에서
 		// git 서브프로세스가 무제한으로 뜨지 않도록 동시성을 제한한다 (순서 유지).
 		const specs = parseRawZ(raw);
+		const wanted = blobsToRead(specs, opts.head, blobs);
+		const prefetched = await gitCatFileBatch(
+			repo,
+			pickForBatch(wanted, await gitCatFileSizes(repo, wanted)),
+		);
 		files.push(
 			...(await mapWithLimit(specs, BUILD_CONCURRENCY, (spec) =>
-				buildFile(repo, base, spec, opts.head, blobs),
+				buildFile(repo, base, spec, opts.head, blobs, prefetched),
 			)),
 		);
 	}

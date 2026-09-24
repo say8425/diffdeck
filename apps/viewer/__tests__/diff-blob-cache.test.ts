@@ -112,20 +112,28 @@ test("head mode reads both sides through the cache and matches the uncached resu
 	expect(blobs.stats()).toMatchObject({ entries: 3, hits: 3 });
 });
 
-// get()이 처음 miss할 때 한 번 `onMiss`를 부르는 캐시. `getDiffFiles`는 목록
-// (`git diff --raw`)을 뽑은 뒤 파일마다 캐시를 보고 miss면 읽으므로, 여기서 ref를
-// 움직이면 "목록과 읽기 사이에 ref가 움직인" 경합을 결정론적으로 만든다.
+// 처음 캐시 미스가 날 때(`has`든 `get`이든 먼저 오는 쪽) 한 번 `onMiss`를 부르는
+// 캐시. `getDiffFiles`는 목록(`git diff --raw`)을 뽑은 뒤에야 캐시를 보므로, 여기서
+// ref를 움직이면 "목록과 읽기 사이에 ref가 움직인" 경합을 결정론적으로 만든다.
+// 선읽기(`cat-file --batch`)는 `has`로 캐시를 확인하므로 배치 **전**에 걸린다.
 const racingCache = (onMiss: () => void): BlobCache => {
 	const inner = createBlobCache();
 	let fired = false;
+	const fire = (): void => {
+		if (fired) return;
+		fired = true;
+		onMiss();
+	};
 	return {
 		get(oid) {
 			const hit = inner.get(oid);
-			if (hit === undefined && !fired) {
-				fired = true;
-				onMiss();
-			}
+			if (hit === undefined) fire();
 			return hit;
+		},
+		has(oid) {
+			const present = inner.has(oid);
+			if (!present) fire();
+			return present;
 		},
 		set: (oid, bytes) => inner.set(oid, bytes),
 		stats: () => inner.stats(),
@@ -178,4 +186,34 @@ test("keys entries by the full object id", async () => {
 	const full = await revParse("HEAD:a.txt");
 	expect(full).toHaveLength(40);
 	expect(text(blobs.get(full))).toBe("v1\n");
+});
+
+test("an id the batch could not read falls back to reading by that id, never by name", async () => {
+	// feat을 한 커밋 더 전진시킨 커밋을 미리 만들어 두고 feat은 원래 자리로 되돌린다.
+	await branchFeat();
+	gitSync(["checkout", "-q", "feat"]);
+	writeFileSync(join(repo, "a.txt"), "feat moved on\n");
+	gitSync(["commit", "-qam", "advance"]);
+	const advanced = await revParse("feat");
+	gitSync(["checkout", "-q", "main"]);
+	gitSync(["update-ref", "refs/heads/feat", `${advanced}~1`]);
+	// 목록이 가리킬 feat의 a.txt blob을 치운다 — 배치도 파일별 읽기도 이것을 못 읽는다.
+	const featA = await revParse("feat:a.txt");
+	const loose = join(
+		repo,
+		".git",
+		"objects",
+		featA.slice(0, 2),
+		featA.slice(2),
+	);
+	rmSync(loose);
+	// 목록 뒤에 feat이 전진하면, 이름(`feat:a.txt`)으로는 다른 내용이 **읽힌다**.
+	const blobs = racingCache(() =>
+		gitSync(["update-ref", "refs/heads/feat", advanced]),
+	);
+	const file = (await getDiffFiles(repo, HEAD_OPTS, blobs)).find(
+		(f) => f.name === "a.txt",
+	);
+	expect(file?.newContents).toBe(""); // 못 읽은 것은 못 읽은 것이다(지금과 같은 동작)
+	expect(blobs.has(featA)).toBe(false);
 });
