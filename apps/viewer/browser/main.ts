@@ -56,6 +56,7 @@ import {
 	buildLoadErrorModel,
 	type LoadErrorActionKind,
 	type LoadFailure,
+	loadErrorKey,
 	renderLoadError,
 } from "./loadError.ts";
 import { createParseCache } from "./parseCache.ts";
@@ -953,6 +954,12 @@ const enrichEmptyState = async (): Promise<void> => {
 	if (!summary) {
 		if (diffMount.querySelector("#empty") === marker) {
 			marker.removeAttribute("data-loading");
+			// 304로 복구하는 경로에서는 marker가 실패 카드일 수 있다 — 그
+			// 껍데기(카드 클래스·표식·role)를 남기면 "No changes."가 실패
+			// 카드 모양으로 뜬다.
+			marker.removeAttribute("data-load-error");
+			marker.removeAttribute("role");
+			marker.className = "";
 			marker.textContent = "No changes.";
 		}
 		return;
@@ -1347,11 +1354,16 @@ const recoverFromStaleBase = (unknownBase: boolean): boolean => {
 	return true;
 };
 
-/** fetchDiff가 null을 줬을 때 그 이유. load()의 실패 카드가 읽는다. */
-let lastFailure: LoadFailure | null = null;
+/**
+ * 실패도 값으로 돌려준다. 모듈 변수로 흘리면 load()와 poll()이 서로의
+ * 결과를 덮어쓸 수 있다 — 지금은 동기로 읽어서 안전하다는 사실에 기대지
+ * 않는다.
+ */
+type FetchDiffOutcome =
+	| FetchDiffResult
+	| { kind: "failed"; failure: LoadFailure };
 
-const fetchDiff = async (): Promise<FetchDiffResult | null> => {
-	lastFailure = null;
+const fetchDiff = async (): Promise<FetchDiffOutcome> => {
 	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
 	// 재시도)에 의존하므로 의도적으로 순차 실행 — Promise.all로 병렬화할 대상이
 	// 아니다 (diff.ts:resolveBaseRef와 동일 관례).
@@ -1372,12 +1384,10 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 			// 보여주게 된다). 대신 화면이 무슨 일인지 말하고 빠져나갈 길을
 			// 준다(loadError.ts). 이 종류는 흔하다: 머지 후 삭제된 브랜치를
 			// 가리키는 링크.
-			lastFailure = result.failure;
-			return null;
+			return { kind: "failed", failure: result.failure };
 		}
 		if (attempt >= RETRY_DELAYS_MS.length) {
-			lastFailure = result.failure;
-			return null;
+			return { kind: "failed", failure: result.failure };
 		}
 		// oxlint-disable-next-line no-await-in-loop
 		await sleep(RETRY_DELAYS_MS[attempt]);
@@ -1413,6 +1423,8 @@ const applyFetched = (result: FetchDiffResult): void => {
  */
 const onLoadErrorAction = (kind: LoadErrorActionKind): void => {
 	if (kind === "retry") {
+		// 카드가 떠 있다는 건 살아 있는 CodeView가 없다는 뜻이라(showLoadFailure)
+		// 여기서 덮어써도 안전하다.
 		diffMount.innerHTML = LOADING_MARKUP;
 		void load();
 		return;
@@ -1429,6 +1441,56 @@ const onLoadErrorAction = (kind: LoadErrorActionKind): void => {
 	location.href = next.toString();
 };
 
+/**
+ * 실패를 화면에 말한다. load()와 watch의 poll()이 같이 쓴다 — watch는 창을
+ * 안 보고 있을 때 쓰는 기능이라 focus가 발화하지 않으므로, poll()이 실패를
+ * 삼키면 폴더가 지워지거나 서버가 꺼져도 화면은 옛 카드·옛 개수를 무기한
+ * 주장한다.
+ */
+const showLoadFailure = (failure: LoadFailure): void => {
+	// 살아 있는 CodeView가 없을 때만 실패 카드로 덮어쓴다. load()의 로딩
+	// 인디케이터는 `!lastFiles`로 같은 취지를 노리지만, 정확한 위험 조건은
+	// "렌더된 내용이 있다"가 아니라 "붙어 있는 CodeView가 있다"다: diffMount는
+	// CodeView의 스크롤 컨테이너 그 자체라, innerHTML 대입이 CodeView가 setup
+	// 때 붙여 둔 컨테이너를 문서에서 떼어낸다. CodeView.setup()은 이미 setup된
+	// 인스턴스의 재부착을 거부하므로(`already setup`), 인스턴스를 새로 만들기
+	// 전까지 패널은 영구히 빈 채로 남는다 — 서버를 Ctrl+C로 끄고 탭으로
+	// 돌아오기만 해도(focus 리스너가 load()를 호출한다) 걸리는 경로다.
+	//
+	// `!lastFiles`로 걸면 변경이 없는 리포(lastFiles === []는 truthy)에서
+	// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
+	// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
+	// changes."를 계속 주장하게 된다.
+	// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
+	// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
+	// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
+	// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
+	// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
+	// 달리 사용자가 속는다.
+	//
+	// 어떤 실패든 **이유를 말한다**(loadError.ts). 예전엔 사라진 head만
+	// 전용 카드였고 나머지는 전부 "Failed to load diff." 한 줄이라, 홈
+	// 디렉토리를 연 것인지 서버가 꺼진 것인지 화면에서 가를 수 없었다.
+	const model = buildLoadErrorModel(failure, {
+		repo,
+		head: currentHead,
+		base: compareBase,
+	});
+	if (!codeView) {
+		// 같은 실패가 폴마다 반복되면 카드를 다시 그리지 않는다 — 매번 갈면
+		// 버튼의 포커스·호버가 2초마다 날아간다.
+		const shown = diffMount.querySelector("#empty[data-load-error]");
+		if (shown?.getAttribute("data-load-error") !== loadErrorKey(model)) {
+			diffMount.replaceChildren(
+				renderLoadError(document, model, onLoadErrorAction),
+			);
+		}
+	}
+	// 어느 쪽이든 실패는 알린다 — 안 그러면 라벨이 "Loading…"에 고착된다.
+	// diff가 떠 있어 카드를 못 그릴 때는 이 한 줄이 이유를 나른다.
+	statusEl.textContent = model.status;
+};
+
 const load = async (): Promise<void> => {
 	// 정체성 갱신은 diff와 독립이다 — 기다리지 않는다. 브랜치를 갈아탄 뒤
 	// 창으로 돌아오면(focus → load) 라벨이 따라온다.
@@ -1442,43 +1504,8 @@ const load = async (): Promise<void> => {
 		diffMount.innerHTML = LOADING_MARKUP;
 	}
 	const result = await fetchDiff();
-	if (result === null) {
-		// 살아 있는 CodeView가 없을 때만 실패 카드로 덮어쓴다. 위 로딩
-		// 인디케이터는 `!lastFiles`로 같은 취지를 노리지만, 정확한 위험 조건은
-		// "렌더된 내용이 있다"가 아니라 "붙어 있는 CodeView가 있다"다: diffMount는
-		// CodeView의 스크롤 컨테이너 그 자체라, innerHTML 대입이 CodeView가 setup
-		// 때 붙여 둔 컨테이너를 문서에서 떼어낸다. CodeView.setup()은 이미 setup된
-		// 인스턴스의 재부착을 거부하므로(`already setup`), 인스턴스를 새로 만들기
-		// 전까지 패널은 영구히 빈 채로 남는다 — 서버를 Ctrl+C로 끄고 탭으로
-		// 돌아오기만 해도(focus 리스너가 load()를 호출한다) 걸리는 경로다.
-		//
-		// `!lastFiles`로 걸면 변경이 없는 리포(lastFiles === []는 truthy)에서
-		// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
-		// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
-		// changes."를 계속 주장하게 된다.
-		// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
-		// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
-		// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
-		// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
-		// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
-		// 달리 사용자가 속는다.
-		//
-		// 어떤 실패든 **이유를 말한다**(loadError.ts). 예전엔 사라진 head만
-		// 전용 카드였고 나머지는 전부 "Failed to load diff." 한 줄이라, 홈
-		// 디렉토리를 연 것인지 서버가 꺼진 것인지 화면에서 가를 수 없었다.
-		const model = buildLoadErrorModel(lastFailure ?? { kind: "network" }, {
-			repo,
-			head: currentHead,
-			base: compareBase,
-		});
-		if (!codeView) {
-			diffMount.replaceChildren(
-				renderLoadError(document, model, onLoadErrorAction),
-			);
-		}
-		// 어느 쪽이든 실패는 알린다 — 안 그러면 라벨이 "Loading…"에 고착된다.
-		// diff가 떠 있어 카드를 못 그릴 때는 이 한 줄이 이유를 나른다.
-		statusEl.textContent = model.status;
+	if (result.kind === "failed") {
+		showLoadFailure(result.failure);
 		return;
 	}
 	applyFetched(result);
@@ -1663,6 +1690,8 @@ const setPickerOpen = (open: boolean): void => {
 	if (!open) return;
 	if (pickerSearch) pickerSearch.value = "";
 	pickerActive = 0;
+	// 직전 실패를 새 시도 동안 주장하지 않는다 — 결과가 오기 전엔 모른다.
+	pickerFailed = false;
 	renderPickerRows();
 	pickerSearch?.focus();
 	void loadPickerRows();
@@ -2073,7 +2102,10 @@ const poll = async (): Promise<void> => {
 	void refreshRepoLabel();
 	try {
 		const result = await fetchDiff();
-		if (result === null) return;
+		if (result.kind === "failed") {
+			showLoadFailure(result.failure);
+			return;
+		}
 		applyFetched(result);
 	} finally {
 		pollInFlight = false;

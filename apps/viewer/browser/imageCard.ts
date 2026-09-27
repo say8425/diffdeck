@@ -40,7 +40,7 @@ const buildPane = (
 	img.addEventListener(
 		"error",
 		() => {
-			const note = document.createElement("div");
+			const note = img.ownerDocument.createElement("div");
 			note.className = "img-error";
 			note.textContent = "Couldn't load image";
 			img.replaceWith(note);

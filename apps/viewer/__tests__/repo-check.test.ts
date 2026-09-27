@@ -50,6 +50,24 @@ describe("classifyRepo (real git)", () => {
 	});
 });
 
+// git이 자기 테스트용으로 두는 스위치로 "소유자가 다르다"를 실제로 만든다
+// (다른 사용자 계정 없이). 그 메시지에 safe.directory가 실린다는 것까지 실측이다.
+describe("classifyRepo (dubious ownership)", () => {
+	test("unsafe-repo, not not-a-repo, when git refuses the owner", async () => {
+		const repo = join(root, "owned");
+		await $`git init -q ${repo}`;
+		const saved = process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+		process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = "1";
+		try {
+			expect(await classifyRepo(repo)).toBe("unsafe-repo");
+		} finally {
+			if (saved === undefined)
+				delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+			else process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = saved;
+		}
+	});
+});
+
 describe("classifyRepo (injected)", () => {
 	const deps = (revParse: RepoCheckDeps["revParse"]): RepoCheckDeps => ({
 		exists: () => true,
@@ -62,7 +80,9 @@ describe("classifyRepo (injected)", () => {
 	});
 
 	test("git-unavailable when the shell cannot find git", async () => {
-		const d = deps(() => Promise.resolve({ exitCode: 1, stdout: "" }));
+		const d = deps(() =>
+			Promise.resolve({ exitCode: 1, stdout: "", stderr: "" }),
+		);
 		expect(await classifyRepo("/x", d)).toBe("git-unavailable");
 	});
 });

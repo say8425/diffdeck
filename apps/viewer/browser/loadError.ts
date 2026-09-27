@@ -84,6 +84,14 @@ const byMarker = (
 				action: null,
 				status: failed("no working tree"),
 			};
+		case "unsafe-repo":
+			return {
+				headline: "git refuses to open this repository",
+				context: ctx.repo,
+				note: "It's owned by another user. If you trust it: git config --global --add safe.directory <path>",
+				action: RETRY,
+				status: failed("repository not trusted by git"),
+			};
 		case "git-unavailable":
 			return {
 				headline: "Couldn't run git",
@@ -108,9 +116,12 @@ const byMarker = (
 				headline: "That base is gone",
 				context: `No ref named ${ctx.base} to compare against`,
 				note: null,
+				// 버튼은 URL의 base만 걷는다 — 그러면 저장된 프리퍼런스가 있으면
+				// 그것이, 없으면 자동 해석이 이긴다. "default"라고 약속하면 저장된
+				// develop이 뜨는 순간 거짓말이 된다.
 				action: {
 					kind: "drop-base",
-					label: "Compare against the default base instead",
+					label: `Remove ${ctx.base} from this link`,
 				},
 				status: failed("base not found"),
 			};
@@ -166,6 +177,13 @@ export const buildLoadErrorModel = (
 	};
 };
 
+/**
+ * 같은 카드인지 가르는 열쇠. watch 폴이 같은 실패를 2초마다 되풀이할 때
+ * 카드를 다시 그리지 않으려고 쓴다(다시 그리면 버튼 포커스가 날아간다).
+ */
+export const loadErrorKey = (model: LoadErrorModel): string =>
+	`${model.headline}\n${model.context}`;
+
 export const renderLoadError = (
 	doc: Document,
 	model: LoadErrorModel,
@@ -174,7 +192,13 @@ export const renderLoadError = (
 	const root = doc.createElement("div");
 	root.id = "empty";
 	root.className = "empty-card";
-	root.setAttribute("data-load-error", "");
+	root.setAttribute("data-load-error", loadErrorKey(model));
+	// 빈 상태 카드와 달리 이건 **일어난 일**의 통지다. 보조기술이 #status만
+	// 읽고 지나가지 않게 한다.
+	root.setAttribute("role", "alert");
+	// id가 "empty"인 것도 계약이다 — 서버가 돌아와 304가 오면(빈 리포)
+	// applyFetched가 enrichEmptyState로 복구하는데, 그 함수는 #empty를 찾아
+	// 갈아 끼운다. id를 바꾸면 실패 카드가 복구 뒤에도 남는다.
 
 	const headline = doc.createElement("div");
 	headline.className = "empty-headline";

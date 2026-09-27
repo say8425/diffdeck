@@ -15,11 +15,13 @@ export type RepoProblem =
 	| "repo-missing" // 그 경로가 디스크에 없다(삭제·이동된 워크트리)
 	| "not-a-repo" // 있지만 git 워킹트리 밖이다
 	| "no-worktree" // git 디렉토리 안이지만 워킹트리가 없다(bare, .git 내부)
+	| "unsafe-repo" // 리포지만 소유자가 달라 git이 거부한다(safe.directory)
 	| "git-unavailable"; // git을 띄우지 못했다(미설치, 서버 cwd 삭제)
 
 export interface RevParseResult {
 	exitCode: number;
 	stdout: string;
+	stderr: string;
 }
 
 /** 테스트 주입점 — 스폰 실패(throw)와 종료 코드를 흉내 낸다. */
@@ -32,7 +34,11 @@ const realRevParse = async (repo: string): Promise<RevParseResult> => {
 	const out = await $`git -C ${repo} rev-parse --is-inside-work-tree`
 		.nothrow()
 		.quiet();
-	return { exitCode: out.exitCode, stdout: out.stdout.toString() };
+	return {
+		exitCode: out.exitCode,
+		stdout: out.stdout.toString(),
+		stderr: out.stderr.toString(),
+	};
 };
 
 export const REAL_REPO_CHECK_DEPS: RepoCheckDeps = {
@@ -64,15 +70,25 @@ export const classifyRepo = async (
 	}
 	// 128은 git 자신의 fatal이다. 그 밖(셸의 command not found = 1 등)은 git이
 	// 제대로 뜨지 않았다는 뜻이다.
-	return result.exitCode === 128 ? "not-a-repo" : "git-unavailable";
+	if (result.exitCode !== 128) return "git-unavailable";
+	// 같은 128이어도 이건 리포가 **맞다** — "Not a git repository"라고 하면
+	// 사용자가 엉뚱한 곳을 찾는다. 메시지는 로캘을 타지 않는 식별자
+	// (`safe.directory`)로 가른다: git은 번역된 본문에도 그 설정 이름을
+	// 그대로 싣는다.
+	return result.stderr.includes("safe.directory")
+		? "unsafe-repo"
+		: "not-a-repo";
 };
 
 const MESSAGES: Record<RepoProblem, string> = {
 	"no-repo": "missing repo parameter",
 	"repo-missing": "no such directory",
-	// 예전 응답 본문을 그대로 유지한다 — 외부 클라이언트가 읽고 있을 수 있다.
+	// not-a-repo만 예전 본문을 유지한다 — 외부 클라이언트가 읽고 있을 수 있다.
+	// 나머지(repo 누락·없는 경로·…)는 예전에도 이 문자열이었지만 이제 각자
+	// 이유를 말한다. 기계가 읽을 곳은 본문이 아니라 x-diff-error다.
 	"not-a-repo": "not a git repository",
 	"no-worktree": "git repository without a working tree",
+	"unsafe-repo": "git refuses this repository (safe.directory)",
 	"git-unavailable": "could not run git",
 };
 

@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures/app.ts";
+import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 const withParams = (url: string, set: Record<string, string>): string => {
 	const next = new URL(url);
@@ -126,4 +126,80 @@ test("a failed image load says so instead of a broken icon", async ({
 		"Couldn't load image",
 	);
 	await expect(imageCard.locator("img")).toHaveCount(0);
+});
+
+// watch는 창을 안 보고 있을 때 쓰는 기능이라 focus가 발화하지 않는다. poll()이
+// 실패를 삼키면 폴더가 지워져도 화면은 옛 카드·옛 개수를 무기한 주장한다.
+// 이 스펙들은 focus 없이 폴만으로 이유가 뜨는지 본다.
+test("a watch poll surfaces a deleted folder on the empty-state screen", async ({
+	page,
+}) => {
+	const viewer = await launchViewer(["--watch"], { clean: true });
+	try {
+		await page.goto(viewer.url);
+		await expect(
+			page.locator("#diff #empty.empty-card:not([data-load-error])"),
+		).toBeVisible({ timeout: 15_000 });
+		rmSync(viewer.repoDir, { recursive: true, force: true });
+		await expect(card(page).locator(".empty-headline")).toHaveText(
+			"That folder doesn't exist",
+			{ timeout: 15_000 },
+		);
+	} finally {
+		await viewer.stop();
+	}
+});
+
+test("a watch poll surfaces the reason in the status while a diff is on screen", async ({
+	page,
+}) => {
+	const viewer = await launchViewer(["--watch"]);
+	try {
+		await page.goto(viewer.url);
+		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
+			timeout: 15_000,
+		});
+		const rendered = await page.locator("diffs-container").count();
+		rmSync(viewer.repoDir, { recursive: true, force: true });
+		await expect(page.locator("#status")).toHaveText(
+			"Failed to load diff: folder not found",
+			{ timeout: 15_000 },
+		);
+		// 살아 있는 CodeView는 덮어쓰지 않는다(CLAUDE.md innerHTML 항목).
+		await expect(page.locator("diffs-container")).toHaveCount(rendered);
+		await expect(card(page)).toHaveCount(0);
+	} finally {
+		await viewer.stop();
+	}
+});
+
+// 빈 리포에서 실패 카드가 뜬 뒤 서버가 돌아오면 첫 응답은 304다(etag가
+// 그대로). 그 경로는 renderPatch를 안 거치고 enrichEmptyState가 #empty를
+// 갈아 끼우는 것으로만 복구된다 — 실패 카드의 id가 "empty"인 것이 그 계약이다.
+test("recovering through a 304 replaces the failure card with the empty state", async ({
+	page,
+}) => {
+	const viewer = await launchViewer([], { clean: true });
+	try {
+		await page.goto(viewer.url);
+		const emptyCard = page.locator(
+			"#diff #empty.empty-card:not([data-load-error])",
+		);
+		await expect(emptyCard).toBeVisible({ timeout: 15_000 });
+
+		await page.route("**/api/diff*", (route) => route.abort());
+		await page.locator("#refresh").click();
+		await expect(card(page)).toBeVisible({ timeout: 15_000 });
+
+		await page.unroute("**/api/diff*");
+		const notModified = page.waitForResponse(
+			(r) => r.url().includes("/api/diff") && r.status() === 304,
+		);
+		await page.locator("#refresh").click();
+		await notModified;
+		await expect(emptyCard).toBeVisible({ timeout: 15_000 });
+		await expect(card(page)).toHaveCount(0);
+	} finally {
+		await viewer.stop();
+	}
 });

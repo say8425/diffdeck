@@ -3,6 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 import {
 	buildLoadErrorModel,
 	type LoadFailure,
+	loadErrorKey,
 	renderLoadError,
 } from "../browser/loadError.ts";
 
@@ -70,11 +71,22 @@ describe("buildLoadErrorModel", () => {
 		expect(m.context).toBe("No ref named  in this repo");
 	});
 
-	test("unknown-base names the base and offers the default base", () => {
+	test("unknown-base names the base and offers to drop it from the link", () => {
 		const m = buildLoadErrorModel(http(400, "unknown-base"), ctx);
 		expect(m.headline).toBe("That base is gone");
 		expect(m.context).toContain("develop");
-		expect(m.action?.kind).toBe("drop-base");
+		// "default"라고 약속하지 않는다 — 저장된 프리퍼런스가 이길 수 있다.
+		expect(m.action).toEqual({
+			kind: "drop-base",
+			label: "Remove develop from this link",
+		});
+	});
+
+	test("unsafe-repo says git refuses it rather than that it is not a repo", () => {
+		const m = buildLoadErrorModel(http(400, "unsafe-repo"), ctx);
+		expect(m.headline).toBe("git refuses to open this repository");
+		expect(m.context).toBe("/Users/me");
+		expect(m.note).toContain("safe.directory");
 	});
 
 	test("403 says the token was rejected", () => {
@@ -105,6 +117,20 @@ describe("buildLoadErrorModel", () => {
 	});
 });
 
+describe("loadErrorKey", () => {
+	test("differs when the context differs, even under the same headline", () => {
+		const a = buildLoadErrorModel(http(400, "not-a-repo"), ctx);
+		const b = buildLoadErrorModel(http(400, "not-a-repo"), {
+			...ctx,
+			repo: "/elsewhere",
+		});
+		expect(loadErrorKey(a)).not.toBe(loadErrorKey(b));
+		expect(loadErrorKey(a)).toBe(
+			loadErrorKey(buildLoadErrorModel(http(400, "not-a-repo"), ctx)),
+		);
+	});
+});
+
 describe("renderLoadError", () => {
 	test("renders the empty-card vocabulary with headline, context, action and note", () => {
 		const onAction = mock(() => {});
@@ -112,7 +138,8 @@ describe("renderLoadError", () => {
 		const el = renderLoadError(document, model, onAction);
 		expect(el.id).toBe("empty");
 		expect(el.className).toBe("empty-card");
-		expect(el.hasAttribute("data-load-error")).toBe(true);
+		expect(el.getAttribute("data-load-error")).toBe(loadErrorKey(model));
+		expect(el.getAttribute("role")).toBe("alert");
 		expect(el.querySelector(".empty-headline")?.textContent).toBe(
 			model.headline,
 		);
