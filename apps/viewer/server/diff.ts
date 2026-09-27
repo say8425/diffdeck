@@ -15,16 +15,6 @@ import { mapWithLimit } from "./mapLimit.ts";
 // 대형 diff + watch 폴링에서 프로세스가 폭증한다.
 const BUILD_CONCURRENCY = 8;
 
-export const isGitRepo = async (repo: string): Promise<boolean> => {
-	try {
-		const out =
-			await $`git -C ${repo} rev-parse --is-inside-work-tree 2>/dev/null`.text();
-		return out.trim() === "true";
-	} catch {
-		return false;
-	}
-};
-
 const refExists = async (repo: string, ref: string): Promise<boolean> => {
 	const r = await $`git -C ${repo} rev-parse --verify --quiet ${ref}`
 		.nothrow()

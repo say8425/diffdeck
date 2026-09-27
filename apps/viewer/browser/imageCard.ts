@@ -17,7 +17,8 @@ export const IMAGE_CARD_CSS =
 	".img-pane--new figcaption{color:#57ab5a}" +
 	".img-checker{display:flex;justify-content:center;align-items:center;padding:10px;" +
 	"background:repeating-conic-gradient(#232324 0% 25%,#1a1a1b 0% 50%) 0 0/16px 16px}" +
-	".img-checker img{max-width:100%;max-height:320px;object-fit:contain;display:block}";
+	".img-checker img{max-width:100%;max-height:320px;object-fit:contain;display:block}" +
+	".img-error{color:#8b8b93;font-size:12px;padding:24px 8px}";
 
 const buildPane = (
 	side: "old" | "new",
@@ -34,6 +35,18 @@ const buildPane = (
 	img.src = src;
 	img.alt = alt;
 	img.loading = "lazy";
+	// /api/blob이 실패하면(404·400·서버 종료) 브라우저의 깨진 이미지 아이콘만
+	// 남아 무엇이 잘못됐는지 말하지 않는다. 같은 자리를 문장으로 바꾼다.
+	img.addEventListener(
+		"error",
+		() => {
+			const note = document.createElement("div");
+			note.className = "img-error";
+			note.textContent = "Couldn't load image";
+			img.replaceWith(note);
+		},
+		{ once: true },
+	);
 	checker.append(img);
 	pane.append(caption, checker);
 	return pane;

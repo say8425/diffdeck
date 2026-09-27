@@ -66,7 +66,11 @@ test("a failed refresh still shows the failure card when no diff is on screen", 
 		await expect(page.locator("#status")).toHaveText(/failed/i, {
 			timeout: 15_000,
 		});
-		await expect(page.locator("#diff #empty")).toHaveText(/failed to load/i);
+		// route.abort()는 네트워크 실패다 — 카드는 그 이유를 말한다
+		// (loadError.ts, 문구별 판정은 error-cards.e2e.ts).
+		await expect(page.locator("#diff #empty .empty-headline")).toHaveText(
+			"Can't reach the diffdeck server",
+		);
 	} finally {
 		await viewer.stop();
 	}

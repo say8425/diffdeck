@@ -284,4 +284,15 @@ describe("ensureImageCard", () => {
 		ensureImageCard(host, entry({ version: undefined }), false, urlFor);
 		expect(root.querySelector("[data-image-card]")).toBe(first);
 	});
+	test("a failed image load is replaced by a note instead of a broken icon", () => {
+		const { host, root } = makeContainer();
+		ensureImageCard(host, entry({ showOld: false }), false, makeUrlFor());
+		const img = root.querySelector("img");
+		expect(img).not.toBeNull();
+		img?.dispatchEvent(new Event("error"));
+		expect(root.querySelector("img")).toBeNull();
+		expect(root.querySelector(".img-error")?.textContent).toBe(
+			"Couldn't load image",
+		);
+	});
 });

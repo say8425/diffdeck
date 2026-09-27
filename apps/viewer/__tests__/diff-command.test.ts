@@ -3,12 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
-import {
-	getDiffFiles,
-	getFileBytes,
-	isGitRepo,
-	resolveBaseRef,
-} from "../server/diff.ts";
+import { getDiffFiles, getFileBytes, resolveBaseRef } from "../server/diff.ts";
 
 let repo: string;
 
@@ -24,15 +19,6 @@ beforeEach(async () => {
 
 afterEach(() => {
 	rmSync(repo, { recursive: true, force: true });
-});
-
-describe("isGitRepo", () => {
-	test("true for a repo, false for a plain dir", async () => {
-		expect(await isGitRepo(repo)).toBe(true);
-		const plain = mkdtempSync(join(tmpdir(), "cc-plain-"));
-		expect(await isGitRepo(plain)).toBe(false);
-		rmSync(plain, { recursive: true, force: true });
-	});
 });
 
 describe("getDiffFiles", () => {
