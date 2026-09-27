@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.5.0...diffdeck-v1.5.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* summary.ts의 git 호출도 `$` 대신 Bun.spawn 헬퍼로 읽는다 ([#77](https://github.com/say8425/diffdeck/issues/77)) ([03ce8d9](https://github.com/say8425/diffdeck/commit/03ce8d9bae1a81fabd9fde606485f4f2a65482e6))
+* 출력이 64KB를 넘을 수 있는 나머지 git 호출도 Bun.spawn 헬퍼로 읽는다 ([#78](https://github.com/say8425/diffdeck/issues/78)) ([2802806](https://github.com/say8425/diffdeck/commit/2802806500887a058f0d42ea2bce7c23d4742ece))
+* 큰 blob이 섞인 diff가 45초 뒤 503으로 떨어지던 것을 고친다 ([#74](https://github.com/say8425/diffdeck/issues/74)) ([94800b3](https://github.com/say8425/diffdeck/commit/94800b36f12cc86786697eec10f44cfee6ac7d9f))
+
+
+### Performance Improvements
+
+* 변경 폴에서 바뀌지 않은 blob의 git show를 blob OID 캐시로 건너뛴다 ([#79](https://github.com/say8425/diffdeck/issues/79)) ([35f3b0b](https://github.com/say8425/diffdeck/commit/35f3b0b621e31bedff2d7934c56a8f9d068303c0))
+* 첫 로드에서 blob을 git cat-file --batch 한 번으로 미리 읽는다 ([#82](https://github.com/say8425/diffdeck/issues/82)) ([d2e2e20](https://github.com/say8425/diffdeck/commit/d2e2e20ff89542a772a0f05aa23772b9af6ae775))
+
 ## [1.5.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.4.0...diffdeck-v1.5.0) (2026-09-04)
 
 
