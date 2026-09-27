@@ -52,6 +52,13 @@ import { decodeHeaderValue } from "./headerValue.ts";
 import { ensureImageCard, IMAGE_CARD_CSS } from "./imageCard.ts";
 import { blobUrl, type ImageEntry, imageEntries } from "./imageDiff.ts";
 import { countChangedLines, isLargeFile } from "./largeFile.ts";
+import {
+	buildLoadErrorModel,
+	type LoadErrorActionKind,
+	type LoadFailure,
+	loadErrorKey,
+	renderLoadError,
+} from "./loadError.ts";
 import { createParseCache } from "./parseCache.ts";
 import {
 	compareBaseKey,
@@ -947,6 +954,12 @@ const enrichEmptyState = async (): Promise<void> => {
 	if (!summary) {
 		if (diffMount.querySelector("#empty") === marker) {
 			marker.removeAttribute("data-loading");
+			// 304로 복구하는 경로에서는 marker가 실패 카드일 수 있다 — 그
+			// 껍데기(카드 클래스·표식·role)를 남기면 "No changes."가 실패
+			// 카드 모양으로 뜬다.
+			marker.removeAttribute("data-load-error");
+			marker.removeAttribute("role");
+			marker.className = "";
 			marker.textContent = "No changes.";
 		}
 		return;
@@ -1256,11 +1269,12 @@ type FetchDiffAttempt =
 	| FetchDiffResult
 	// 서버가 살아있고 이 요청 자체가 잘못됐다는 신호(토큰 불일치·git repo
 	// 아님) — 재시도해도 같은 답을 받으므로 즉시 포기한다.
-	| { kind: "terminal"; unknownBase: boolean; unknownHead: boolean }
+	| { kind: "terminal"; failure: LoadFailure & { kind: "http" } }
 	// 서버가 일시적으로 응답을 못 만든(single-flight 타임아웃 503,
 	// singleFlight.ts) 경우와 네트워크 레벨 실패(fetch 자체가 throw) —
-	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다.
-	| { kind: "retryable" };
+	// 둘 다 곧 회복될 수 있으니 재시도할 가치가 있다. 재시도까지 실패하면
+	// 이 failure가 카드의 문구를 정한다.
+	| { kind: "retryable"; failure: LoadFailure };
 
 const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 	const query = new URLSearchParams({
@@ -1278,20 +1292,28 @@ const fetchDiffOnce = async (): Promise<FetchDiffAttempt> => {
 		});
 		const base = decodeHeaderValue(res.headers.get("x-diff-base"));
 		if (res.status === 304) return { kind: "unchanged", base };
-		if (res.status === 503) return { kind: "retryable" };
+		if (res.status === 503) {
+			return { kind: "retryable", failure: { kind: "busy" } };
+		}
 		if (!res.ok) {
-			const marker = res.headers.get("x-diff-error");
+			// 본문은 표식이 없는 실패에서만 카드에 실린다(서버가 준 말을
+			// 버리지 않는다). 읽기 실패는 본문 없음으로 친다.
+			const body = await res.text().catch(() => "");
 			return {
 				kind: "terminal",
-				unknownBase: marker === "unknown-base",
-				unknownHead: marker === "unknown-head",
+				failure: {
+					kind: "http",
+					status: res.status,
+					marker: res.headers.get("x-diff-error"),
+					body,
+				},
 			};
 		}
 		const files = (await res.json()) as DiffFile[];
 		return { kind: "data", files, base, etag: res.headers.get("etag") };
 	} catch (err) {
 		console.error(err);
-		return { kind: "retryable" };
+		return { kind: "retryable", failure: { kind: "network" } };
 	}
 };
 
@@ -1332,11 +1354,16 @@ const recoverFromStaleBase = (unknownBase: boolean): boolean => {
 	return true;
 };
 
-/** 직전 시도가 "그 head를 못 찾겠다"로 끝났으면 그 ref 이름. */
-let lastUnknownHead: string | null = null;
+/**
+ * 실패도 값으로 돌려준다. 모듈 변수로 흘리면 load()와 poll()이 서로의
+ * 결과를 덮어쓸 수 있다 — 지금은 동기로 읽어서 안전하다는 사실에 기대지
+ * 않는다.
+ */
+type FetchDiffOutcome =
+	| FetchDiffResult
+	| { kind: "failed"; failure: LoadFailure };
 
-const fetchDiff = async (): Promise<FetchDiffResult | null> => {
-	lastUnknownHead = null;
+const fetchDiff = async (): Promise<FetchDiffOutcome> => {
 	// 각 시도가 이전 시도의 결과(terminal이면 즉시 포기, retryable이면 대기 후
 	// 재시도)에 의존하므로 의도적으로 순차 실행 — Promise.all로 병렬화할 대상이
 	// 아니다 (diff.ts:resolveBaseRef와 동일 관례).
@@ -1348,18 +1375,20 @@ const fetchDiff = async (): Promise<FetchDiffResult | null> => {
 			// attempt를 되돌린다 — 복구 직후의 재요청이 503을 만나면 남은
 			// 1회 재시도가 필요하고, 그것이 CLAUDE.md "Loading… 자가치유"
 			// 3요소 중 클라이언트 몫이다.
-			if (recoverFromStaleBase(result.unknownBase)) {
+			if (recoverFromStaleBase(result.failure.marker === "unknown-base")) {
 				attempt--;
 				continue;
 			}
 			// head는 base와 달리 **URL에 산다** — 저장된 값을 조용히 지우는
 			// 자가복구를 쓸 수 없다(링크가 요청한 것과 다른 화면을 이유도 없이
 			// 보여주게 된다). 대신 화면이 무슨 일인지 말하고 빠져나갈 길을
-			// 준다. 이 종류는 흔하다: 머지 후 삭제된 브랜치를 가리키는 링크.
-			lastUnknownHead = result.unknownHead ? currentHead : null;
-			return null;
+			// 준다(loadError.ts). 이 종류는 흔하다: 머지 후 삭제된 브랜치를
+			// 가리키는 링크.
+			return { kind: "failed", failure: result.failure };
 		}
-		if (attempt >= RETRY_DELAYS_MS.length) return null;
+		if (attempt >= RETRY_DELAYS_MS.length) {
+			return { kind: "failed", failure: result.failure };
+		}
 		// oxlint-disable-next-line no-await-in-loop
 		await sleep(RETRY_DELAYS_MS[attempt]);
 	}
@@ -1388,31 +1417,78 @@ const applyFetched = (result: FetchDiffResult): void => {
 };
 
 /**
- * "그 head가 없다" 카드. 빈 상태 카드와 **같은 클래스**를 쓴다 — 새 어휘를
- * 만들 이유가 없고, 액션 버튼의 생김새도 그대로 물려받는다.
+ * 실패 카드의 버튼. 세 길 모두 **URL을 바꾸거나 다시 시도할 뿐** 저장된 값은
+ * 건드리지 않는다 — head·명시된 base는 링크가 요청한 것이라, 사용자가 누르기
+ * 전까지 URL은 그대로다.
  */
-const renderMissingHead = (ref: string): void => {
-	diffMount.replaceChildren();
-	const card = document.createElement("div");
-	card.id = "empty";
-	card.className = "empty-card";
-	const headline = document.createElement("div");
-	headline.className = "empty-headline";
-	headline.textContent = "That branch is gone";
-	const context = document.createElement("div");
-	context.className = "empty-context";
-	context.textContent = `No ref named ${ref} in this repo`;
-	const action = document.createElement("button");
-	action.type = "button";
-	action.className = "empty-action";
-	action.textContent = "View the working tree instead";
-	action.addEventListener("click", () => {
-		const next = new URL(location.href);
+const onLoadErrorAction = (kind: LoadErrorActionKind): void => {
+	if (kind === "retry") {
+		// 카드가 떠 있다는 건 살아 있는 CodeView가 없다는 뜻이라(showLoadFailure)
+		// 여기서 덮어써도 안전하다.
+		diffMount.innerHTML = LOADING_MARKUP;
+		void load();
+		return;
+	}
+	const next = new URL(location.href);
+	if (kind === "view-working-tree") {
 		next.searchParams.delete("head");
-		location.href = next.toString();
+	} else {
+		// 레거시 `mode=base`도 같은 축이라 함께 걷는다. 그러면 저장된
+		// 프리퍼런스 → 기본값 순으로 떨어진다(resolveCompareBase).
+		next.searchParams.delete("base");
+		next.searchParams.delete("mode");
+	}
+	location.href = next.toString();
+};
+
+/**
+ * 실패를 화면에 말한다. load()와 watch의 poll()이 같이 쓴다 — watch는 창을
+ * 안 보고 있을 때 쓰는 기능이라 focus가 발화하지 않으므로, poll()이 실패를
+ * 삼키면 폴더가 지워지거나 서버가 꺼져도 화면은 옛 카드·옛 개수를 무기한
+ * 주장한다.
+ */
+const showLoadFailure = (failure: LoadFailure): void => {
+	// 살아 있는 CodeView가 없을 때만 실패 카드로 덮어쓴다. load()의 로딩
+	// 인디케이터는 `!lastFiles`로 같은 취지를 노리지만, 정확한 위험 조건은
+	// "렌더된 내용이 있다"가 아니라 "붙어 있는 CodeView가 있다"다: diffMount는
+	// CodeView의 스크롤 컨테이너 그 자체라, innerHTML 대입이 CodeView가 setup
+	// 때 붙여 둔 컨테이너를 문서에서 떼어낸다. CodeView.setup()은 이미 setup된
+	// 인스턴스의 재부착을 거부하므로(`already setup`), 인스턴스를 새로 만들기
+	// 전까지 패널은 영구히 빈 채로 남는다 — 서버를 Ctrl+C로 끄고 탭으로
+	// 돌아오기만 해도(focus 리스너가 load()를 호출한다) 걸리는 경로다.
+	//
+	// `!lastFiles`로 걸면 변경이 없는 리포(lastFiles === []는 truthy)에서
+	// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
+	// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
+	// changes."를 계속 주장하게 된다.
+	// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
+	// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
+	// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
+	// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
+	// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
+	// 달리 사용자가 속는다.
+	//
+	// 어떤 실패든 **이유를 말한다**(loadError.ts). 예전엔 사라진 head만
+	// 전용 카드였고 나머지는 전부 "Failed to load diff." 한 줄이라, 홈
+	// 디렉토리를 연 것인지 서버가 꺼진 것인지 화면에서 가를 수 없었다.
+	const model = buildLoadErrorModel(failure, {
+		repo,
+		head: currentHead,
+		base: compareBase,
 	});
-	card.append(headline, context, action);
-	diffMount.append(card);
+	if (!codeView) {
+		// 같은 실패가 폴마다 반복되면 카드를 다시 그리지 않는다 — 매번 갈면
+		// 버튼의 포커스·호버가 2초마다 날아간다.
+		const shown = diffMount.querySelector("#empty[data-load-error]");
+		if (shown?.getAttribute("data-load-error") !== loadErrorKey(model)) {
+			diffMount.replaceChildren(
+				renderLoadError(document, model, onLoadErrorAction),
+			);
+		}
+	}
+	// 어느 쪽이든 실패는 알린다 — 안 그러면 라벨이 "Loading…"에 고착된다.
+	// diff가 떠 있어 카드를 못 그릴 때는 이 한 줄이 이유를 나른다.
+	statusEl.textContent = model.status;
 };
 
 const load = async (): Promise<void> => {
@@ -1428,37 +1504,8 @@ const load = async (): Promise<void> => {
 		diffMount.innerHTML = LOADING_MARKUP;
 	}
 	const result = await fetchDiff();
-	if (result === null) {
-		// 살아 있는 CodeView가 없을 때만 실패 카드로 덮어쓴다. 위 로딩
-		// 인디케이터는 `!lastFiles`로 같은 취지를 노리지만, 정확한 위험 조건은
-		// "렌더된 내용이 있다"가 아니라 "붙어 있는 CodeView가 있다"다: diffMount는
-		// CodeView의 스크롤 컨테이너 그 자체라, innerHTML 대입이 CodeView가 setup
-		// 때 붙여 둔 컨테이너를 문서에서 떼어낸다. CodeView.setup()은 이미 setup된
-		// 인스턴스의 재부착을 거부하므로(`already setup`), 인스턴스를 새로 만들기
-		// 전까지 패널은 영구히 빈 채로 남는다 — 서버를 Ctrl+C로 끄고 탭으로
-		// 돌아오기만 해도(focus 리스너가 load()를 호출한다) 걸리는 경로다.
-		//
-		// `!lastFiles`로 걸면 변경이 없는 리포(lastFiles === []는 truthy)에서
-		// 어긋난다: 그 경로는 teardownViews()로 이미 codeView를 비운 뒤라 카드를
-		// 쓰는 게 안전한데도 억제돼, 상태 라벨만 실패를 말하고 화면은 "No
-		// changes."를 계속 주장하게 된다.
-		// 사라진 head는 평범한 실패가 아니다 — 원인이 URL에 적혀 있고,
-		// 새로고침해도 같은 화면이라 스스로 못 빠져나온다(머지 후 삭제된
-		// 브랜치를 가리키는 링크에서 흔하다). 무엇이 없는지 말하고 나갈 길을
-		// 준다. **자동으로 되돌리지는 않는다** — head는 저장된 값이 아니라
-		// 링크가 요청한 것이라, 말없이 다른 화면을 보여주면 base의 자가복구와
-		// 달리 사용자가 속는다.
-		const goneHead = lastUnknownHead;
-		if (goneHead !== null) {
-			if (!codeView) renderMissingHead(goneHead);
-			statusEl.textContent = "";
-			return;
-		}
-		if (!codeView) {
-			diffMount.innerHTML = '<div id="empty">Failed to load diff.</div>';
-		}
-		// 어느 쪽이든 실패는 알린다 — 안 그러면 라벨이 "Loading…"에 고착된다.
-		statusEl.textContent = "Failed to load diff.";
+	if (result.kind === "failed") {
+		showLoadFailure(result.failure);
 		return;
 	}
 	applyFetched(result);
@@ -1521,6 +1568,10 @@ const CHECK_SVG =
 // 오픈에 그걸 쓰면 "이 리포엔 고를 게 없다"는 거짓말이 한 프레임 스친다.
 let pickerRows: HeadRow[] = [];
 let pickerLoaded = false;
+// 직전 /api/refs가 실패했다. 이게 없으면 목록을 영영 못 받는 리포(지워진
+// 폴더·리포 아님)에서 피커가 "Loading…"을 무기한 말한다 — 끝나지 않을
+// 일을 진행 중이라고 주장하는 셈이다. 다음 열림에서 성공하면 걷힌다.
+let pickerFailed = false;
 // 방향키가 움직이는 활성 행. 필터가 바뀌면 첫 행으로 되돌린다.
 let pickerActive = 0;
 // 현재 화면에 그려진 행들 — 키보드 처리와 렌더가 같은 목록을 봐야 한다.
@@ -1537,7 +1588,11 @@ const renderPickerRows = (): void => {
 		const empty = document.createElement("div");
 		empty.id = "ref-picker-empty";
 		empty.setAttribute("role", "presentation");
-		empty.textContent = pickerLoaded ? "No match" : "Loading…";
+		empty.textContent = pickerLoaded
+			? "No match"
+			: pickerFailed
+				? "Couldn't load branches"
+				: "Loading…";
 		pickerList.append(empty);
 		return;
 	}
@@ -1600,8 +1655,13 @@ const loadPickerRows = async (): Promise<void> => {
 		const res = await fetch(
 			`/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
 		);
-		if (!res.ok) return;
+		if (!res.ok) {
+			pickerFailed = true;
+			renderPickerRows();
+			return;
+		}
 		const body = (await res.json()) as RefsResult;
+		pickerFailed = false;
 		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
 		// "내가 어느 워크트리에 있는가"의 판정은 모델이 repoLabel의 것을
 		// 그대로 쓴다(답이 앱 안에 둘 있으면 안 된다).
@@ -1618,6 +1678,8 @@ const loadPickerRows = async (): Promise<void> => {
 		renderPickerRows();
 	} catch {
 		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.
+		pickerFailed = true;
+		renderPickerRows();
 	}
 };
 
@@ -1628,6 +1690,8 @@ const setPickerOpen = (open: boolean): void => {
 	if (!open) return;
 	if (pickerSearch) pickerSearch.value = "";
 	pickerActive = 0;
+	// 직전 실패를 새 시도 동안 주장하지 않는다 — 결과가 오기 전엔 모른다.
+	pickerFailed = false;
 	renderPickerRows();
 	pickerSearch?.focus();
 	void loadPickerRows();
@@ -2038,7 +2102,10 @@ const poll = async (): Promise<void> => {
 	void refreshRepoLabel();
 	try {
 		const result = await fetchDiff();
-		if (result === null) return;
+		if (result.kind === "failed") {
+			showLoadFailure(result.failure);
+			return;
+		}
 		applyFetched(result);
 	} finally {
 		pollInFlight = false;

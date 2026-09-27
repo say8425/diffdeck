@@ -7,7 +7,6 @@ import { type CwdDeps, isCwdAlive } from "./cwd.ts";
 import {
 	getDiffFiles,
 	getFileBytes,
-	isGitRepo,
 	resolveBaseRef,
 	verifyBaseRef,
 } from "./diff.ts";
@@ -19,6 +18,7 @@ import {
 	payloadEtag,
 } from "./payloadCache.ts";
 import { getRefs, type RefsResult } from "./refs.ts";
+import { classifyRepo, repoProblemResponse } from "./repoCheck.ts";
 import {
 	parseSelection,
 	type Selection,
@@ -262,9 +262,8 @@ const createHandler = (cfg: {
 			}
 			const sel = parseSelection(url.searchParams);
 			const repo = sel.repo;
-			if (!repo || !(await isGitRepo(repo))) {
-				return new Response("not a git repository", { status: 400 });
-			}
+			const problem = await classifyRepo(repo);
+			if (problem) return repoProblemResponse(problem);
 			const untracked = sel.untracked;
 			const mode = sel.base.kind === "head" ? "working" : "base";
 			const baseResult = await resolveSelectionBase(repo, sel);
@@ -331,9 +330,8 @@ const createHandler = (cfg: {
 			}
 			const sel = parseSelection(url.searchParams);
 			const repo = sel.repo;
-			if (!repo || !(await isGitRepo(repo))) {
-				return new Response("not a git repository", { status: 400 });
-			}
+			const problem = await classifyRepo(repo);
+			if (problem) return repoProblemResponse(problem);
 			// 빈 상태 카드가 diff와 **다른 비교**를 설명하면 안 된다. 여기서
 			// resolveBaseCached를 그냥 부르면 사용자가 develop을 골라 놓고도
 			// 카드는 "No changes vs main"이라고 말한다.
@@ -363,9 +361,8 @@ const createHandler = (cfg: {
 			}
 			const sel = parseSelection(url.searchParams);
 			const repo = sel.repo;
-			if (!repo || !(await isGitRepo(repo))) {
-				return new Response("not a git repository", { status: 400 });
-			}
+			const problem = await classifyRepo(repo);
+			if (problem) return repoProblemResponse(problem);
 			const result = await awaitFlight(getRefsCached(repo));
 			if (result instanceof Response) return result;
 			return new Response(JSON.stringify(result), {
@@ -379,9 +376,8 @@ const createHandler = (cfg: {
 			}
 			const sel = parseSelection(url.searchParams);
 			const repo = sel.repo;
-			if (!repo || !(await isGitRepo(repo))) {
-				return new Response("not a git repository", { status: 400 });
-			}
+			const problem = await classifyRepo(repo);
+			if (problem) return repoProblemResponse(problem);
 			const path = url.searchParams.get("path") ?? "";
 			// blob은 이미지 diff 전용 — 이미지 외 파일(빈 경로 포함)은 노출하지 않는다.
 			if (!isImagePath(path)) {
@@ -466,7 +462,7 @@ export const startDiffServer = (opts: {
 		// 커넥션을 강제 종료한다("request timed out after 10 seconds"). 120초는
 		// /api/diff가 순차로 기다리는 두 플라이트(baseFlight → diffFlight)의
 		// 합(singleFlight.ts의 기본 타임아웃 45초 × 2 = 90초)이 실제로 응답을
-		// (정상이든 503이든) 만들어 낼 시간을 확보하고서도 isGitRepo·응답 전송에
+		// (정상이든 503이든) 만들어 낼 시간을 확보하고서도 classifyRepo·응답 전송에
 		// ~30초 여유를 남기도록 고른 값이다 — 개별 플라이트가 아니라 "그 요청이
 		// 기다리는 플라이트의 합 < idleTimeout"이 진짜 불변식이다. 예전엔 fn()이
 		// settle하지 않을 때 이 값에 걸려도 클라이언트가 재시도하지 않아 뷰어가

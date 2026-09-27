@@ -803,13 +803,36 @@ describe("diff server 400 kinds are distinguishable", () => {
 		expect(res.headers.get("x-diff-error")).toBe("unknown-base");
 	});
 
-	test("a non-repository is not marked, so nothing is dropped", async () => {
+	test("a non-repository carries its own marker, not unknown-base", async () => {
 		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
 		const res = await fetch(
 			`${base}/api/diff?repo=${encodeURIComponent(viewerDir)}&token=${token}&base=main`,
 		);
 		expect(res.status).toBe(400);
-		expect(res.headers.get("x-diff-error")).toBeNull();
+		expect(res.headers.get("x-diff-error")).toBe("not-a-repo");
+	});
+
+	// 브라우저 카드는 이 표식으로 "지워진 폴더"와 "리포 아님"을 가른다. 네
+	// 라우트가 같은 판정을 공유하는지 본다 — 하나만 옛 한 문장으로 남으면
+	// 이미지·요약·피커가 diff와 다른 이유를 말한다.
+	test.each(["diff", "summary", "refs", "blob"])(
+		"/api/%s marks a missing directory as repo-missing",
+		async (route) => {
+			const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+			const gone = join(viewerDir, "no-such-dir");
+			const res = await fetch(
+				`${base}/api/${route}?repo=${encodeURIComponent(gone)}&token=${token}&path=a.png`,
+			);
+			expect(res.status).toBe(400);
+			expect(res.headers.get("x-diff-error")).toBe("repo-missing");
+		},
+	);
+
+	test("a request without repo is marked no-repo", async () => {
+		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
+		const res = await fetch(`${base}/api/diff?token=${token}`);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("no-repo");
 	});
 });
 
