@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.5.1...diffdeck-v1.6.0) (2026-09-27)
+
+
+### Features
+
+* diff 로드 실패 카드가 이유를 말한다 ([#85](https://github.com/say8425/diffdeck/issues/85)) ([cfa6592](https://github.com/say8425/diffdeck/commit/cfa659271452d0f2694d10ec899544865a8f0ca0))
+
 ## [1.5.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.5.0...diffdeck-v1.5.1) (2026-09-24)
 
 
