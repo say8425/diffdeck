@@ -266,6 +266,11 @@ test.describe("PR badges", () => {
 						triggerWhole: label.scrollWidth <= label.clientWidth,
 						titleClipped: title.scrollWidth > title.clientWidth,
 						numberRight: rect("#pr-chip-number").right,
+						chipWidth: rect("#pr-chip").width,
+						chipFloor: Number.parseFloat(
+							(document.getElementById("pr-chip") as HTMLElement).style
+								.minWidth,
+						),
 						chipRight: rect("#pr-chip").right,
 						statusLeft: rect("#status").left,
 						rightEdge: rect(".tb-right").right,
@@ -273,11 +278,16 @@ test.describe("PR badges", () => {
 					};
 				});
 
-			// 트리거는 온전히 들어가는 폭 — 제목만 말줄임돼야 한다.
-			await page.setViewportSize({ width: 720, height: 600 });
+			// 칩에 아직 양보할 제목이 남아 있는 폭 — 그동안 트리거는 온전해야
+			// 한다. 폭을 넉넉히 잡고 그 전제(칩이 바닥보다 넓다)를 함께 단언한다:
+			// 글꼴 폭은 OS마다 달라서(720px은 macOS에선 칩이 92px로 남았지만
+			// Linux CI에선 바닥에 닿아 트리거가 정당하게 줄었다) 전제를 적어 두지
+			// 않으면 레이아웃 차이가 계약 위반처럼 보인다. 실패 시 치수 전부가
+			// 찍히도록 한 객체로 비교한다.
+			await page.setViewportSize({ width: 900, height: 600 });
 			const mid = await measure();
-			expect(mid.titleClipped).toBe(true);
-			expect(mid.triggerWhole).toBe(true);
+			expect(mid.chipWidth).toBeGreaterThan(mid.chipFloor + 1);
+			expect(mid).toMatchObject({ titleClipped: true, triggerWhole: true });
 
 			// 더 좁으면 트리거도 줄지만 번호는 칩 안에 남고, 칩이 개수를 덮거나
 			// 오른쪽 그룹을 밀지 않는다.
