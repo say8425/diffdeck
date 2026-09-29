@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	chipMinWidth,
 	PR_STATE_LABEL,
 	prBranchOf,
 	prChipView,
@@ -78,6 +79,11 @@ describe("viewedPrBranch", () => {
 		expect(viewedPrBranch("fix/foo", "main", refs)).toBe("fix/foo");
 	});
 
+	// `head=HEAD`는 커밋된 HEAD를 본다 — 그 브랜치는 워크트리가 물고 있는 것이다.
+	test("head=HEAD means the worktree's branch", () => {
+		expect(viewedPrBranch("HEAD", "feat/x", refs)).toBe("feat/x");
+	});
+
 	test("a head not in the list yet is taken as is", () => {
 		expect(viewedPrBranch("feat/y", "main", [])).toBe("feat/y");
 	});
@@ -98,6 +104,15 @@ describe("prFor", () => {
 	test("does not pick up inherited properties", () => {
 		expect(prFor(prs, "constructor")).toBeNull();
 		expect(prFor(prs, "toString")).toBeNull();
+	});
+});
+
+describe("chipMinWidth", () => {
+	// 제목은 빠진다 — 말줄임으로 0까지 양보하는 몫이다.
+	test("sums icon, one gap, number and the box edges, rounded up", () => {
+		expect(
+			chipMinWidth({ icon: 14, number: 27.3, gap: 6, padding: 18, border: 2 }),
+		).toBe(68);
 	});
 });
 

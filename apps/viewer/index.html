@@ -94,18 +94,32 @@
 				flex: none;
 			}
 			/* 지금 보는 브랜치의 PR — 아이콘·번호·제목을 담은 버튼형 칩이고
-			   누르면 GitHub의 그 PR이 새 탭으로 열린다. 트리거처럼 줄어드는 몫을
-			   나눠 진다(제목만 말줄임되고 아이콘·번호는 남는다). `#toolbar`로
-			   스코프한 것은 `.tb-left > * { flex: none }`을 특이도로 이기기
-			   위해서다 — 트리거 규칙과 같은 이유(아래 `.tb-picker` 주석). */
+			   누르면 GitHub의 그 PR이 새 탭으로 열린다. `#toolbar`로 스코프한
+			   것은 `.tb-left > * { flex: none }`을 특이도로 이기기 위해서다 —
+			   트리거 규칙과 같은 이유(아래 `.tb-picker` 주석).
+
+			   **줄어드는 순서가 계약이다: 칩의 제목 → 트리거.** flex shrink는
+			   basis로 가중되므로 둘 다 `1`이면 흔한 60~80자 PR 제목(트리거보다
+			   길다)이 몫을 나눠 가져, 공간이 남는데도 트리거가 잘린다 — 트리거의
+			   `max-width`를 걷어낸 이유(아래 `.tb-picker` 주석)를 칩이 되살리는
+			   셈이다. 그래서 가중치를 아주 크게 줘 칩이 먼저 양보한다. **1000으로는
+			   모자랐다(실측)**: 트리거가 여전히 1px 안팎의 몫을 받아 라벨이
+			   187 → 186px이 되고, 1px이라도 넘치면 `text-overflow`가 말줄임표를
+			   그린다. 100000이면 그 몫이 1px의 수백분의 1이다. 바닥
+			   (`min-width`)은 main.ts가 아이콘+번호 폭으로 잰다(`chipMinWidth` —
+			   번호 길이가 PR마다 달라 CSS 상수로는 못 적는다). 제목은 hover
+			   툴팁에서 전부 읽히지만 트리거는 대신 말해 줄 곳이 없다.
+			   `overflow: hidden`은 바닥보다 더 눌린 극단에서 아이콘·번호가 상자
+			   밖으로 새어 #status에 겹치지 않게 한다. */
 			#toolbar #pr-chip {
 				box-sizing: border-box;
 				height: 26px;
 				display: inline-flex;
 				align-items: center;
 				gap: 6px;
-				flex: 0 1 auto;
+				flex: 0 100000 auto;
 				min-width: 0;
+				overflow: hidden;
 				padding: 0 10px 0 8px;
 				background: var(--vd-inset);
 				color: var(--vd-fg);

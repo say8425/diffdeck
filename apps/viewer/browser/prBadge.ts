@@ -35,7 +35,10 @@ export const prIconSvg = (state: PrState, size: number): string =>
 
 /**
  * 참조 이름에서 PR의 head 브랜치 이름을 얻는다. PR은 원격 접두 없는 이름으로
- * 오므로 `origin/feat/x`는 `feat/x`로 맞춘다 — 원격 이름은 `/`를 품지 않는다.
+ * 오므로 `origin/feat/x`는 `feat/x`로 맞춘다. **원격 이름에 `/`가 없다고
+ * 가정한다** — git은 `team/x` 같은 원격 이름을 허용하지만 드물고, 그 경우
+ * `team/x/feat`가 `x/feat`의 PR을 찾아 대개 아무것도 못 찾는다(틀린 PR을 다는
+ * 쪽이 아니라 못 다는 쪽으로 어긋난다).
  */
 export const prBranchOf = (name: string, kind: RefRecord["kind"]): string =>
 	kind === "remote" ? name.slice(name.indexOf("/") + 1) : name;
@@ -52,7 +55,9 @@ export const viewedPrBranch = (
 	worktreeBranch: string | null,
 	refs: readonly RefRecord[],
 ): string | null => {
-	if (head === null) return worktreeBranch;
+	// `head=HEAD`는 "이 워크트리의 커밋된 HEAD"다 — 브랜치 이름이 아니라서
+	// 그대로 찾으면 아무 PR도 없다. 가리키는 브랜치는 워크트리의 것이다.
+	if (head === null || head === "HEAD") return worktreeBranch;
 	const ref = refs.find((r) => r.name === head);
 	return ref ? prBranchOf(ref.name, ref.kind) : head;
 };
@@ -79,6 +84,23 @@ export interface PrChipView {
 	 */
 	ariaLabel: string;
 }
+
+/** `chipMinWidth`가 더하는 칩의 치수(px). main.ts가 실측해 넘긴다. */
+export interface ChipParts {
+	icon: number;
+	number: number;
+	gap: number;
+	padding: number;
+	border: number;
+}
+
+/**
+ * 칩이 줄어들 수 있는 바닥 — 아이콘과 번호, 그 사이 간격과 상자 가장자리.
+ * 제목은 여기서 빠진다(말줄임으로 0까지 양보한다). 번호 길이가 PR마다 달라
+ * CSS 상수로는 못 적는다(index.html의 `#pr-chip` 주석).
+ */
+export const chipMinWidth = (p: ChipParts): number =>
+	Math.ceil(p.icon + p.gap + p.number + p.padding + p.border);
 
 export const prChipView = (pr: PrRecord | null): PrChipView | null =>
 	pr === null

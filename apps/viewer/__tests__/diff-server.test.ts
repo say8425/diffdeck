@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	setSystemTime,
+	test,
+} from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -725,12 +733,50 @@ describe("diff server prs route", () => {
 
 	// 기본 경로는 실제 `gh`를 부른다. GitHub 원격이 없는 리포(이 픽스처)나
 	// `gh`가 없는 환경에서는 실패하는데, 그건 에러가 아니라 "PR 없음"이다.
-	test("without a GitHub remote the real lister answers no PRs", async () => {
-		const res = await fetch(
-			`${base}/api/prs?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
+	// GH_REPO가 설정된 환경이면 gh가 픽스처의 원격 부재를 무시하고 그 리포의
+	// 실제 PR을 답한다 — 그때는 이 단언이 성립하지 않는다.
+	test.skipIf(Boolean(process.env.GH_REPO))(
+		"without a GitHub remote the real lister answers no PRs",
+		async () => {
+			const res = await fetch(
+				`${base}/api/prs?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
+			);
+			expect(res.status).toBe(200);
+			expect(await res.json()).toEqual({});
+		},
+	);
+
+	// 실패를 성공만큼 오래 두면 기동 순간의 끊김 한 번이 1분 동안 PR 표시를
+	// 지운다. 시계를 돌려 두 수명을 가른다(10초 뒤 실패는 다시 묻고 성공은 아니다).
+	test("a failed lookup is cached briefly, a successful one for a minute", async () => {
+		// 첫 호출만 실패하고 그 뒤로는 성공한다.
+		let calls = 0;
+		const listPrs = mock(() =>
+			Promise.resolve((calls++ === 0 ? null : PRS) as typeof PRS | null),
 		);
-		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({});
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			listPrs,
+		});
+		const url = `http://127.0.0.1:${h.server.port}/api/prs?repo=${encodeURIComponent(repo)}&token=${h.token}`;
+		const t0 = Date.now();
+		try {
+			expect(await (await fetch(url)).json()).toEqual({});
+			setSystemTime(new Date(t0 + 5_000));
+			await fetch(url);
+			expect(listPrs).toHaveBeenCalledTimes(1);
+			setSystemTime(new Date(t0 + 11_000));
+			expect(await (await fetch(url)).json()).toEqual(PRS);
+			expect(listPrs).toHaveBeenCalledTimes(2);
+			setSystemTime(new Date(t0 + 40_000));
+			await fetch(url);
+			expect(listPrs).toHaveBeenCalledTimes(2);
+		} finally {
+			setSystemTime();
+			h.stop();
+		}
 	});
 
 	// `gh`는 네트워크를 탄다 — 폴·focus·피커 열림마다 부르면 GitHub에 매번 간다.

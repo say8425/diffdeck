@@ -66,7 +66,7 @@ const PRS = [
 	},
 ];
 
-const launchWithPrs = async () => {
+const launchWithPrs = async (flags: string[] = []) => {
 	const ghDir = mkdtempSync(join(tmpdir(), "dd-e2e-gh-"));
 	const json = join(ghDir, "prs.json");
 	writeFileSync(json, JSON.stringify(PRS));
@@ -77,7 +77,7 @@ const launchWithPrs = async () => {
 	);
 	chmodSync(gh, 0o755);
 	const viewer = await launchViewer(
-		[],
+		flags,
 		{ branches: ["develop", "wip", "old"], featureBranchCommit: true },
 		undefined,
 		{ PATH: `${ghDir}:${process.env.PATH ?? ""}` },
@@ -242,35 +242,83 @@ test.describe("PR badges", () => {
 	});
 
 	// 유닛이 원리적으로 못 보는 계약: 칩은 트리거와 함께 줄어드는 몫을 진다.
-	test("⑤ in a narrow window the chip title clips but the toolbar stays on screen", async ({
+	// 유닛이 원리적으로 못 보는 계약: 칩은 줄어드는 몫을 **트리거보다 먼저**
+	// 진다(index.html의 `#pr-chip` 주석). 둘의 shrink가 같으면 긴 PR 제목이
+	// 몫을 나눠 가져, 트리거만으로는 들어갈 폭에서도 트리거가 잘린다.
+	test("⑤ in a narrow window the chip title yields first and the toolbar stays on screen", async ({
 		page,
 	}) => {
 		const { url, stop } = await launchWithPrs();
 		try {
-			await page.setViewportSize({ width: 720, height: 600 });
 			await page.goto(url);
 			await expect(page.locator("#pr-chip-number")).toHaveText("#12");
-			const m = await page.evaluate(() => {
-				const title = document.getElementById("pr-chip-title") as HTMLElement;
-				const num = document.getElementById("pr-chip-number") as HTMLElement;
-				const right = document.querySelector(".tb-right") as HTMLElement;
-				const chip = document.getElementById("pr-chip") as HTMLElement;
-				return {
-					clipped: title.scrollWidth > title.clientWidth,
-					numberWhole: num.scrollWidth <= num.clientWidth,
-					rightEdge: right.getBoundingClientRect().right,
-					chipRight: chip.getBoundingClientRect().right,
-					rightLeft: right.getBoundingClientRect().left,
-					toolbarHeight: (
-						document.getElementById("toolbar") as HTMLElement
-					).getBoundingClientRect().height,
-				};
+			const measure = () =>
+				page.evaluate(() => {
+					const rect = (sel: string) =>
+						(
+							document.querySelector(sel) as HTMLElement
+						).getBoundingClientRect();
+					const label = document.getElementById(
+						"ref-picker-label",
+					) as HTMLElement;
+					const title = document.getElementById("pr-chip-title") as HTMLElement;
+					return {
+						triggerWhole: label.scrollWidth <= label.clientWidth,
+						titleClipped: title.scrollWidth > title.clientWidth,
+						numberRight: rect("#pr-chip-number").right,
+						chipRight: rect("#pr-chip").right,
+						statusLeft: rect("#status").left,
+						rightEdge: rect(".tb-right").right,
+						toolbarHeight: rect("#toolbar").height,
+					};
+				});
+
+			// 트리거는 온전히 들어가는 폭 — 제목만 말줄임돼야 한다.
+			await page.setViewportSize({ width: 720, height: 600 });
+			const mid = await measure();
+			expect(mid.titleClipped).toBe(true);
+			expect(mid.triggerWhole).toBe(true);
+
+			// 더 좁으면 트리거도 줄지만 번호는 칩 안에 남고, 칩이 개수를 덮거나
+			// 오른쪽 그룹을 밀지 않는다.
+			for (const width of [720, 560]) {
+				await page.setViewportSize({ width, height: 600 });
+				const m = await measure();
+				expect(m.numberRight).toBeLessThanOrEqual(m.chipRight);
+				expect(m.chipRight).toBeLessThanOrEqual(m.statusLeft);
+				expect(m.rightEdge).toBeLessThanOrEqual(width);
+				expect(m.toolbarHeight).toBeLessThanOrEqual(43);
+			}
+		} finally {
+			await stop();
+		}
+	});
+
+	// watch의 폴(2초)은 매번 /api/prs를 다시 묻고 서버는 60초 동안 같은 값을
+	// 준다. 같은 값에도 열린 피커를 다시 세우면 누르는 도중 행 노드가 갈려
+	// click이 사라진다 — 같은 응답이면 아무것도 다시 그리지 않아야 한다.
+	test("⑥ under --watch an open picker is not rebuilt by unchanged PRs", async ({
+		page,
+	}) => {
+		const { url, stop } = await launchWithPrs(["--watch"]);
+		try {
+			await page.goto(url);
+			await page.locator("#ref-picker-btn").click();
+			const row = page.locator("#ref-picker .ref-row").first();
+			await expect(row.locator(".ref-row-pr")).toHaveCount(1);
+			await row.evaluate((el) => {
+				(el as HTMLElement & { ddMark?: boolean }).ddMark = true;
 			});
-			expect(m.clipped).toBe(true);
-			expect(m.numberWhole).toBe(true);
-			expect(m.rightEdge).toBeLessThanOrEqual(720);
-			expect(m.chipRight).toBeLessThanOrEqual(m.rightLeft);
-			expect(m.toolbarHeight).toBeLessThanOrEqual(43);
+			// 폴 두 번 이상.
+			await page.waitForTimeout(5_000);
+			expect(
+				await page
+					.locator("#ref-picker .ref-row")
+					.first()
+					.evaluate(
+						(el) => (el as HTMLElement & { ddMark?: boolean }).ddMark === true,
+					),
+			).toBe(true);
 		} finally {
 			await stop();
 		}

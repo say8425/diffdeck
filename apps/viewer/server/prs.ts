@@ -6,8 +6,11 @@
  *
  * **부가 정보다** — `gh`가 없거나, 로그인이 안 됐거나, 원격이 GitHub이 아니거나,
  * 네트워크가 느리면 빈 결과를 돌려주고 화면은 PR 표시만 뺀다. 그래서 어떤
- * 실패도 던지지 않는다.
+ * 실패도 던지지 않는다. 다만 "PR 없음"과 "못 받음"은 가른다(`getPrs`가 null) —
+ * 서버가 실패를 성공만큼 오래 캐시하면 기동 순간의 네트워크 한 번 끊김이
+ * 1분 동안 모든 PR 표시를 지운다.
  */
+import { gitText } from "./gitOutput.ts";
 
 export type PrState = "open" | "draft" | "merged" | "closed";
 
@@ -36,7 +39,7 @@ export const PR_LIST_LIMIT = 100;
 export const GH_TIMEOUT_MS = 10_000;
 
 const GH_FIELDS =
-	"number,title,headRefName,state,isDraft,url,isCrossRepository";
+	"number,title,headRefName,state,isDraft,url,isCrossRepository,headRepositoryOwner";
 
 interface GhPr {
 	number?: unknown;
@@ -46,7 +49,22 @@ interface GhPr {
 	isDraft?: unknown;
 	url?: unknown;
 	isCrossRepository?: unknown;
+	headRepositoryOwner?: unknown;
 }
+
+/**
+ * 원격 URL의 소유자(`git@github.com:acme/api.git`·`https://github.com/acme/api`
+ * → `acme`). 호스트는 보지 않는다 — GitHub Enterprise도 같은 모양이다.
+ */
+export const remoteOwner = (url: string): string | null =>
+	/[:/]([^/:]+)\/[^/]+?(?:\.git)?\/?$/.exec(url.trim())?.[1] ?? null;
+
+const ownerLogin = (owner: unknown): string | null =>
+	owner !== null &&
+	typeof owner === "object" &&
+	typeof (owner as { login?: unknown }).login === "string"
+		? (owner as { login: string }).login
+		: null;
 
 const stateOf = (pr: GhPr): PrState | null => {
 	if (pr.state === "OPEN") return pr.isDraft === true ? "draft" : "open";
@@ -66,10 +84,17 @@ const isLive = (state: PrState): boolean =>
  * 열렸거나 둘 다 끝났으면 먼저 온 것 — `gh`가 최신순으로 주므로 가장 최근
  * 것이 이긴다.
  *
- * **포크에서 온 PR은 뺀다.** 그 head는 남의 리포 브랜치라 이름이 같아도 이
- * 리포의 브랜치가 아니다 — `main`에서 올린 포크 PR이 우리 `main` 행에 붙는다.
+ * **남의 포크에서 온 PR은 뺀다.** 그 head는 남의 리포 브랜치라 이름이 같아도
+ * 이 리포의 브랜치가 아니다 — 포크의 `main`에서 올린 PR이 우리 `main` 행에
+ * 붙는다. **내 포크는 예외다**(`ownFork` = `origin`의 소유자): 포크 워크플로
+ * (`gh repo fork --clone`)에서는 `gh`가 기준 리포를 upstream으로 풀어서 내 PR이
+ * 전부 cross-repository로 오는데, 그걸 빼면 그 사용자들에게는 PR 표시가 통째로
+ * 사라진다. 그들의 로컬 브랜치는 `origin`(= 내 포크)의 브랜치다.
  */
-export const parsePrList = (raw: string): PrsByBranch => {
+export const parsePrList = (
+	raw: string,
+	ownFork: string | null = null,
+): PrsByBranch => {
 	let list: unknown;
 	try {
 		list = JSON.parse(raw);
@@ -82,7 +107,12 @@ export const parsePrList = (raw: string): PrsByBranch => {
 	const out: PrsByBranch = Object.create(null) as PrsByBranch;
 	for (const pr of list as GhPr[]) {
 		if (pr === null || typeof pr !== "object") continue;
-		if (pr.isCrossRepository === true) continue;
+		if (
+			pr.isCrossRepository === true &&
+			(ownFork === null || ownerLogin(pr.headRepositoryOwner) !== ownFork)
+		) {
+			continue;
+		}
 		const state = stateOf(pr);
 		if (
 			state === null ||
@@ -105,11 +135,11 @@ export const parsePrList = (raw: string): PrsByBranch => {
 	return out;
 };
 
-/** `gh`를 실행해 stdout을 돌려준다. 실패는 전부 빈 문자열이다. */
+/** `gh`를 실행해 stdout을 돌려준다. 실패는 전부 null이다. */
 export type GhRunner = (
 	repo: string,
 	args: readonly string[],
-) => Promise<string>;
+) => Promise<string | null>;
 
 export const runGh: GhRunner = async (repo, args) => {
 	try {
@@ -121,19 +151,28 @@ export const runGh: GhRunner = async (repo, args) => {
 			timeout: GH_TIMEOUT_MS,
 		});
 		const out = await new Response(proc.stdout).text();
-		return (await proc.exited) === 0 ? out : "";
+		return (await proc.exited) === 0 ? out : null;
 	} catch {
 		// `gh`가 설치돼 있지 않으면 스폰 자체가 ENOENT로 던진다.
-		return "";
+		return null;
 	}
 };
 
+/** `origin`의 URL. 없으면 빈 문자열(`remote get-url`이 실패로 끝난다). */
+export const readOriginUrl = (repo: string): Promise<string> =>
+	gitText(["-C", repo, "remote", "get-url", "origin"]);
+
+/**
+ * 브랜치별 PR. **null은 "못 받았다"**(`gh` 없음·인증 없음·GitHub 원격 아님·
+ * 타임아웃)이고 빈 객체는 "PR이 없다"다 — 호출자가 캐시 수명을 가르는 근거다.
+ */
 export const getPrs = async (
 	repo: string,
 	run: GhRunner = runGh,
-): Promise<PrsByBranch> =>
-	parsePrList(
-		await run(repo, [
+	originUrl: (repo: string) => Promise<string> = readOriginUrl,
+): Promise<PrsByBranch | null> => {
+	const [raw, origin] = await Promise.all([
+		run(repo, [
 			"pr",
 			"list",
 			"--state",
@@ -143,4 +182,7 @@ export const getPrs = async (
 			"--json",
 			GH_FIELDS,
 		]),
-	);
+		originUrl(repo),
+	]);
+	return raw === null ? null : parsePrList(raw, remoteOwner(origin));
+};

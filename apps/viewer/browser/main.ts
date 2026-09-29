@@ -84,7 +84,13 @@ import {
 	filterPickerRows,
 	type HeadRow,
 } from "./refPicker/model.ts";
-import { prChipView, prFor, prIconSvg, viewedPrBranch } from "./prBadge.ts";
+import {
+	chipMinWidth,
+	prChipView,
+	prFor,
+	prIconSvg,
+	viewedPrBranch,
+} from "./prBadge.ts";
 import { findWorktree, repoLabelView } from "./repoLabel.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
@@ -218,6 +224,11 @@ let lastRepoRoot: string | null = null;
 let lastRefs: readonly RefRecord[] = [];
 // /api/prs가 준 마지막 값. 받기 전·실패하면 비어 있고 PR 표시만 빠진다.
 let lastPrs: PrsByBranch = {};
+// 그 응답의 원문. watch는 2초마다 이 경로를 타는데(refreshRepoLabel → poll),
+// 서버는 60초 동안 같은 값을 준다 — 같으면 칩·피커를 다시 그리지 않는다.
+// 열린 피커를 폴마다 다시 세우면 누르는 도중 행 노드가 갈려 click이 사라지고
+// aria-activedescendant가 다시 걸려 스크린리더가 되읽는다.
+let lastPrsRaw = "";
 
 /**
  * PR 칩을 지금 보고 있는 브랜치에 맞춘다. PR이 없으면 칩을 숨긴다 — "PR 없음"을
@@ -237,6 +248,19 @@ const applyPrChip = (): void => {
 	prChipIconEl.innerHTML = prIconSvg(view.state, 14);
 	prChipNumberEl.textContent = view.number;
 	prChipTitleEl.textContent = view.title;
+	// 줄어드는 바닥 = 아이콘 + 번호(index.html의 `#pr-chip` 주석). 아이콘과
+	// 번호는 `flex: none`이라 지금 폭이 곧 자연폭이다 — 칩이 눌려 있어도 맞다.
+	const cs = getComputedStyle(prChipEl);
+	prChipEl.style.minWidth = `${chipMinWidth({
+		icon: prChipIconEl.getBoundingClientRect().width,
+		number: prChipNumberEl.getBoundingClientRect().width,
+		gap: Number.parseFloat(cs.columnGap) || 0,
+		padding:
+			Number.parseFloat(cs.paddingLeft) + Number.parseFloat(cs.paddingRight),
+		border:
+			Number.parseFloat(cs.borderLeftWidth) +
+			Number.parseFloat(cs.borderRightWidth),
+	})}px`;
 };
 
 const applyRepoLabel = (
@@ -273,7 +297,10 @@ const refreshPrs = async (): Promise<void> => {
 			`/api/prs?repo=${encodeURIComponent(repo)}&token=${token}`,
 		);
 		if (!res.ok) return;
-		lastPrs = (await res.json()) as PrsByBranch;
+		const raw = await res.text();
+		if (raw === lastPrsRaw) return;
+		lastPrsRaw = raw;
+		lastPrs = JSON.parse(raw) as PrsByBranch;
 		applyPrChip();
 		rebuildPickerRows();
 	} catch {
