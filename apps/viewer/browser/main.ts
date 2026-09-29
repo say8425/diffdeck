@@ -16,7 +16,8 @@ import {
 	type FileTreeItemHandle,
 } from "@diffdeck/trees";
 import type { DiffFile } from "../server/diff.ts";
-import type { RefsResult, WorktreeRecord } from "../server/refs.ts";
+import type { PrsByBranch } from "../server/prs.ts";
+import type { RefRecord, RefsResult, WorktreeRecord } from "../server/refs.ts";
 import type { RepoSummary } from "../server/summary.ts";
 import { changeTotalsView } from "./changeTotals.ts";
 import { createCopyButton } from "./copyButton.ts";
@@ -83,7 +84,8 @@ import {
 	filterPickerRows,
 	type HeadRow,
 } from "./refPicker/model.ts";
-import { repoLabelView } from "./repoLabel.ts";
+import { prChipView, prFor, prIconSvg, viewedPrBranch } from "./prBadge.ts";
+import { findWorktree, repoLabelView } from "./repoLabel.ts";
 import { computeDragWidth, computeKeyboardWidth } from "./resize.ts";
 import { createFindBar, type FindBar } from "./search/findBar.ts";
 import { highlightDom } from "./search/highlightDom.ts";
@@ -198,8 +200,11 @@ const applyChangeTotals = (
 const pickerScopeEl = document.getElementById("picker-scope") as HTMLElement;
 const pickerNameEl = document.getElementById("picker-name") as HTMLElement;
 const pickerBranchEl = document.getElementById("picker-branch") as HTMLElement;
-// 겹치지 않는 다른 축 — 무엇과 견주는가.
-const baseLabelEl = document.getElementById("base-label") as HTMLElement;
+// 지금 보고 있는 브랜치의 PR. 트리거 바로 뒤에 서서 "무엇을 보는가"를 잇는다.
+const prChipEl = document.getElementById("pr-chip") as HTMLAnchorElement;
+const prChipIconEl = document.getElementById("pr-chip-icon") as HTMLElement;
+const prChipNumberEl = document.getElementById("pr-chip-number") as HTMLElement;
+const prChipTitleEl = document.getElementById("pr-chip-title") as HTMLElement;
 
 /**
  * 툴바 라벨과 탭 제목을 **한 계산 경로**로 세운다. 둘이 갈라지면 같은 사실을
@@ -209,22 +214,30 @@ const baseLabelEl = document.getElementById("base-label") as HTMLElement;
 // 하는데 그때는 워크트리 목록이 손에 없으므로 여기에 붙들어 둔다.
 let lastWorktrees: readonly WorktreeRecord[] = [];
 let lastRepoRoot: string | null = null;
+// 칩이 "head로 고른 참조가 원격인가"를 가르려면 목록이 필요하다(prBadge.ts).
+let lastRefs: readonly RefRecord[] = [];
+// /api/prs가 준 마지막 값. 받기 전·실패하면 비어 있고 PR 표시만 빠진다.
+let lastPrs: PrsByBranch = {};
 
 /**
- * 견줄 기준의 **표시명**. 워킹트리(HEAD) 대비면 null — 그건 "커밋 안 한 변경"
- * 이지 무엇과 견준 결과가 아니라서 라벨이 아무 말도 하지 않아야 한다.
- * `@auto`의 이름은 서버가 매 diff 응답의 `x-diff-base`로 알려준다.
+ * PR 칩을 지금 보고 있는 브랜치에 맞춘다. PR이 없으면 칩을 숨긴다 — "PR 없음"을
+ * 말할 자리를 만들지 않는다(대부분의 브랜치가 그 상태라 소음이 된다).
  */
-const baseDisplay = (): string | null =>
-	// 커밋된 rev를 보는 중이면 워킹트리 기준은 뜻이 없어 서버가 auto로
-	// 해석한다(`server/selection.ts`의 normalize). 화면도 같은 규칙을 써야
-	// 라벨이 서버가 실제로 쓴 기준과 어긋나지 않는다 — 안 그러면 서버는
-	// main과 견주는데 툴바는 아무 말도 안 한다.
-	compareBase === "HEAD" && currentHead === null
-		? null
-		: compareBase === "HEAD" || compareBase === "@auto"
-			? diffBase || null
-			: compareBase;
+const applyPrChip = (): void => {
+	const worktreeBranch = findWorktree(lastWorktrees, repo)?.branch ?? null;
+	const view = prChipView(
+		prFor(lastPrs, viewedPrBranch(currentHead, worktreeBranch, lastRefs)),
+	);
+	prChipEl.hidden = view === null;
+	if (view === null) return;
+	prChipEl.href = view.href;
+	prChipEl.title = view.tooltip;
+	prChipEl.setAttribute("aria-label", view.ariaLabel);
+	// 열거값에서 만든 상수 마크업이라 innerHTML이 안전하다.
+	prChipIconEl.innerHTML = prIconSvg(view.state, 14);
+	prChipNumberEl.textContent = view.number;
+	prChipTitleEl.textContent = view.title;
+};
 
 const applyRepoLabel = (
 	worktrees?: readonly WorktreeRecord[],
@@ -236,15 +249,36 @@ const applyRepoLabel = (
 	}
 	const view = repoLabelView(repo, lastWorktrees, lastRepoRoot, {
 		head: currentHead,
-		base: baseDisplay(),
 	});
 	pickerScopeEl.textContent = view.scope;
 	pickerNameEl.textContent = view.name;
 	pickerBranchEl.textContent = view.branch;
 	// 말줄임을 hover로 편다 — 트리거는 이제 세 조각을 담아 길어질 수 있다.
 	pickerBtn?.setAttribute("title", view.title);
-	baseLabelEl.textContent = view.base;
 	document.title = view.documentTitle;
+	// 칩은 트리거와 같은 사실(지금 보는 브랜치)에서 나오므로 같은 경로로 갱신한다.
+	applyPrChip();
+};
+
+/**
+ * 브랜치별 PR을 받아 칩과 (열려 있으면) 피커 행에 얹는다.
+ *
+ * refs와 따로 받는 이유는 서버 쪽 주석(`/api/prs`)과 같다 — `gh`는 네트워크를
+ * 타서 느리고, 라벨·목록이 그 속도에 묶이면 안 된다. 부르는 곳은 라벨 갱신과
+ * 같은 곳(load·poll·피커 열림)이고 서버의 60초 TTL이 비용을 흡수한다.
+ */
+const refreshPrs = async (): Promise<void> => {
+	try {
+		const res = await fetch(
+			`/api/prs?repo=${encodeURIComponent(repo)}&token=${token}`,
+		);
+		if (!res.ok) return;
+		lastPrs = (await res.json()) as PrsByBranch;
+		applyPrChip();
+		rebuildPickerRows();
+	} catch {
+		// 부가 정보다 — 못 받으면 PR 표시만 빠진다.
+	}
 };
 
 /**
@@ -270,12 +304,15 @@ const applyRepoLabel = (
  * 안 되기 때문이다.
  */
 const refreshRepoLabel = async (): Promise<void> => {
+	// 같은 세 시점에 PR도 따라온다 — watch가 브랜치를 갈아타면 칩도 옮겨야 한다.
+	void refreshPrs();
 	try {
 		const res = await fetch(
 			`/api/refs?repo=${encodeURIComponent(repo)}&token=${token}`,
 		);
 		if (!res.ok) return;
 		const body = (await res.json()) as RefsResult;
+		lastRefs = body.refs;
 		applyRepoLabel(body.worktrees, body.repoRoot);
 	} catch {
 		// 부가 정보다 — 못 받아도 이름은 이미 떠 있고 diff는 그대로 동작한다.
@@ -1394,12 +1431,11 @@ const fetchDiff = async (): Promise<FetchDiffOutcome> => {
 	}
 };
 
-// x-diff-base가 보고한 "서버가 해석한 base" 이름. 피커 라벨(@auto일 때)과
-// grab 참조가 읽는다.
+// x-diff-base가 보고한 "서버가 해석한 base" 이름. grab 참조와 이미지 blob이
+// 읽는다.
 let diffBase = "";
 const applyFetched = (result: FetchDiffResult): void => {
 	diffBase = result.base;
-	applyRepoLabel();
 	if (result.kind === "unchanged") {
 		// 변경 없음: 현재 렌더 유지, 상태 라벨만 복원한다.
 		statusEl.textContent =
@@ -1568,6 +1604,8 @@ const CHECK_SVG =
 // 오픈에 그걸 쓰면 "이 리포엔 고를 게 없다"는 거짓말이 한 프레임 스친다.
 let pickerRows: HeadRow[] = [];
 let pickerLoaded = false;
+// 목록을 세운 마지막 /api/refs 응답. PR이 늦게 도착하면 이걸로 행을 다시 세운다.
+let pickerRefs: RefsResult | null = null;
 // 직전 /api/refs가 실패했다. 이게 없으면 목록을 영영 못 받는 리포(지워진
 // 폴더·리포 아님)에서 피커가 "Loading…"을 무기한 말한다 — 끝나지 않을
 // 일을 진행 중이라고 주장하는 셈이다. 다음 열림에서 성공하면 걷힌다.
@@ -1632,19 +1670,53 @@ const renderPickerRows = (): void => {
 		el.setAttribute("aria-selected", String(selected));
 		// 사용자 입력이 섞이지 않는 상수 마크업이라 안전하다.
 		if (selected) el.insertAdjacentHTML("afterbegin", CHECK_SVG);
+		// 첫 줄은 예전 행 그대로(이름 + 오른쪽 메모)이고, PR이 있으면 그 아래
+		// 둘째 줄이 붙는다. PR 없는 행은 한 줄로 남아 목록이 불필요하게 길어지지
+		// 않는다.
+		const line = document.createElement("span");
+		line.className = "ref-row-line";
 		const label = document.createElement("span");
 		label.className = "ref-row-label";
 		label.textContent = row.label;
-		el.append(label);
+		line.append(label);
 		if (row.note) {
 			const note = document.createElement("span");
 			note.className = "ref-row-tag";
 			note.textContent = row.note;
-			el.append(note);
+			line.append(note);
+		}
+		el.append(line);
+		if (row.pr) {
+			el.dataset.pr = row.pr.state;
+			const pr = document.createElement("span");
+			pr.className = "ref-row-pr";
+			// 상태는 아이콘(모양·색 + aria-label)이 말한다 — 글자로 되풀이하지 않는다.
+			pr.insertAdjacentHTML("afterbegin", prIconSvg(row.pr.state, 11));
+			const num = document.createElement("span");
+			num.className = "ref-row-pr-number";
+			num.textContent = `#${row.pr.number}`;
+			const title = document.createElement("span");
+			title.className = "ref-row-pr-title";
+			title.textContent = row.pr.title;
+			pr.append(num, title);
+			el.append(pr);
 		}
 		el.addEventListener("click", () => void applyPick(row));
 		pickerList.append(el);
 	}
+};
+
+/** 받아 둔 refs와 PR로 행을 다시 세운다. 목록을 아직 못 받았으면 할 일이 없다. */
+const rebuildPickerRows = (): void => {
+	if (!pickerRefs) return;
+	pickerRows = buildHeadRows(
+		pickerRefs.worktrees,
+		pickerRefs.refs,
+		pickerRefs.defaultBranch,
+		{ repo, head: currentHead },
+		lastPrs,
+	);
+	if (!pickerPanel?.hidden) renderPickerRows();
 };
 
 // 열 때마다 새로 받는다. 한 번 받고 영원히 쓰면 뷰어를 켜 둔 채 만든
@@ -1665,17 +1737,17 @@ const loadPickerRows = async (): Promise<void> => {
 		// 같은 응답으로 라벨도 최신화한다 — 피커를 열 때마다 공짜로 따라온다.
 		// "내가 어느 워크트리에 있는가"의 판정은 모델이 repoLabel의 것을
 		// 그대로 쓴다(답이 앱 안에 둘 있으면 안 된다).
+		lastRefs = body.refs;
 		applyRepoLabel(body.worktrees, body.repoRoot);
 		// /api/refs 하나로 목록이 완성된다. 예전에는 행마다 파일 개수를 얹으려고
 		// /api/summary를 이어 받았는데, 그건 base 축의 수치라 head를 고르는
 		// 지금은 행의 뜻과 맞지 않는다(그리고 getRepoSummary는 의도적으로
 		// single-flight 밖이라 목록이 그 속도에 묶였다).
 		pickerLoaded = true;
-		pickerRows = buildHeadRows(body.worktrees, body.refs, body.defaultBranch, {
-			repo,
-			head: currentHead,
-		});
-		renderPickerRows();
+		pickerRefs = body;
+		// PR은 따로 온다(refreshPrs) — 받아 둔 게 있으면 지금 얹고, 늦게 오면
+		// rebuildPickerRows가 다시 세운다.
+		rebuildPickerRows();
 	} catch {
 		// 목록을 못 받아도 피커는 열린다 — 지금 고른 값은 라벨이 계속 말한다.
 		pickerFailed = true;
@@ -1695,6 +1767,7 @@ const setPickerOpen = (open: boolean): void => {
 	renderPickerRows();
 	pickerSearch?.focus();
 	void loadPickerRows();
+	void refreshPrs();
 };
 
 /**
@@ -1841,13 +1914,13 @@ compareBase =
 // /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
 // hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
 //
-// **이 호출은 `compareBase`·`currentHead` 선언보다 뒤에 있어야 한다.** 한때
+// **이 호출은 `currentHead` 선언보다 뒤에 있어야 한다**(PR 칩도 그 값을 읽는다). 한때
 // 선언부(284·291행)보다 앞인 242행에 있었는데, 그때 살아 있던 이유는
 // 번들러뿐이었다: `bun build`가 최상위 `let`을 `var`로 낮춰 TDZ가 아니라
 // `undefined`가 됐다(실측 — 같은 코드를 ESM 그대로 평가하면
 // `ReferenceError: Cannot access 'currentHead' before initialization`으로
 // 모듈이 통째로 죽는다). 게다가 `undefined`는 `null`이 아니라 head 분기를
-// 통과해 `#base-label`에 리터럴 `"vs undefined"`를 썼다 — 같은 동기 실행
+// 통과해 (지금은 없는) `#base-label`에 리터럴 `"vs undefined"`를 썼다 — 같은 동기 실행
 // 안의 이 호출이 덮어써서 페인트만 안 됐을 뿐이다. 타입체크도 커버리지도
 // 유닛도 이걸 못 본다(main.ts는 셋 다 밖이다).
 applyRepoLabel();

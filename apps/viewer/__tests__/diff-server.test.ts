@@ -701,6 +701,79 @@ describe("diff server refs route", () => {
 	});
 });
 
+describe("diff server prs route", () => {
+	const PRS = {
+		"feat/x": {
+			number: 7,
+			title: "feat: x",
+			state: "open",
+			url: "https://github.com/o/r/pull/7",
+		},
+	} as const;
+
+	test("rejects a request without the token", async () => {
+		const res = await fetch(`${base}/api/prs?repo=${encodeURIComponent(repo)}`);
+		expect(res.status).toBe(403);
+	});
+
+	test("rejects a path that is not a git repository", async () => {
+		const res = await fetch(
+			`${base}/api/prs?repo=${encodeURIComponent(viewerDir)}&token=${handle.token}`,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	// 기본 경로는 실제 `gh`를 부른다. GitHub 원격이 없는 리포(이 픽스처)나
+	// `gh`가 없는 환경에서는 실패하는데, 그건 에러가 아니라 "PR 없음"이다.
+	test("without a GitHub remote the real lister answers no PRs", async () => {
+		const res = await fetch(
+			`${base}/api/prs?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({});
+	});
+
+	// `gh`는 네트워크를 탄다 — 폴·focus·피커 열림마다 부르면 GitHub에 매번 간다.
+	test("answers from the lister and caches it across requests", async () => {
+		const listPrs = mock(() => Promise.resolve(PRS));
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			listPrs,
+		});
+		try {
+			const url = `http://127.0.0.1:${h.server.port}/api/prs?repo=${encodeURIComponent(repo)}&token=${h.token}`;
+			const first = await fetch(url);
+			expect(first.status).toBe(200);
+			expect(await first.json()).toEqual(PRS);
+			expect((await fetch(url)).status).toBe(200);
+			expect(listPrs).toHaveBeenCalledTimes(1);
+			expect(listPrs).toHaveBeenCalledWith(repo);
+		} finally {
+			h.stop();
+		}
+	});
+
+	test("a lister that never settles answers 503 instead of hanging", async () => {
+		const h = startDiffServer({
+			port: 0,
+			viewerDir,
+			env: { XDG_CACHE_HOME: cacheHome },
+			flightTimeoutMs: 1,
+			listPrs: () => new Promise(() => {}),
+		});
+		try {
+			const res = await fetch(
+				`http://127.0.0.1:${h.server.port}/api/prs?repo=${encodeURIComponent(repo)}&token=${h.token}`,
+			);
+			expect(res.status).toBe(503);
+		} finally {
+			h.stop();
+		}
+	});
+});
+
 describe("diff server caller-supplied base", () => {
 	const tok = (): string =>
 		readTokenSync({ XDG_CACHE_HOME: cacheHome }) as string;
@@ -815,7 +888,7 @@ describe("diff server 400 kinds are distinguishable", () => {
 	// 브라우저 카드는 이 표식으로 "지워진 폴더"와 "리포 아님"을 가른다. 네
 	// 라우트가 같은 판정을 공유하는지 본다 — 하나만 옛 한 문장으로 남으면
 	// 이미지·요약·피커가 diff와 다른 이유를 말한다.
-	test.each(["diff", "summary", "refs", "blob"])(
+	test.each(["diff", "summary", "refs", "prs", "blob"])(
 		"/api/%s marks a missing directory as repo-missing",
 		async (route) => {
 			const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });

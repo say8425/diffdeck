@@ -248,25 +248,22 @@ describe("repoLabelView", () => {
 	});
 });
 
-describe("repoLabelView — 무엇을 보고 있는지와 무엇과 견주는지", () => {
+describe("repoLabelView — 무엇을 보고 있는지", () => {
 	const MAIN = "/Users/p/dev/diffdeck";
 	const INNER = "/Users/p/dev/diffdeck/.claude/worktrees/feat+ABC-1";
 	const trees = [wt(), wt({ path: INNER, branch: "feat/ABC-1" })];
 
-	// 견줄 기준이 워킹트리(HEAD)면 base를 말하지 않는다 — 그건 "커밋 안 한
-	// 변경"이지 무엇과 견준 결과가 아니다.
-	test("워킹트리 뷰에서는 base 자리를 비운다", () => {
-		const v = repoLabelView(MAIN, [wt()], MAIN, { head: null, base: null });
+	// 견줄 기준은 말하지 않는다 — 화면에서 고를 수 없어 정보가 되지 못했다.
+	test("워크트리 뷰의 title은 경로와 브랜치만 말한다", () => {
+		const v = repoLabelView(MAIN, [wt()], MAIN, { head: null });
 		expect(v.branch).toBe(" · main");
+		expect(v.title).toBe("/Users/p/dev/diffdeck · main");
+		expect(v).not.toHaveProperty("base");
 	});
 
-	test("base가 있으면 브랜치 뒤에 붙인다", () => {
-		const v = repoLabelView(MAIN, [wt()], MAIN, { head: null, base: "main" });
-		// base는 자기 자리를 갖는다 — 트리거가 head를 말하고, 이 값은 개수
-		// 왼쪽의 별도 표식이 말한다.
-		expect(v.branch).toBe(" · main");
-		expect(v.base).toBe("vs main");
-		expect(v.title).toBe("/Users/p/dev/diffdeck · main · vs main");
+	test("브랜치 뷰의 title은 리포 루트와 그 브랜치만 말한다", () => {
+		const v = repoLabelView(INNER, trees, MAIN, { head: "feature/other" });
+		expect(v.title).toBe("/Users/p/dev/diffdeck · feature/other");
 	});
 
 	// **브랜치를 head로 보면 워크트리는 결과에 영향을 주지 않는다** — 어느
@@ -275,19 +272,16 @@ describe("repoLabelView — 무엇을 보고 있는지와 무엇과 견주는지
 	test("브랜치 뷰에서는 워크트리 이름을 빼고 그 브랜치를 주인공으로 세운다", () => {
 		const v = repoLabelView(INNER, trees, MAIN, {
 			head: "feature/other",
-			base: "main",
 		});
 		expect(v.scope).toBe("diffdeck · ");
 		expect(v.name).toBe("feature/other");
 		expect(v.branch).toBe("");
-		expect(v.base).toBe("vs main");
 	});
 
 	// 예전에는 라벨이 워크트리의 브랜치를 말해 보고 있지도 않은 곳을 가리켰다.
 	test("브랜치 뷰의 라벨은 워크트리의 브랜치를 말하지 않는다", () => {
 		const v = repoLabelView(INNER, trees, MAIN, {
 			head: "feature/other",
-			base: null,
 		});
 		expect(v.branch).not.toContain("feat/ABC-1");
 		expect(v.name).not.toBe("feat+ABC-1");
@@ -296,7 +290,6 @@ describe("repoLabelView — 무엇을 보고 있는지와 무엇과 견주는지
 	test("브랜치 뷰의 탭 제목은 그 브랜치를 앞세운다", () => {
 		const v = repoLabelView(INNER, trees, MAIN, {
 			head: "feature/other",
-			base: "main",
 		});
 		expect(v.documentTitle).toBe("feature/other — diffdeck");
 	});
@@ -304,37 +297,15 @@ describe("repoLabelView — 무엇을 보고 있는지와 무엇과 견주는지
 	test("리포 루트를 모르면 브랜치 뷰에서도 접두를 지어내지 않는다", () => {
 		const v = repoLabelView(INNER, trees, null, {
 			head: "feature/other",
-			base: null,
 		});
 		expect(v.scope).toBe("");
 		expect(v.name).toBe("feature/other");
 	});
 
 	test("워크트리 뷰는 예전 형태 그대로다", () => {
-		const v = repoLabelView(INNER, trees, MAIN, { head: null, base: null });
+		const v = repoLabelView(INNER, trees, MAIN, { head: null });
 		expect(v.scope).toBe("diffdeck / ");
 		expect(v.name).toBe("feat+ABC-1");
 		expect(v.branch).toBe(" · feat/ABC-1");
-	});
-});
-
-describe("repoLabelView — base는 독립된 자리다", () => {
-	test("견줄 기준이 없으면 빈 문자열", () => {
-		expect(
-			repoLabelView("/w/a", [wt({ path: "/w/a" })], "/w/a", {
-				head: null,
-				base: null,
-			}).base,
-		).toBe("");
-	});
-
-	// 접두 없이 그대로 들어간다 — 자기 요소를 가지므로 구분자를 품을 이유가 없다.
-	test("접두 구분자를 품지 않는다", () => {
-		expect(
-			repoLabelView("/w/a", [wt({ path: "/w/a" })], "/w/a", {
-				head: null,
-				base: "develop",
-			}).base,
-		).toBe("vs develop");
 	});
 });

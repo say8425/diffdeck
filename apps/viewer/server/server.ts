@@ -17,6 +17,7 @@ import {
 	type PayloadCacheEntry,
 	payloadEtag,
 } from "./payloadCache.ts";
+import { getPrs, type PrsByBranch } from "./prs.ts";
 import { getRefs, type RefsResult } from "./refs.ts";
 import { classifyRepo, repoProblemResponse } from "./repoCheck.ts";
 import {
@@ -54,6 +55,9 @@ const BASE_TTL_MS = 10_000;
 // 피커 목록의 수명. 브랜치·워크트리는 diff 내용보다 훨씬 덜 움직이므로
 // 짧게 잡아도 팝오버를 열 때마다 git을 두 번 부르지 않는다.
 const REFS_TTL_MS = 5_000;
+// PR 목록의 수명. `gh`는 네트워크를 타고 PR은 브랜치보다도 덜 움직인다 —
+// 폴·focus·피커 열림마다 불려도 GitHub에는 1분에 한 번만 간다.
+const PRS_TTL_MS = 60_000;
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
@@ -118,6 +122,9 @@ const createHandler = (cfg: {
 	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 핸들러가 자기 캐시를
 	// 만든다. flightTimeoutMs와 같은 패턴이다.
 	blobCache?: BlobCache;
+	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 `gh pr list`를 부른다.
+	// flightTimeoutMs와 같은 패턴이다.
+	listPrs?: (repo: string) => Promise<PrsByBranch>;
 }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
@@ -207,6 +214,19 @@ const createHandler = (cfg: {
 			if (hit && now - hit.at < REFS_TTL_MS) return hit.value;
 			const value = await getRefs(repo);
 			refsCache.set(repo, { value, at: now });
+			return value;
+		});
+	// PR 목록. refs와 같은 이유로 핸들러 스코프다.
+	const prsFlight = createSingleFlight<PrsByBranch>(cfg.flightTimeoutMs);
+	const prsCache = new Map<string, { value: PrsByBranch; at: number }>();
+	const listPrs = cfg.listPrs ?? ((repo: string) => getPrs(repo));
+	const getPrsCached = (repo: string): Promise<PrsByBranch> =>
+		prsFlight(repo, async () => {
+			const now = Date.now();
+			const hit = prsCache.get(repo);
+			if (hit && now - hit.at < PRS_TTL_MS) return hit.value;
+			const value = await listPrs(repo);
+			prsCache.set(repo, { value, at: now });
 			return value;
 		});
 	return async (req: Request): Promise<Response> => {
@@ -370,6 +390,23 @@ const createHandler = (cfg: {
 			});
 		}
 
+		// 브랜치별 PR. /api/refs에 싣지 않는 이유: refs는 5초 TTL로 폴마다
+		// 도는데 이쪽은 네트워크를 타서 수백 ms~수 초가 걸린다 — 한 응답에 묶으면
+		// 목록과 라벨이 `gh`의 속도로 떨어진다. 따로 받아 도착하는 대로 얹는다.
+		if (url.pathname === "/api/prs") {
+			if (url.searchParams.get("token") !== cfg.token) {
+				return new Response("forbidden", { status: 403 });
+			}
+			const repo = parseSelection(url.searchParams).repo;
+			const problem = await classifyRepo(repo);
+			if (problem) return repoProblemResponse(problem);
+			const result = await awaitFlight(getPrsCached(repo));
+			if (result instanceof Response) return result;
+			return new Response(JSON.stringify(result), {
+				headers: { "content-type": "application/json; charset=utf-8" },
+			});
+		}
+
 		if (url.pathname === "/api/blob") {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
@@ -438,6 +475,8 @@ export const startDiffServer = (opts: {
 	cwdDeps?: CwdDeps;
 	// 테스트 전용 훅 — createHandler의 같은 이름 필드로 그대로 흘러간다.
 	blobCache?: BlobCache;
+	// 테스트 전용 훅 — createHandler의 같은 이름 필드로 그대로 흘러간다.
+	listPrs?: (repo: string) => Promise<PrsByBranch>;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
 	// Mint the token but don't write it yet — Bun.serve throws if the port is
@@ -453,6 +492,7 @@ export const startDiffServer = (opts: {
 		repairCwd: opts.repairCwd,
 		cwdDeps: opts.cwdDeps,
 		blobCache: opts.blobCache,
+		listPrs: opts.listPrs,
 	});
 	const server = Bun.serve({
 		hostname: "127.0.0.1",

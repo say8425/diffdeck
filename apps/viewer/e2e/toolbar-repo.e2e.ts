@@ -41,13 +41,16 @@ test.describe("toolbar repo label", () => {
 			// 메인 워크트리라 리포 접두가 없다 — 붙으면 `dd-e2e-repo-x / dd-e2e-repo-x`.
 			await expect(page.locator("#picker-scope")).toBeEmpty();
 
-			// 개수 바로 왼쪽 자리는 이제 **견줄 기준**의 몫이다 — 트리거가
-			// "무엇을 보는가"를 말하므로 그 자리에 같은 말을 두면 중복이다.
+			// 견줄 기준(`vs main`)은 걷어냈다 — 화면에서 고를 수 없어 정보가
+			// 되지 못했다. 트리거 뒤에는 PR 칩이 서고(PR이 없는 이 픽스처에선
+			// 숨는다) 바로 개수가 온다.
+			expect(await page.locator("#base-label").count()).toBe(0);
 			const beforeStatus = await page.evaluate(
 				() =>
-					document.getElementById("base-label")?.nextElementSibling?.id ?? null,
+					document.getElementById("pr-chip")?.nextElementSibling?.id ?? null,
 			);
 			expect(beforeStatus).toBe("status");
+			await expect(page.locator("#pr-chip")).toBeHidden();
 
 			// 조각 사이에 공백 텍스트 노드가 끼면 `name  · main`이 된다.
 			// #picker-branch가 구분자를 품고 오므로 마크업은 붙여 써야 하는데,
@@ -229,9 +232,6 @@ test.describe("toolbar repo label", () => {
 			await expect(page.locator("#picker-scope")).toHaveText(
 				`${basename(repoDir)} ·`,
 			);
-			// 견줄 기준이 자동 해석으로 올라간다 — 커밋된 rev에는 미커밋
-			// 변경이 없어 워킹트리 기준은 뜻이 없다. 다른 축이므로 자기 자리다.
-			await expect(page.locator("#base-label")).toHaveText("vs main");
 			// 워크트리의 브랜치를 말하면 보고 있지도 않은 곳을 가리킨다.
 			expect(
 				await page
