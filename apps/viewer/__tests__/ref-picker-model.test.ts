@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildHeadRows, filterPickerRows } from "../browser/refPicker/model.ts";
+import type { PrsByBranch } from "../server/prs.ts";
 import type { RefRecord, WorktreeRecord } from "../server/refs.ts";
 
 const ref = (name: string, kind: "local" | "remote" = "local"): RefRecord => ({
@@ -203,5 +204,72 @@ describe("filterPickerRows", () => {
 	test("finds a worktree by the branch it holds", () => {
 		const held = filterPickerRows(rows, "feat").map((r) => r.value);
 		expect(held).toContain("/w/repo/.claude/worktrees/feat");
+	});
+});
+
+describe("buildHeadRows — pull requests", () => {
+	const prs: PrsByBranch = {
+		feat: {
+			number: 85,
+			title: "feat: 로드 실패 카드",
+			state: "open",
+			url: "https://github.com/o/r/pull/85",
+		},
+		old: {
+			number: 12,
+			title: "fix: 옛 일",
+			state: "merged",
+			url: "https://github.com/o/r/pull/12",
+		},
+	};
+	const current = { repo: "/w/repo", head: null };
+
+	test("rows carry no PR until PRs are known", () => {
+		const rows = buildHeadRows(
+			[MAIN_WT, FEAT_WT],
+			[ref("feat")],
+			"main",
+			current,
+		);
+		expect(rows.every((r) => r.pr === null)).toBe(true);
+	});
+
+	// 워크트리 행은 **물고 있는 브랜치**의 PR을 단다.
+	test("a worktree row carries the PR of the branch it holds", () => {
+		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", current, prs);
+		const feat = rows.find((r) => r.value === FEAT_WT.path);
+		expect(feat?.pr?.number).toBe(85);
+		expect(rows.find((r) => r.value === MAIN_WT.path)?.pr).toBeNull();
+	});
+
+	test("local and remote branch rows both carry the branch's PR", () => {
+		const rows = buildHeadRows(
+			[MAIN_WT],
+			[ref("feat"), ref("origin/feat", "remote"), ref("old"), ref("main")],
+			"main",
+			current,
+			prs,
+		);
+		const byValue = (v: string) => rows.find((r) => r.value === v)?.pr;
+		expect(byValue("feat")?.number).toBe(85);
+		expect(byValue("origin/feat")?.number).toBe(85);
+		expect(byValue("old")?.state).toBe("merged");
+		expect(byValue("main")).toBeNull();
+	});
+
+	// 행에 보이는 글자는 전부 검색어가 된다.
+	test("filtering finds a row by PR number or title", () => {
+		const rows = buildHeadRows(
+			[MAIN_WT],
+			[ref("feat"), ref("old"), ref("main")],
+			"main",
+			current,
+			prs,
+		);
+		const values = (q: string) => filterPickerRows(rows, q).map((r) => r.value);
+		expect(values("#85")).toEqual(["feat"]);
+		expect(values("12")).toEqual(["old"]);
+		expect(values("로드 실패")).toEqual(["feat"]);
+		expect(values("FIX:")).toEqual(["old"]);
 	});
 });

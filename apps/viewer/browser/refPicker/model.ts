@@ -13,7 +13,9 @@
  *
  * DOM도 fetch도 모르므로 유닛으로 전부 덮인다 — 배선만 main.ts에 남는다.
  */
+import type { PrRecord, PrsByBranch } from "../../server/prs.ts";
 import type { RefRecord, WorktreeRecord } from "../../server/refs.ts";
+import { prBranchOf, prFor } from "../prBadge.ts";
 import { findWorktree, repoDisplayName } from "../repoLabel.ts";
 
 /** 목록의 두 구역. 종류가 다르다는 것을 화면에서 가르는 근거다. */
@@ -37,6 +39,11 @@ export interface HeadRow {
 	note: string | null;
 	/** 지금 보고 있는 행. 값의 종류가 둘이라 비교를 모델이 끝낸다. */
 	selected: boolean;
+	/**
+	 * 이 행의 브랜치에 올라온 PR. 워크트리는 **물고 있는 브랜치**의 PR이다.
+	 * 없거나 아직 `/api/prs`를 못 받았으면 null — 행은 한 줄로 남는다.
+	 */
+	pr: PrRecord | null;
 }
 
 /** 지금 무엇을 보고 있는가. */
@@ -70,6 +77,7 @@ const worktreeRows = (
 	worktrees: readonly WorktreeRecord[],
 	defaultBranch: string | null,
 	current: CurrentHead,
+	prs: PrsByBranch,
 ): HeadRow[] => {
 	// head가 브랜치면 워크트리는 "지금 보고 있지 않은 것"이라 고를 대상이다 —
 	// 그때까지 숨기면 워크트리가 하나뿐인 리포에서 브랜치 뷰에 갇힌다.
@@ -93,6 +101,7 @@ const worktreeRows = (
 			tag: null,
 			note: worktreeNote(worktree, defaultBranch),
 			selected: worktree === viewed,
+			pr: prFor(prs, worktree.branch),
 		}));
 };
 
@@ -106,6 +115,7 @@ const branchRows = (
 	refs: readonly RefRecord[],
 	defaultBranch: string | null,
 	current: CurrentHead,
+	prs: PrsByBranch,
 ): HeadRow[] => {
 	const toRow = (record: RefRecord): HeadRow => {
 		const isDefault = record.name === defaultBranch;
@@ -117,6 +127,8 @@ const branchRows = (
 			tag: isDefault ? "default" : null,
 			note: isDefault ? "default" : null,
 			selected: record.name === current.head,
+			// 원격 참조도 그 브랜치의 PR을 단다 — PR은 원격 접두 없는 이름으로 온다.
+			pr: prFor(prs, prBranchOf(record.name, record.kind)),
 		};
 	};
 	const rank = (record: RefRecord): number => {
@@ -135,9 +147,10 @@ export const buildHeadRows = (
 	refs: readonly RefRecord[],
 	defaultBranch: string | null,
 	current: CurrentHead,
+	prs: PrsByBranch = {},
 ): HeadRow[] => [
-	...worktreeRows(worktrees, defaultBranch, current),
-	...branchRows(refs, defaultBranch, current),
+	...worktreeRows(worktrees, defaultBranch, current, prs),
+	...branchRows(refs, defaultBranch, current, prs),
 ];
 
 export const filterPickerRows = (
@@ -149,9 +162,13 @@ export const filterPickerRows = (
 	// `note`도 본다 — 워크트리 행의 **브랜치 이름**이 거기 산다. label만 보면
 	// 브랜치명을 타이핑했을 때 그 브랜치를 물고 있는 워크트리가 안 잡히는데,
 	// 그건 이 목록에서 가장 자연스러운 검색어다.
+	// PR 번호(`#85`·`85`)와 제목도 본다 — 행에 보이는 글자는 전부 검색어가 된다.
 	return rows.filter(
 		(r) =>
 			r.label.toLowerCase().includes(needle) ||
-			(r.note ?? "").toLowerCase().includes(needle),
+			(r.note ?? "").toLowerCase().includes(needle) ||
+			(r.pr !== null &&
+				(`#${r.pr.number}`.includes(needle) ||
+					r.pr.title.toLowerCase().includes(needle))),
 	);
 };

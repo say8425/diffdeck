@@ -52,6 +52,9 @@ export const launchViewer = async (
 	// daemon-cwd.e2e.ts만 이걸 따로 준다 — 기동 cwd를 지웠을 때도 서빙 대상
 	// repo는 살아 있어야 "cwd 삭제"와 "repo 삭제"를 구분할 수 있기 때문.
 	launchCwd?: string,
+	// 서버 프로세스에 더할 환경 변수. pr-badge.e2e.ts가 가짜 `gh`를 PATH 앞에
+	// 두는 데 쓴다 — 실제 `gh`는 GitHub에 가야 해서 픽스처 리포로는 못 부른다.
+	extraEnv: Record<string, string> = {},
 ): Promise<LaunchedViewer> => {
 	const repo = makeFixtureRepo(repoOptions);
 	const cacheHome = mkdtempSync(join(tmpdir(), "dd-e2e-cache-"));
@@ -61,7 +64,7 @@ export const launchViewer = async (
 		[cliPath, "--no-open", "--port", "0", ...flags],
 		{
 			cwd: launchCwd ?? repo.dir,
-			env: { ...process.env, XDG_CACHE_HOME: cacheHome },
+			env: { ...process.env, XDG_CACHE_HOME: cacheHome, ...extraEnv },
 		},
 	);
 

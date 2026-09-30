@@ -1,6 +1,6 @@
 // 툴바의 두 축과 오른쪽 그룹의 순서.
 //
-// 왼쪽은 "지금 무엇을 보고 있는가"를 한 문장으로 말하고(트리거 · 견줄 기준 ·
+// 왼쪽은 "지금 무엇을 보고 있는가"를 한 문장으로 말하고(트리거 · PR 칩 ·
 // 개수 · 변경량), 오른쪽은 화면을 다룬다. 예전엔 뷰 모드와 새로고침이 왼쪽
 // 한복판에 앉아 그 문장을 두 동강 냈다.
 //
@@ -36,10 +36,10 @@ test.describe("toolbar groups", () => {
 				return { left: idsOf(".tb-left"), right: idsOf(".tb-right") };
 			});
 
-			// 왼쪽은 정보 넷뿐이다 — 조작은 트리거 하나이고 그건 곧 표식이다.
+			// 왼쪽은 정보 넷뿐이다 — 트리거와 PR 칩은 누를 수 있지만 둘 다 곧 표식이다.
 			expect(groups.left).toEqual([
 				"tb-picker",
-				"base-label",
+				"pr-chip",
 				"status",
 				"change-totals",
 			]);
