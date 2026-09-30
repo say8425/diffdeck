@@ -284,6 +284,11 @@ const applyRepoLabel = (
 	applyPrChip();
 };
 
+// 칩의 바닥 폭은 번호 글자의 폭으로 잰다. Pretendard는 `font-display: swap`
+// 이라 그 파일이 측정 뒤에 도착하면 시스템 폰트로 잰 값이 남는다 — 바닥이
+// 좁으면 번호가 잘리고 넓으면 트리거 몫을 빼앗는다. 폰트가 올 때마다 다시 잰다.
+document.fonts.addEventListener("loadingdone", () => applyPrChip());
+
 /**
  * 브랜치별 PR을 받아 칩과 (열려 있으면) 피커 행에 얹는다.
  *

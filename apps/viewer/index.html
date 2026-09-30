@@ -5,7 +5,103 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>diffdeck</title>
 		<style>
+			/* 폰트 — UI는 Pretendard, 코드는 JetBrains Mono(한글은 D2Coding).
+			   파일은 전부 이 뷰어가 직접 싣는다(fonts/README.md). 시스템 폰트에
+			   맡기면 OS마다 화면이 달라지고, 실제로 같은 레이아웃 e2e가 macOS와
+			   Linux CI에서 서로 다른 폭을 쟀다.
+
+			   `font-display: swap` — 로컬 서버라 수십 ms면 도착하지만, 그 사이
+			   글자를 숨기지는 않는다. 바뀐 글꼴로 폭이 달라지는 곳(PR 칩의 바닥
+			   폭)은 main.ts가 `document.fonts`의 loadingdone에서 다시 잰다. */
+			@font-face {
+				font-family: "Pretendard Variable";
+				font-style: normal;
+				font-weight: 45 920;
+				font-display: swap;
+				src: url("fonts/PretendardVariable.woff2") format("woff2-variations");
+			}
+			/* JetBrains Mono는 Fontsource의 서브셋 그대로다 — unicode-range도 그
+			   패키지의 것을 옮겼다. 라틴·라틴 확장만 싣고, 정체·이탤릭 둘 다
+			   둔다(테마가 주석 등을 이탤릭으로 칠한다 — 없으면 합성 기울임이 된다). */
+			@font-face {
+				font-family: "JetBrains Mono Variable";
+				font-style: normal;
+				font-weight: 100 800;
+				font-display: swap;
+				src: url("fonts/jetbrains-mono-latin-wght-normal.woff2")
+					format("woff2-variations");
+				unicode-range:
+					U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+					U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+					U+2212, U+2215, U+FEFF, U+FFFD;
+			}
+			@font-face {
+				font-family: "JetBrains Mono Variable";
+				font-style: normal;
+				font-weight: 100 800;
+				font-display: swap;
+				src: url("fonts/jetbrains-mono-latin-ext-wght-normal.woff2")
+					format("woff2-variations");
+				unicode-range:
+					U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+					U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+					U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+			}
+			@font-face {
+				font-family: "JetBrains Mono Variable";
+				font-style: italic;
+				font-weight: 100 800;
+				font-display: swap;
+				src: url("fonts/jetbrains-mono-latin-wght-italic.woff2")
+					format("woff2-variations");
+				unicode-range:
+					U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+					U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+					U+2212, U+2215, U+FEFF, U+FFFD;
+			}
+			@font-face {
+				font-family: "JetBrains Mono Variable";
+				font-style: italic;
+				font-weight: 100 800;
+				font-display: swap;
+				src: url("fonts/jetbrains-mono-latin-ext-wght-italic.woff2")
+					format("woff2-variations");
+				unicode-range:
+					U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+					U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+					U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+			}
+			/* JetBrains Mono엔 한글이 없어 코드의 한글은 여기로 떨어진다.
+			   **unicode-range를 한글로 좁힌 것이 계약이다** — JetBrains Mono는
+			   라틴 서브셋만 실어 박스 문자(─) 같은 글자가 없는데, 범위가 없으면
+			   브라우저가 그 한 글자를 그리려고 D2Coding 1.5MB를 받는다(한글이 없는
+			   diff에서도). 좁혀 두면 그런 글자는 시스템 monospace로 떨어진다. 범위: 한글 자모·호환 자모·확장 A/B·음절·
+			   반각 호환 자모. 볼드는 싣지 않았다(합성 볼드 — fonts/README.md). */
+			@font-face {
+				font-family: "D2Coding";
+				font-style: normal;
+				font-weight: 400;
+				font-display: swap;
+				src: url("fonts/d2coding-full.woff2") format("woff2");
+				unicode-range:
+					U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7A3, U+D7B0-D7FF,
+					U+FFA0-FFDC;
+			}
 			:root {
+				/* 끝의 시스템 폰트들은 폰트 파일을 못 받았을 때(서빙 실패)의 폴백이다. */
+				--vd-font-ui:
+					"Pretendard Variable", system-ui, -apple-system, "Segoe UI",
+					sans-serif;
+				--vd-font-code:
+					"JetBrains Mono Variable", "D2Coding", ui-monospace, "SF Mono", Menlo,
+					Consolas, monospace;
+				/* 두 vendored 엔진에 폰트를 넘기는 통로. 둘 다 shadow DOM이라 페이지
+				   CSS는 닿지 않지만 커스텀 프로퍼티는 상속으로 넘어간다 — 엔진이
+				   `var(--diffs-font-family, 기본값)`·`--trees-font-family-override`로
+				   읽도록 이미 열어 둔 자리다(엔진 코드는 손대지 않는다). */
+				--diffs-font-family: var(--vd-font-code);
+				--diffs-header-font-family: var(--vd-font-ui);
+				--trees-font-family-override: var(--vd-font-ui);
 				--vd-bg: #141415;
 				--vd-inset: #070707;
 				--vd-fg: #adadb1;
@@ -22,11 +118,7 @@
 				height: 100%;
 				background: var(--vd-bg);
 				color: var(--vd-fg);
-				font-family:
-					system-ui,
-					-apple-system,
-					"Segoe UI",
-					sans-serif;
+				font-family: var(--vd-font-ui);
 			}
 			#app {
 				display: grid;
