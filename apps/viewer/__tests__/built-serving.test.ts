@@ -60,7 +60,8 @@ describe("built bundle serving", () => {
 		const urls = [...html.matchAll(/url\("(fonts\/[^"]+)"\)/g)].map(
 			(m) => m[1],
 		);
-		expect(urls.length).toBeGreaterThanOrEqual(6);
+		// Pretendard · JetBrains Mono 정체·이탤릭 · D2Coding
+		expect(new Set(urls).size).toBe(4);
 		for (const u of new Set(urls)) {
 			const res = await fetch(`${base}/${u}`);
 			expect(res.status).toBe(200);

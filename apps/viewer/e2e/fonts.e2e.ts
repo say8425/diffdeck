@@ -62,8 +62,9 @@ test.describe("fonts", () => {
 			expect(await statusOf(page, "JetBrains Mono Variable")).toContain(
 				"loaded",
 			);
-			// 한글이 없는 diff에서는 D2Coding(1.5MB)을 받지 않는다.
-			expect(await statusOf(page, "D2Coding")).not.toContain("loaded");
+			// 한글이 없는 diff에서는 D2Coding(1.5MB)을 받지 않는다 — 받는 중("loading")도
+			// 아니어야 한다.
+			expect(await statusOf(page, "D2Coding")).toEqual(["unloaded"]);
 		} finally {
 			await stop();
 		}
@@ -89,27 +90,98 @@ test.describe("fonts", () => {
 		}
 	});
 
-	// D2Coding의 unicode-range를 한글로 좁힌 것이 계약이다. JetBrains Mono는
-	// 라틴 서브셋만 실어서 박스 문자(─) 같은 글자가 없는데, 범위가 없으면
-	// 브라우저가 그 한 글자를 그리려고 다음 폴백인 D2Coding 1.5MB를 받는다.
-	// ①의 "한글 없으면 안 받는다"는 범위가 없어도 참이라 이걸 못 가른다.
-	test("③ glyphs JetBrains Mono lacks do not pull in D2Coding", async ({
+	// D2Coding의 unicode-range를 한글로 좁힌 것이 계약이다. 기준 글자는 **한자**다:
+	// JetBrains Mono엔 없고 D2Coding엔 있다(둘 다 fontTools로 cmap 확인). 범위가
+	// 없으면 브라우저가 그 한 글자를 그리려고 D2Coding 1.5MB를 받는다. ①의 "한글
+	// 없으면 안 받는다"는 범위가 없어도 참이라 이걸 못 가른다. 기준 글자를 고를 때
+	// 두 폰트의 cmap을 확인할 것 — 한때 박스 문자(─)였는데, JetBrains Mono를
+	// 서브셋에서 전체 폰트로 바꾸자 JBM이 그 글자를 갖게 되어 판별력을 잃었다.
+	test("③ non-Hangul glyphs JetBrains Mono lacks do not pull in D2Coding", async ({
 		page,
 	}) => {
 		const { url, repoDir, stop } = await launchViewer([]);
 		try {
 			writeFileSync(
 				join(repoDir, "src", "hello.ts"),
-				'export const hello = (): string => "hello, world"; // ──── box\n',
+				'export const hello = (): string => "hello, world"; // 漢字 box ─── →\n',
 			);
 			await page.goto(url);
 			await expect(
-				page.locator("diffs-container [data-line]").filter({ hasText: "────" }),
+				page.locator("diffs-container [data-line]").filter({ hasText: "漢字" }),
 			).toBeVisible();
 			await page.evaluate(() => document.fonts.ready);
 			// 로드가 시작될 틈을 준다 — 범위가 없으면 여기서 loading/loaded가 된다.
 			await page.waitForTimeout(500);
 			expect(await statusOf(page, "D2Coding")).toEqual(["unloaded"]);
+		} finally {
+			await stop();
+		}
+	});
+
+	// 코드의 기호가 전부 JetBrains Mono로 그려지는가 — 선언된 폰트가 아니라
+	// **실제로 글리프를 그린 폰트**를 DevTools 프로토콜로 읽는다. 한때 Fontsource
+	// 라틴 서브셋을 실었는데 화살표·수학 기호·박스 문자가 빠져 있어 그 글자만
+	// OS 폰트(macOS Menlo, Linux DejaVu Sans Mono)로 그려졌다 — 계산된 font-family는
+	// 그대로라 ①로는 원리적으로 안 보인다.
+	test("④ arrows, math and box-drawing glyphs are drawn by JetBrains Mono", async ({
+		page,
+	}) => {
+		const { url, repoDir, stop } = await launchViewer([]);
+		try {
+			writeFileSync(
+				join(repoDir, "src", "hello.ts"),
+				"export const hello = (): string => 'a'; // → ⇒ ≠ ≤ ≥ ─ │ ┌ λ ∞\n",
+			);
+			await page.goto(url);
+			const line = page
+				.locator("diffs-container [data-line]")
+				.filter({ hasText: "→ ⇒" })
+				.first();
+			await expect(line).toBeVisible();
+			await page.evaluate(() => document.fonts.ready);
+
+			const cdp = await page.context().newCDPSession(page);
+			await cdp.send("DOM.enable");
+			await cdp.send("CSS.enable");
+			await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+			// 그 줄의 텍스트 노드마다 "실제로 글리프를 그린 폰트"를 묻는다. 워커
+			// 하이라이트가 줄을 갈아 끼울 수 있어 poll이 매번 새로 찾는다.
+			const renderedFamilies = async (): Promise<string[]> => {
+				const count = await page.evaluate(() => {
+					const texts: Text[] = [];
+					for (const host of document.querySelectorAll("diffs-container")) {
+						for (const row of host.shadowRoot?.querySelectorAll(
+							"[data-line]",
+						) ?? []) {
+							if (!row.textContent?.includes("→ ⇒")) continue;
+							const walker = document.createTreeWalker(
+								row,
+								NodeFilter.SHOW_TEXT,
+							);
+							for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+								texts.push(n as Text);
+							}
+						}
+					}
+					(globalThis as { ddTexts?: Text[] }).ddTexts = texts;
+					return texts.length;
+				});
+				const families = new Set<string>();
+				for (let i = 0; i < count; i++) {
+					const { result } = await cdp.send("Runtime.evaluate", {
+						expression: `globalThis.ddTexts[${i}]`,
+					});
+					const { nodeId } = await cdp.send("DOM.requestNode", {
+						objectId: result.objectId as string,
+					});
+					const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", {
+						nodeId,
+					});
+					for (const f of fonts) families.add(f.familyName);
+				}
+				return [...families].sort();
+			};
+			await expect.poll(renderedFamilies).toEqual(["JetBrains Mono"]);
 		} finally {
 			await stop();
 		}

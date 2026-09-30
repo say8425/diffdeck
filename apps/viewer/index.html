@@ -4,6 +4,24 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>diffdeck</title>
+		<!-- 늘 쓰는 두 폰트는 CSS를 파싱하기 전에 받기 시작한다 — swap으로 시스템
+		     폰트가 먼저 그려졌다 바뀌는 깜박임을 줄인다. D2Coding은 한글이 있을
+		     때만 필요하므로 미리 받지 않는다(unicode-range 계약). crossorigin은
+		     폰트 preload가 캐시 항목을 @font-face 요청과 맞추는 데 필요하다. -->
+		<link
+			rel="preload"
+			href="fonts/PretendardVariable.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
+		<link
+			rel="preload"
+			href="fonts/JetBrainsMono-wght.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
 		<style>
 			/* 폰트 — UI는 Pretendard, 코드는 JetBrains Mono(한글은 D2Coding).
 			   파일은 전부 이 뷰어가 직접 싣는다(fonts/README.md). 시스템 폰트에
@@ -16,67 +34,38 @@
 			@font-face {
 				font-family: "Pretendard Variable";
 				font-style: normal;
-				font-weight: 45 920;
+				font-weight: 45 930;
 				font-display: swap;
 				src: url("fonts/PretendardVariable.woff2") format("woff2-variations");
 			}
-			/* JetBrains Mono는 Fontsource의 서브셋 그대로다 — unicode-range도 그
-			   패키지의 것을 옮겼다. 라틴·라틴 확장만 싣고, 정체·이탤릭 둘 다
-			   둔다(테마가 주석 등을 이탤릭으로 칠한다 — 없으면 합성 기울임이 된다). */
+			/* JetBrains Mono는 공식 가변 폰트 전체다(서브셋이 아니다 — 화살표·수학
+			   기호·박스 문자까지 있어야 코드가 전부 이 폰트로 그려진다. Fontsource
+			   서브셋은 그 글자들이 빠져 OS 폰트로 떨어졌다). 이탤릭도 둔다 —
+			   pierre-dark는 Markdown 이탤릭 등에 italic을 쓰고, 없으면 합성
+			   기울임이 된다. */
 			@font-face {
 				font-family: "JetBrains Mono Variable";
 				font-style: normal;
 				font-weight: 100 800;
 				font-display: swap;
-				src: url("fonts/jetbrains-mono-latin-wght-normal.woff2")
-					format("woff2-variations");
-				unicode-range:
-					U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-					U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-					U+2212, U+2215, U+FEFF, U+FFFD;
-			}
-			@font-face {
-				font-family: "JetBrains Mono Variable";
-				font-style: normal;
-				font-weight: 100 800;
-				font-display: swap;
-				src: url("fonts/jetbrains-mono-latin-ext-wght-normal.woff2")
-					format("woff2-variations");
-				unicode-range:
-					U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
-					U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
-					U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+				src: url("fonts/JetBrainsMono-wght.woff2") format("woff2-variations");
 			}
 			@font-face {
 				font-family: "JetBrains Mono Variable";
 				font-style: italic;
 				font-weight: 100 800;
 				font-display: swap;
-				src: url("fonts/jetbrains-mono-latin-wght-italic.woff2")
+				src: url("fonts/JetBrainsMono-Italic-wght.woff2")
 					format("woff2-variations");
-				unicode-range:
-					U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-					U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-					U+2212, U+2215, U+FEFF, U+FFFD;
-			}
-			@font-face {
-				font-family: "JetBrains Mono Variable";
-				font-style: italic;
-				font-weight: 100 800;
-				font-display: swap;
-				src: url("fonts/jetbrains-mono-latin-ext-wght-italic.woff2")
-					format("woff2-variations");
-				unicode-range:
-					U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
-					U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
-					U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 			}
 			/* JetBrains Mono엔 한글이 없어 코드의 한글은 여기로 떨어진다.
-			   **unicode-range를 한글로 좁힌 것이 계약이다** — JetBrains Mono는
-			   라틴 서브셋만 실어 박스 문자(─) 같은 글자가 없는데, 범위가 없으면
-			   브라우저가 그 한 글자를 그리려고 D2Coding 1.5MB를 받는다(한글이 없는
-			   diff에서도). 좁혀 두면 그런 글자는 시스템 monospace로 떨어진다. 범위: 한글 자모·호환 자모·확장 A/B·음절·
-			   반각 호환 자모. 볼드는 싣지 않았다(합성 볼드 — fonts/README.md). */
+			   **unicode-range를 한글로 좁힌 것이 계약이다** — D2Coding은 한자·
+			   가나 등도 갖고 있어서, 범위가 없으면 JetBrains Mono에 없는 그런 글자
+			   하나를 그리려고 한글이 없는 diff에서도 1.5MB를 받고 그 글자만
+			   D2Coding의 모양이 된다. 좁혀 두면 그런 글자는 시스템 폰트로 떨어진다.
+			   범위: 한글 자모·호환 자모·확장 A/B·음절·반각 호환 자모와 원화 기호
+			   (₩ U+20A9, 전각 ￦ U+FFE6 — JetBrains Mono에 없다). 볼드는 싣지
+			   않았다(합성 볼드 — fonts/README.md). */
 			@font-face {
 				font-family: "D2Coding";
 				font-style: normal;
@@ -84,8 +73,8 @@
 				font-display: swap;
 				src: url("fonts/d2coding-full.woff2") format("woff2");
 				unicode-range:
-					U+1100-11FF, U+3130-318F, U+A960-A97F, U+AC00-D7A3, U+D7B0-D7FF,
-					U+FFA0-FFDC;
+					U+1100-11FF, U+20A9, U+3130-318F, U+A960-A97F, U+AC00-D7A3,
+					U+D7B0-D7FF, U+FFA0-FFDC, U+FFE6;
 			}
 			:root {
 				/* 끝의 시스템 폰트들은 폰트 파일을 못 받았을 때(서빙 실패)의 폴백이다. */
