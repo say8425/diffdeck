@@ -1,4 +1,4 @@
-// diff-grab e2e 18종: 거터/텍스트 두 경로 모두에서 실제 브라우저 제스처로
+// diff-grab e2e 19종: 거터/텍스트 두 경로 모두에서 실제 브라우저 제스처로
 // 선택을 만들고(드래그·더블/트리플클릭), 팝오버·클립보드 인코딩까지 실
 // Chrome으로 검증한다.
 // happy-dom 유닛 테스트(grab/*.test.ts)는 순수 로직만 커버하므로,
@@ -847,5 +847,61 @@ test("⑱ 드래그를 끈 거터도 shift클릭 확장과 재클릭 해제는 �
 	// 그 한 줄을 다시 클릭하면 해제된다 — 드래그 켠 경로의
 	// pendingSingleLineUnselect와 같은 결과.
 	await dragSelect(page, center(a), center(a));
+	await expect.poll(selectedCount).toBe(0);
+});
+
+test("⑲ 라벨 줄의 ✕는 줄 높이를 늘리지 않고, 누르면 Esc와 같이 닫힌다 — 거터 선택까지", async ({
+	page,
+	viewerUrl,
+}) => {
+	await page.goto(viewerUrl);
+	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
+
+	// 거터 경로로 연다 — 팝오버가 엔진 라인 선택을 "소유"하는 유일한 경로라,
+	// ✕가 close() 공통 경로(onClosed → clearSelectedLines)를 타는지 여기서만
+	// 판별된다. 텍스트 경로로 열면 지울 선택이 애초에 없어 vacuous하다.
+	const container = page
+		.locator("diffs-container")
+		.filter({ has: page.locator('[data-fold="src/hello.ts"]') });
+	await expect(container).toBeVisible();
+	const selectedCount = (): Promise<number> =>
+		container.evaluate(
+			(el) =>
+				el.shadowRoot?.querySelectorAll("[data-selected-line]").length ?? 0,
+		);
+
+	const cell = await container
+		.locator("[data-column-number]")
+		.first()
+		.boundingBox();
+	if (!cell) throw new Error("gutter cell not visible");
+	const center = { x: cell.x + cell.width / 2, y: cell.y + cell.height / 2 };
+	await dragSelect(page, center, center);
+	await container.locator("[data-utility-button]").click();
+	const popover = page.locator("#grab-popover");
+	await expect(popover).toBeVisible();
+	expect(await selectedCount()).toBeGreaterThan(0);
+
+	// 18px 버튼이 15px 라벨 줄을 키우면 팝오버 높이가 POPOVER_SIZE와 어긋난다
+	// (배치는 open() 때 한 번만 계산된다). 줄 자신의 높이를 읽으면 CSS를
+	// 되읽을 뿐이라, 버튼을 뺐을 때의 팝오버 높이와 견준다.
+	const close = popover.locator(".grab-close");
+	const box = await popover.boundingBox();
+	const btn = await close.boundingBox();
+	if (!box || !btn) throw new Error("popover parts not visible");
+	const withoutButton = await close.evaluate((el) => {
+		const pop = el.closest("#grab-popover") as HTMLElement;
+		(el as HTMLElement).style.display = "none";
+		const h = pop.getBoundingClientRect().height;
+		(el as HTMLElement).style.display = "";
+		return h;
+	});
+	expect(box.height).toBe(withoutButton);
+	// 오른쪽 상단 — 버튼이 팝오버 오른쪽 패딩(8px) 안쪽 끝에 붙는다.
+	expect(box.x + box.width - (btn.x + btn.width)).toBeLessThanOrEqual(8);
+	expect(btn.y - box.y).toBeLessThanOrEqual(8);
+
+	await close.click();
+	await expect(popover).toBeHidden();
 	await expect.poll(selectedCount).toBe(0);
 });
