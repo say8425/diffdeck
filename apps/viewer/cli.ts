@@ -51,7 +51,7 @@ export interface CliDeps {
 	exit: (code: number) => never;
 	onSignal: (signal: "SIGINT" | "SIGTERM", handler: () => void) => void;
 	cwd: () => string;
-	/** 프로세스를 재오염 불가능한 경로로 옮긴다. 예방과 복구 양쪽에 쓰인다. */
+	/** 프로세스를 지워질 수 없는 경로로 옮긴다. 예방과 복구 양쪽에 쓰인다. */
 	toSafeCwd: () => void;
 	viewerDir: string;
 	prewarm: (opts: {
@@ -85,11 +85,9 @@ export const run = (argv: string[], deps: CliDeps): void => {
 	const port = args.port ?? deps.resolvePort();
 	const repo = deps.cwd();
 
-	// repo를 읽었으니 프로세스 cwd는 더 이상 쓰이지 않는다(이후 git 호출
-	// 17곳은 전부 repo를 명시적으로 넘긴다). 여기서 이탈해 두면 이 디렉토리가
-	// — 대개 worktree라 작업이 끝나면 삭제된다 — 나중에 지워져도 데몬이
-	// 살아남는다. cwd가 unlink된 프로세스는 자식 프로세스를 하나도 띄울 수
-	// 없어(OS 제약) git 호출이 repo와 무관하게 전부 죽는다.
+	// repo를 읽은 직후에 cwd를 떠난다(먼저 떠나면 repo가 `/`가 된다). 이후 git·gh 호출은
+	// 모두 repo를 명시하므로, 대개 지워질 워크트리인 이 디렉토리가 삭제돼도 데몬이
+	// 산다 — cwd가 삭제된 프로세스는 자식 프로세스를 띄울 수 없다(.claude/rules/server.md).
 	deps.toSafeCwd();
 
 	let handle: ReturnType<typeof startDiffServer>;
@@ -106,10 +104,7 @@ export const run = (argv: string[], deps: CliDeps): void => {
 	}
 
 	const url = deps.buildUrl({
-		// handle.server.port is `number | undefined` in bun-types (unix sockets
-		// have no port); we always request an explicit TCP port above, so the
-		// bound port is always defined and always equals it — fall back to the
-		// requested port defensively rather than asserting non-null.
+		// bun-types makes the port optional (unix sockets); we always bind TCP.
 		port: handle.server.port ?? port,
 		repo,
 		token: handle.token,
@@ -126,9 +121,6 @@ export const run = (argv: string[], deps: CliDeps): void => {
 	deps.log(url);
 	deps.log("Press Ctrl+C to stop.");
 
-	// 브라우저가 뜨는 동안 diff 파이프라인을 미리 돌려 payload 캐시를 데운다 —
-	// 첫 화면 요청이 캐시 히트(또는 single-flight 합류)로 떨어져 콜드 로드가
-	// 짧아진다. best-effort fire-and-forget.
 	deps.prewarm({
 		port: handle.server.port ?? port,
 		repo,
@@ -160,8 +152,7 @@ export const realDeps: CliDeps = {
 				stderr: "ignore",
 			}).unref();
 		} catch {
-			// Opening the browser is best-effort — the URL is already printed and
-			// the server keeps running even if no opener is available (headless/CI).
+			// Best-effort: the URL is already printed (headless/CI has no opener).
 		}
 	},
 	installSkill: (argv) => {

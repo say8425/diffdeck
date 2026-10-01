@@ -15,8 +15,7 @@ export interface ParsedArgs {
 const parsePort = (raw: string | undefined): number | undefined => {
 	if (!raw) return undefined;
 	const n = Number.parseInt(raw, 10);
-	// 0 is a valid, meaningful value here (ask the OS for any free port —
-	// Bun.serve({ port: 0 }) honors it), so the lower bound is inclusive.
+	// 0 is valid: Bun.serve({ port: 0 }) asks the OS for any free port.
 	return Number.isInteger(n) && n >= 0 && n < 65536 ? n : undefined;
 };
 

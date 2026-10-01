@@ -16,9 +16,7 @@ export const buildDiffViewerUrl = (params: {
 		token: params.token,
 	});
 	if (params.mode) query.set("mode", params.mode);
-	// Append view flags only when they differ from the viewer's own defaults
-	// (untracked off, watch off, flatten on, tree left, style unified, sidebar
-	// visible, fold-with-tree off).
+	// View flags go in only when they differ from the viewer's defaults.
 	if (params.untracked) query.set("untracked", "1");
 	if (params.watch) query.set("watch", "1");
 	if (params.flatten === false) query.set("flatten", "0");

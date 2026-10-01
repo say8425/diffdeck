@@ -1,17 +1,9 @@
-// Deterministic fixture repo for e2e specs: a committed base commit, then
-// working-tree edits so the diff viewer has something to render on first
-// load. Mirrors the mkdtempSync + git-seed pattern from
-// apps/viewer/__tests__/cli-smoke.test.ts (which uses Bun's `$` shell — not
-// available under Playwright's Node runtime, see fixtures/proc.ts's header),
-// extended with the shapes Tasks 7-8 need: two text diffs (for tree nav), a
-// binary image diff (Old/New card), and an untracked file (`--untracked`).
+// Playwright가 Node로 돌리므로 Bun `$` 대신 spawnSync로 git을 부른다(proc.ts).
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// Two distinct 1x1 PNGs (red, then blue) so assets/logo.png has a real binary
-// diff: committed as red, overwritten in the working tree as blue.
 const RED_PNG_BASE64 =
 	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 const BLUE_PNG_BASE64 =
@@ -32,89 +24,54 @@ export interface FixtureRepo {
 	cleanup: () => void;
 }
 
+/**
+ * 전부 opt-in이다 — 기본 픽스처를 전제로 쓴 스펙들이 바이트 단위로 같은
+ * 리포를 보게 둔다.
+ */
 export interface FixtureRepoOptions {
 	/**
-	 * Extra `src/bulk-N.ts` files, each fully rewritten in the working tree, to
-	 * make the rendered diff tall enough to actually scroll — which is what
-	 * drives CodeView's virtualization to mount and unmount files. The default
-	 * fixture renders shorter than the viewport (nothing scrolls), so a spec
-	 * that needs scroll behaviour must opt in. Kept opt-in so every other spec
-	 * sees the byte-identical repo it was written against.
+	 * 통째로 고친 `src/bulk-N.ts`를 더한다. 기본 픽스처는 뷰포트보다 짧아
+	 * 스크롤(가상화의 마운트·언마운트)이 일어나지 않는다.
 	 */
 	bulkFiles?: number;
-	/**
-	 * Opt-in: commit a `pnpm-lock.yaml` with this many lines and edit part of
-	 * it in the working tree. The viewer auto-collapses lockfiles on first
-	 * sight, so this exercises the "huge collapsed file mounts at the bottom"
-	 * path (lockfile-freeze.e2e.ts) without inflating any other spec's repo.
-	 */
+	/** 이 줄 수의 `pnpm-lock.yaml`을 커밋하고 일부를 고친다(lockfile은 접혀서 뜬다). */
 	lockfileLines?: number;
-	/**
-	 * Opt-in: commit `src/mid/deep/nested.ts` (both `mid` and `deep` are
-	 * single-child directories) and edit it in the working tree, so the
-	 * sidebar's `flattenEmptyDirectories` feature actually has a chain to
-	 * compress into one row. Kept opt-in for the same reason as `bulkFiles`/
-	 * `lockfileLines` above.
-	 */
+	/** 단일 자식 디렉토리 사슬(`src/mid/deep/nested.ts`) — 사이드바 flatten의 대상. */
 	nestedChainFile?: boolean;
 	/**
-	 * Opt-in: commit `src/한글파일.ts` and edit it in the working tree, so specs
-	 * can assert a non-ASCII filename actually renders diff content (regression
-	 * guard for the `git diff --raw`/`ls-files` C-quoting bug — see
-	 * apps/viewer/server/diff.ts's `parseRawZ`).
+	 * `src/한글파일.ts` — 비ASCII 파일명이 diff를 그리는지 본다(git의 C-quoting,
+	 * server/diff.ts의 `parseRawZ`).
 	 */
 	koreanFilename?: boolean;
-	/**
-	 * Opt-in: commit `src/big.ts` with this many lines and fully rewrite it in
-	 * the working tree. bulkFiles(200줄)보다 훨씬 큰 하이라이트 대상 파일로,
-	 * 오버스캔 이탈 → 재진입 시의 전체 파일 동기 재토크나이즈 비용(수백 ms)을
-	 * 측정하는 retokenize-cache.e2e.ts 전용. 다른 스펙의 픽스처를 바꾸지 않도록
-	 * opt-in (bulkFiles/lockfileLines와 같은 이유).
-	 */
+	/** 이 줄 수의 `src/big.ts`를 커밋하고 통째로 고친다(변경량은 줄 수의 두 배). */
 	bigFileLines?: number;
 	/**
-	 * Opt-in: commit `src/long.ts` with LONG_FILE_LINES lines and edit only a
-	 * handful of them in the working tree — a file that is long but whose diff
-	 * is small. large-file-collapse.e2e.ts 전용 (다른 스펙의 픽스처를 바꾸지
-	 * 않도록 opt-in — bulkFiles/lockfileLines와 같은 이유).
+	 * 긴 `src/long.ts`에서 몇 줄만 고친다 — 자동 접힘이 파일 길이가 아니라
+	 * 변경량으로 판정되는지 가른다.
 	 */
 	longFileSmallEdit?: boolean;
 	/**
-	 * Opt-in: skip every working-tree edit so the diff is empty on launch
-	 * (the untracked `data.txt` is still written — hidden behind the
-	 * untracked toggle). Also renames the branch to `main` so the resolved
-	 * base label is deterministic. empty-state.e2e.ts 전용.
+	 * 워킹트리를 고치지 않아 기동 시 diff가 비어 있다. untracked `data.txt`는
+	 * 그대로 둔다(토글 뒤에 숨은 변경).
 	 */
 	clean?: boolean;
 	/**
-	 * Opt-in (clean과 함께 사용): rename to main, then branch to `feature`
-	 * and commit one edit of src/hello.ts there — the "work is committed,
-	 * working tree clean" shape the empty-state card points at.
-	 * empty-state.e2e.ts 전용.
+	 * `feature` 브랜치에 `src/hello.ts` 수정 하나를 커밋하고 그 브랜치에 남는다.
+	 * `clean`과 함께면 "작업은 커밋됐고 워킹트리는 깨끗한" 모양이다.
 	 */
 	featureBranchCommit?: boolean;
 	/**
-	 * Opt-in: commit `src/ctx.ts` with two lines that get deleted in the working
-	 * tree, separated by unchanged lines — so the unified diff renders
-	 * `-drop-1` / ` keep-b` / ` keep-c` / `-drop-2`. An old-side range across
-	 * both deletions therefore spans context rows, which is the shape that
-	 * distinguishes a correct `lineFor` (reads `data-alt-line`) from a naive
-	 * `row.side === side` filter. grab-highlight.e2e.ts 전용.
+	 * `src/ctx.ts`에서 context 행을 사이에 둔 두 줄을 지운다. old 쪽 범위가
+	 * context 행을 가로질러, `data-alt-line`을 읽는 `lineFor`와 `row.side`
+	 * 필터를 가른다.
 	 */
 	contextBetweenDeletions?: boolean;
-	/**
-	 * Opt-in: rename to `main` and create these extra branches at the base
-	 * commit, so the compare-base picker has a list worth filtering. Kept
-	 * opt-in like every other shape here — the default fixture must stay
-	 * byte-identical for the ~30 specs written against it.
-	 * ref-picker.e2e.ts 전용.
-	 */
+	/** base 커밋에 이 브랜치들을 더 만든다(피커가 거를 목록). */
 	branches?: string[];
 }
 
-// Wide enough that each line is one diff row; deliberately free of the words
-// other specs search for (e.g. "hello"), so opting in can never shift their
-// match counts.
+// 다른 스펙이 찾는 단어(예: "hello")를 넣지 않는다 — opt-in이 그 스펙들의
+// 매치 수를 바꾸지 않게.
 const bulkFileLines = (marker: string, length = 200): string =>
 	`${Array.from(
 		{ length },
@@ -122,14 +79,11 @@ const bulkFileLines = (marker: string, length = 200): string =>
 			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
 	).join("\n")}\n`;
 
-// 길지만 변경은 작은 파일: 자동 접힘이 "파일 길이"가 아니라 "변경량"으로
-// 판정되는지 가르는 픽스처. 구 로직(파일 전량 카운트)이면 4,000줄로 읽혀
-// 접히고, 변경량(6줄)으로 읽으면 접히지 않는다.
 const LONG_FILE_LINES = 2000;
 const LONG_FILE_EDITED_LINES = 3;
 
-// pnpm-lock.yaml 흉내: 실제 lockfile처럼 패키지 블록이 반복되는 YAML.
-// mutate 시 20줄마다 버전만 바꿔 수천 줄짜리 현실적인 diff를 만든다.
+// pnpm-lock.yaml 흉내. mutate는 20줄마다 한 블록만 바꿔 변경량을 파일 길이보다
+// 훨씬 작게 둔다 — large-file-collapse.e2e.ts의 이름 규칙 스펙이 여기에 기댄다.
 const lockfileContents = (lines: number, mutate: boolean): string => {
 	const out: string[] = ["lockfileVersion: '9.0'", "packages:"];
 	for (let i = 2; i < lines; i += 2) {
@@ -155,7 +109,6 @@ export const makeFixtureRepo = (
 	mkdirSync(join(dir, "src"), { recursive: true });
 	mkdirSync(join(dir, "assets"), { recursive: true });
 
-	// Committed base.
 	writeFileSync(
 		join(dir, "src", "hello.ts"),
 		'export const hello = (): string => "hello";\n',
@@ -214,9 +167,8 @@ export const makeFixtureRepo = (
 	git(dir, ["add", "-A"]);
 	git(dir, ["commit", "-qm", "base"]);
 
-	// 옵션과 무관하게 항상 고정한다. git init은 머신의 init.defaultBranch를
-	// 따르므로(개발자 로컬 main, CI 러너 master) 고정하지 않으면 브랜치명을
-	// 건드리는 스펙이 개발자 머신에서만 통과한다 — 실제로 CI에서 한 번 밟았다.
+	// init.defaultBranch가 머신마다 달라(main/master) 늘 main으로 고정한다 —
+	// 안 하면 브랜치명을 보는 스펙이 일부 머신에서만 통과한다.
 	git(dir, ["branch", "-M", "main"]);
 	for (const branch of options.branches ?? []) {
 		git(dir, ["branch", branch]);
@@ -232,7 +184,6 @@ export const makeFixtureRepo = (
 	}
 
 	if (!options.clean) {
-		// Working-tree changes: two text diffs, one binary image diff.
 		writeFileSync(
 			join(dir, "src", "hello.ts"),
 			'export const hello = (): string => "hello, world";\n',

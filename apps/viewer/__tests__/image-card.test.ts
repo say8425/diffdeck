@@ -280,7 +280,6 @@ describe("ensureImageCard", () => {
 		const first = root.querySelector("[data-image-card]");
 		expect(first?.getAttribute("data-image-card")).toBe("");
 
-		// A second undefined-version call is idempotent ("" === "" → no replace).
 		ensureImageCard(host, entry({ version: undefined }), false, urlFor);
 		expect(root.querySelector("[data-image-card]")).toBe(first);
 	});

@@ -6,41 +6,18 @@ import { getDiffFiles } from "../server/diff.ts";
 import { repoFingerprint } from "../server/fingerprint.ts";
 import { getRefs } from "../server/refs.ts";
 
-/**
- * 출력이 64KB를 넘는 git 호출이 서버 함수를 **동시에** 여러 번 불러도 settle하는가.
- * Bun 1.3.x의 `$`는 그런 호출에서 자식이 끝났는데도 promise가 영영 settle하지 않을
- * 수 있고, 호출이 겹치면 거의 확정이다(업스트림은 1.4.0에서 수정). 동시 호출은
- * 실제로 일어난다 — 선택이 다른 `/api/diff` 요청들, prewarm, watch 폴이 서로 다른
- * flight 키로 겹친다.
- *
- * 한 케이스가 한 호출처를 지킨다: 지문의 `status -uall`, `getDiffFiles`의
- * `diff --raw`와 `ls-files --others`, `getRefs`의 `for-each-ref`. 앞의
- * 셋은 `$`로 돌아가면 첫 라운드에 확정적으로 죽는다(1.3.12, 각 3/3 실측 —
- * `ls-files` 케이스는 `diff --raw`도 거치므로 그걸 되돌려도 함께 죽는다 — 측정은
- * 목록이 `--name-status`이던 시절에 했고, 지금의 `--raw` 출력은 더 크다).
- *
- * **`for-each-ref` 케이스만 16-way다.** 이 호출의 멈춤은 좁은 구간에서만 난다
- * (8-way에서 참조 600~800개 ≈ 180~240KB — 400개 이하나 2000개에서는 30라운드 동안
- * 한 번도 안 멈췄다). 8-way로는 20라운드를 돌려도 되돌린 코드를 5번 중 3번만
- * 잡았고, 16-way로 겹침을 늘리자 첫 라운드에 11번 중 11번 잡혔다(1.3.12, macOS).
- *
- * 같은 `getRefs`의 `worktree list`도 `gitText`로 옮겼지만 **여기서 지키지 않는다**:
- * 죽은 워크트리 등록 400개로 110KB를 내게 해도 `$`가 8·16-way로 10라운드씩
- * 8번 동안 한 번도 안 멈춰(1.3.12) 판별할 모양을 못 찾았다. 멈춤은 출력 크기만으로
- * 정해지지 않는다.
- *
- * 판별력은 `diff-large-blob.test.ts`와 같다: 행업 단언은 1.3.x에서만 갈리므로 CI의
- * `test-bun13` 잡이 이 파일도 Bun 1.3.14로 돌린다. 개수 단언은 버전 무관. 그 잡은
- * 설치 없이 돌므로 픽스처도 `$` 대신 `Bun.spawnSync`로 만든다 — 1.3.x에서 셋업이
- * 먼저 멈추면 무엇을 재는지 흐려진다.
- */
+// 64KB 넘는 출력을 내는 호출처마다 서버 함수를 동시에 여러 번 불러 Bun 1.3.x `$` never-settle 회귀를 잡는다
+// (CI test-bun13, testing.md). 동시 호출은 실제로 일어난다(선택이 다른 /api/diff·prewarm·watch 폴).
+// for-each-ref는 좁은 출력 구간에서만 멈춰 8-way로는 잘 안 잡히므로 16-way로 겹친다. worktree list는 멈춤을
+// 재현하지 못해 지키지 않는다. 픽스처는 `$` 대신 Bun.spawnSync로 만든다 — 1.3.x에서 셋업이 먼저 멈추면 안 된다.
 
-const STAGED = 1000; // 이름 150자 × 1000 → diff --raw ~250KB
-const LOOSE = 1000; // → ls-files --others ~157KB, status -uall은 둘을 합쳐 ~320KB
-const BRANCHES = 800; // → for-each-ref ~256KB
+// 각 호출의 출력이 64KB 파이프 버퍼를 넘어야 한다.
+const STAGED = 1000;
+const LOOSE = 1000;
+const BRANCHES = 800; // for-each-ref 멈춤이 나는 좁은 구간(참조 600~800개) 안이다 — 바꾸면 판별력을 잃는다
 const CALLS = 8;
 const ROUNDS = 2;
-const REF_CALLS = 16; // getRefs만 — 위 docblock 참고
+const REF_CALLS = 16;
 const REF_ROUNDS = 5;
 const SETTLE_MS = 15_000;
 /** 라운드마다 `settleWithin`이 먼저 터지도록 테스트 상한을 라운드 수에 맞춘다. */
@@ -86,7 +63,7 @@ beforeAll(() => {
 		(_, i) => `create refs/heads/${longName("b", i)} HEAD\n`,
 	).join("");
 	git(repo, ["update-ref", "--stdin"], lines);
-}, 60_000); // 훅의 기본 상한 5초는 부하가 걸리면 넘는다(평소 1.2~1.8초, 한 번 넘는 것을 실측)
+}, 60_000); // 훅의 기본 상한 5초는 부하가 걸리면 넘는다
 
 afterAll(() => {
 	rmSync(repo, { recursive: true, force: true });
@@ -108,7 +85,6 @@ const settleWithin = async <T>(work: Promise<T>, what: string): Promise<T> => {
 	}
 };
 
-/** `fn`을 `calls`번 동시에 부르는 라운드를 `rounds`번 돌려 모든 결과를 모은다. */
 const concurrently = async <T>(
 	what: string,
 	fn: () => Promise<T>,
@@ -170,7 +146,6 @@ test(
 			rounds: REF_ROUNDS,
 		});
 		for (const { refs } of results) {
-			// 만든 브랜치 800개 + main
 			expect(refs.filter((r) => r.kind === "local")).toHaveLength(BRANCHES + 1);
 		}
 	},

@@ -3,7 +3,7 @@ import { parseRawZ } from "../server/diff.ts";
 
 const Z40 = "0".repeat(40);
 
-// git 2.55, `git diff --raw -z --no-abbrev HEAD --` 실측 출력(NUL을 \0로).
+// `git diff --raw -z --no-abbrev HEAD --`의 실제 출력이다(NUL은 \0).
 const SHA1_RAW = [
 	`:000000 100644 ${Z40} da0f8ed91a8f2f0f067b3bdf26265d5ca48cf82c A`,
 	"a.txt",
@@ -65,8 +65,7 @@ test("keeps 64-character SHA-256 object ids whole", () => {
 });
 
 test("an unmerged record has no object ids and still maps to modified", () => {
-	// `getDiffFiles`는 늘 base rev를 넘겨 충돌 중인 파일도 M으로 받지만(실측),
-	// U가 오더라도 필드를 밀리지 않고 캐시 키 없이 넘긴다.
+	// getDiffFiles는 늘 base rev를 넘겨 충돌 중인 파일도 M으로 받는다 — U는 방어용이다.
 	const raw = `:000000 000000 ${Z40} ${Z40} U\0u.txt\0:100644 100644 ${"1".repeat(40)} ${Z40} M\0next.txt\0`;
 	expect(parseRawZ(raw)).toEqual([
 		{ status: "modified", name: "u.txt", oldOid: null, newOid: null },

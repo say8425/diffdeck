@@ -22,12 +22,8 @@ export interface SearchFile {
 	fileDiff: FileDiffMetadata;
 }
 
-/**
- * Reconstruct a file's unified render stream as an ordered row list: context
- * lines once (additions side), deletions on the deletions side, additions on
- * the additions side, top-to-bottom. Requires isPartial=false diffs (full
- * old/new contents), which parseDiffFromFile produces.
- */
+// Rows in unified render order; context lines appear once, on the additions
+// side. Requires isPartial=false diffs (full old/new contents).
 export const buildRows = (fileDiff: FileDiffMetadata): SearchRow[] => {
 	const { additionLines, deletionLines, hunks } = fileDiff;
 	const rows: SearchRow[] = [];
@@ -55,12 +51,12 @@ export const buildRows = (fileDiff: FileDiffMetadata): SearchRow[] => {
 		}
 	};
 
-	let newCursor = 0; // next unemitted additionLines index
+	let newCursor = 0;
 
 	for (const hunk of hunks) {
-		const hunkStart = hunk.additionStart - 1; // 0-based new-file index of hunk start
+		const hunkStart = hunk.additionStart - 1;
 		if (hunkStart > newCursor) {
-			pushAdditions(newCursor, hunkStart - newCursor); // collapsed context before hunk
+			pushAdditions(newCursor, hunkStart - newCursor);
 			newCursor = hunkStart;
 		}
 		for (const content of hunk.hunkContent) {
@@ -75,15 +71,11 @@ export const buildRows = (fileDiff: FileDiffMetadata): SearchRow[] => {
 		}
 	}
 	if (newCursor < additionLines.length) {
-		pushAdditions(newCursor, additionLines.length - newCursor); // trailing context
+		pushAdditions(newCursor, additionLines.length - newCursor);
 	}
 	return rows;
 };
 
-/**
- * All matches across files, ordered files[] → unified stream (top-to-bottom)
- * → column. Empty query → [].
- */
 export const findMatches = (
 	files: readonly SearchFile[],
 	query: string,

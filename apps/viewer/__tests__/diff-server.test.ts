@@ -77,9 +77,7 @@ describe("diff server", () => {
 	});
 
 	test("base-mode rebuilds after an edit reuse cached blobs too", async () => {
-		// 위 테스트는 기본(워킹트리 모드) 호출만 지나간다 — base 모드는 서버에서
-		// 별도의 getDiffFiles 호출이라 따로 찌른다. 목록에 있는 참조여야 400이
-		// 아니므로 브랜치를 하나 세운다.
+		// base 모드는 서버에서 별도의 getDiffFiles 호출이라 따로 찌른다. 없는 ref는 400이라 브랜치를 세운다.
 		await $`git -C ${repo} branch basepoint`;
 		const blobCache = createBlobCache();
 		const h = startDiffServer({
@@ -105,27 +103,19 @@ describe("diff server", () => {
 		expect(res.headers.get("x-diffdeck")).toBe("1");
 	});
 
-	// A long-lived daemon outlives the package that spawned it, so upgrading
-	// diffdeck on disk does not upgrade what is answering the port. Clients
-	// (cc-statusline) diff these against the version they resolved and replace
-	// the daemon on a mismatch — which needs the pid, since the incumbent is
-	// detached and its spawner is long gone.
+	// A long-lived daemon outlives its package; clients (cc-statusline) compare the version and use the pid to replace a stale one.
 	test("ping reports the running version and pid so a client can spot a stale daemon", async () => {
 		const res = await fetch(`${base}/api/ping`);
 		expect(res.headers.get("x-diffdeck-version")).toBe(packageJson.version);
 		expect(res.headers.get("x-diffdeck-pid")).toBe(String(process.pid));
 	});
 
-	// The mirror of the test below: binding the port is what makes the token
-	// publishable, so a successful start must actually publish it. A client
-	// reads this file to decide a daemon is usable — without it there is no
-	// link at all, and nothing else here would notice.
+	// Clients read the token file to decide a daemon is usable; nothing else here would notice it missing.
 	test("publishes the token once the port is really ours", () => {
 		expect(readTokenSync({ XDG_CACHE_HOME: cacheHome })).toBe(handle.token);
 	});
 
-	// A token already on disk is handed out to every later daemon, so an open
-	// viewer tab keeps working across a restart.
+	// Keeps an open viewer tab working across a daemon restart.
 	test("reuses a token that was already issued", () => {
 		const reuseCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-reuse-"));
 		const env = { XDG_CACHE_HOME: reuseCacheHome };
@@ -140,10 +130,7 @@ describe("diff server", () => {
 		}
 	});
 
-	// The token is the client's only signal that a daemon is usable. Issuing it
-	// before the port is bound means a spawn that dies on EADDRINUSE still
-	// leaves one behind, and the client then renders a link pointing at whoever
-	// actually owns the port — which answers 403. Fail with nothing instead.
+	// A token left by a spawn that died on EADDRINUSE would make clients link to whoever owns the port (403).
 	test("a failed port bind leaves no token behind", () => {
 		const busyCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-busy-"));
 		const env = { XDG_CACHE_HOME: busyCacheHome };
@@ -199,7 +186,7 @@ describe("diff server", () => {
 			headers: { "if-none-match": etag ?? "" },
 		});
 		expect(second.status).toBe(304);
-		// 304에도 x-diff-base는 실린다 — 클라이언트가 드롭다운 라벨을 유지한다.
+		// 304에도 x-diff-base를 싣는다 — 클라이언트가 grab 참조에 쓰는 base 이름을 유지한다.
 		expect(second.headers.get("x-diff-base")).not.toBeNull();
 		expect(await second.text()).toBe("");
 	});
@@ -224,7 +211,6 @@ describe("diff server", () => {
 		const url = `${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`;
 		const first = await fetch(url);
 		const firstBody = await first.text();
-		// 지문이 그대로면 캐시에서 답하되, 조건부 요청이 아니므로 항상 200 본문.
 		const second = await fetch(url);
 		expect(second.status).toBe(200);
 		expect(second.headers.get("etag")).toBe(first.headers.get("etag"));
@@ -245,14 +231,8 @@ describe("diff server", () => {
 	});
 
 	test("blocks an un-normalized absolute path with a real 403 over the wire", async () => {
-		// fetch() normalizes "/../../etc/passwd" client-side before it ever hits
-		// the server, so the request above never reaches the 403 branch in
-		// createHandler (it 404s on a literal "../../etc/passwd" file instead).
-		// A raw socket lets us send a path Bun's URL parser won't collapse:
-		// a double leading slash. `url.pathname` keeps it as "//etc/passwd", so
-		// `rel` becomes the absolute path "/etc/passwd", and
-		// `path.resolve(viewerRoot, "/etc/passwd")` escapes viewerRoot entirely,
-		// exercising the real traversal guard.
+		// fetch() collapses "/../" client-side, so the test above never reaches the 403 branch. A raw "//etc/passwd"
+		// survives URL parsing and makes path.resolve escape viewerRoot, exercising the real traversal guard.
 		const response = await new Promise<string>(
 			(resolvePromise, rejectPromise) => {
 				let buffer = "";
@@ -286,8 +266,7 @@ describe("diff server", () => {
 		expect(statusLine).toContain("403");
 	});
 
-	// 커버리지 게이트는 branch를 세지 않으므로 분기 양쪽을 각각 찌른다 —
-	// 한쪽만 있으면 repairCwd가 영영 안 불려도 100%로 찍힌다.
+	// 커버리지 게이트는 branch를 세지 않으므로 분기 양쪽을 각각 찌른다.
 	test("cwd가 삭제됐으면 요청 처리 전에 복구를 호출한다", async () => {
 		const repairCwd = mock();
 		const h = startDiffServer({
@@ -322,11 +301,7 @@ describe("diff server", () => {
 		}
 	});
 
-	// cwdDeps를 안 넘기면 REAL_CWD_DEPS(process.cwd()/existsSync)가
-	// 쓰인다 — M-4로 탐지가 repairCwd 유무로 단축평가되면서, cwdDeps까지
-	// 생략한 호출이 없으면 REAL_CWD_DEPS.cwd가 영영 호출되지 않아 함수
-	// 커버리지가 100%에서 떨어진다(실측). 실제 cwd는 살아있으므로 복구는
-	// 안 불리지만, 이 테스트의 목적은 그 경로 자체가 실행되는 것이다.
+	// 이 경로가 없으면 REAL_CWD_DEPS가 한 번도 불리지 않아 함수 커버리지가 떨어진다 — 경로를 실행하는 것이 목적이다.
 	test("repairCwd만 넘기고 cwdDeps는 생략하면 실제 process.cwd()를 쓴다", async () => {
 		const repairCwd = mock();
 		const h = startDiffServer({
@@ -343,10 +318,7 @@ describe("diff server", () => {
 		}
 	});
 
-	// repairCwd를 안 넘긴 호스트는 정의상 cwd를 건드리길 원하지 않는
-	// 쪽이므로 탐지 자체(isCwdAlive 호출)가 매 요청 순수 비용이 되면 안
-	// 된다 — cwdDeps가 "죽었다"고 답하도록 세팅해 두고도 exists가 한
-	// 번도 안 불리는 것으로 탐지가 통째로 건너뛰었음을 증명한다.
+	// cwdDeps가 "죽었다"고 답하게 해 두고도 exists가 안 불려야 탐지를 통째로 건너뛴 것이다.
 	test("repairCwd를 안 넘기면 cwd 탐지 자체를 건너뛴다", async () => {
 		const exists = mock(() => false);
 		const h = startDiffServer({
@@ -440,9 +412,7 @@ describe("api/blob", () => {
 	});
 
 	test("404 for an image-suffixed path escaping the repo", async () => {
-		// isImagePath 게이트를 통과하는 확장자 + repo 밖에 "실재하는" 파일로
-		// getFileBytes의 경로 탈출 가드를 겨냥한다 — 가드가 사라지면 이 파일이
-		// 실제로 읽혀 200이 나오므로 진짜 회귀망이 된다.
+		// .png라 이미지 게이트를 통과하고 repo 밖에 실재하는 파일이라, 탈출 가드가 사라지면 실제로 읽혀 200이 된다.
 		const outside = join(repo, "..", "outside-secret.png");
 		writeFileSync(outside, Buffer.from([0x89, 0x00]));
 		try {
@@ -540,27 +510,9 @@ describe("diff server summary", () => {
 });
 
 describe("diff server flight timeout", () => {
-	// await-flight.test.ts는 손으로 만든 SingleFlightTimeoutError가 503으로
-	// 바뀌는 것을, single-flight.test.ts는 진짜 타임아웃이 그 에러를 낳는
-	// 것을 각각 단위로 증명한다. 이 테스트는 그 둘을 실제 서버 위에서 이어
-	// 붙인다 — createHandler의 flightTimeoutMs 훅(테스트 전용, CLI 표면에는
-	// 없음)으로 baseFlight/diffFlight 타임아웃을 몇 ms로 낮추면, 정상적인
-	// git 서브프로세스 왕복조차 그보다 오래 걸려 진짜 타임아웃이 걸리고,
-	// 그 결과가 손으로 만든 Response가 아니라 실제 HTTP 응답으로 도착하는지
-	// 검증한다.
-	//
-	// 이 테스트는 baseCache **미스**에 기댄다 — 보장의 근거는 "이 describe에서
-	// 처음 등장"이 아니라 **테스트마다 유일한 repo 경로**다: 파일 최상단
-	// beforeEach가 매번 mkdtempSync로 새 디렉터리를 만들고, baseCache는 그
-	// 경로로 키가 갈리므로(server.ts) 이전 어떤 테스트도 이 repo에 대한
-	// 항목을 남길 수 없다. 이 표현이 중요한 이유: repo를 beforeAll로 끌어올려
-	// 여러 테스트가 공유하게 "최적화"하면(그래야 describe-position 논리는
-	// 안 깨진다는 착각이 들 수 있다) 이 파일의 앞선 /api/diff 테스트 ~20개가
-	// 그 공유 repo의 baseCache를 먼저 데워 버려, 이 테스트가 조용히
-	// diffFlight 가드로 미끄러져도 여전히 통과한다 — "유일한 repo 경로"라고
-	// 못박아야 그 리팩터가 이 불변식을 깬다는 게 보인다. 아래 두 번째
-	// 테스트는 정반대로 baseCache **히트**가 있어야만 성립한다 — 둘을
-	// 하나의 공유 beforeEach/픽스처로 "정리"하면 둘 다 조용히 깨진다.
+	// baseCache 미스에 기댄다 — 최상단 beforeEach가 테스트마다 새 repo 경로를 만들기 때문이다. repo를 beforeAll로
+	// 끌어올리면 앞선 /api/diff 테스트가 캐시를 데워, 이 테스트는 조용히 diffFlight 가드만 증명한다.
+	// 아래 테스트는 반대로 히트에 기대므로 둘을 공용 픽스처로 합치지 않는다(server.md).
 	test("api/diff answers a real flight timeout with a real 503 + Retry-After over HTTP", async () => {
 		const timeoutCacheHome = mkdtempSync(join(tmpdir(), "cc-srv-timeout-"));
 		const timeoutHandle = startDiffServer({
@@ -583,26 +535,9 @@ describe("diff server flight timeout", () => {
 		}
 	});
 
-	// 위 테스트가 증명하는 건 baseFlight 가드뿐이다: flightTimeoutMs:1에서는
-	// /api/diff가 먼저 await하는 baseFlight가 항상 이 타이밍에 지므로,
-	// diffFlight의 가드(server.ts 두 번째 awaitFlight)는 한 번도 실행되지
-	// 않는다. singleFlight.ts의 자체 docstring이 기록한 실측 never-settle은
-	// baseFlight(gh pr view)가 아니라 diffFlight(diff.ts의
-	// BUILD_CONCURRENCY=8 git 버스트)다 — 실제로 걸렸던 적 없는 쪽만 증명하고
-	// 실제로 걸렸던 쪽은 미검증으로 남기는 건 순서가 거꾸로다.
-	//
-	// baseCache는 server.ts에서 여전히 모듈 전역 싱글턴이므로(diffCache와
-	// 달리 createHandler 안으로 옮기지 않았다 — 플라이트와는 별개 관심사),
-	// 아래에서 새로 띄우는 flightTimeoutMs:1 서버도 그 항목을 그대로 본다.
-	// 먼저 기본 타임아웃 서버로 같은 repo를 정상 요청해 baseCache를 데우면:
-	// resolveBaseCached의 fn()은 캐시 히트일 때 `await` 없이 동기적으로
-	// `return hit.value`하므로(server.ts:96-103, resolveBaseCached 정의) 그
-	// 반환 프라미스는 마이크로태스크에서 즉시 settle하고, 마이크로태스크
-	// 큐는 어떤 매크로태스크(1ms 타이머 포함)보다도 항상 먼저 비므로 —
-	// baseFlight는 결정적으로(레이스가 아니라) 이긴다. 그러면 handler는
-	// diffFlight로 진입하고, 그 fn()은 첫 줄에서 repoFingerprint(진짜 git
-	// 서브프로세스 왕복)를 await하므로 1ms를 반드시 넘겨 **두 번째** 가드가
-	// 진짜로 타임아웃한다.
+	// 위 테스트는 baseFlight 가드만 증명한다. baseCache는 모듈 스코프라 기본 서버로 먼저 데우면 새 서버도 히트하고,
+	// 히트는 마이크로태스크로 settle해 1ms 타이머보다 결정적으로 먼저 끝난다 — 그래야 diffFlight(지문의 git 왕복)가
+	// 진짜로 타임아웃한다. baseCache를 createHandler 안으로 옮기면 이 테스트는 조용히 위와 같은 가드만 증명한다.
 	test("api/diff answers a real diffFlight timeout (not baseFlight) with a real 503", async () => {
 		const warm = await fetch(
 			`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}`,
@@ -632,20 +567,10 @@ describe("diff server flight timeout", () => {
 	});
 });
 
-// HTTP 헤더 값은 latin1이다. git은 refname에 비ASCII를 허용하므로 base 브랜치
-// 이름이 한글/일본어/중국어이면 x-diff-base를 실은 Response 생성이 throw하고
-// 응답 전체가 500이 된다(Bun 1.3.12 실측). 클라의 fetchDiffOnce는 비-503
-// non-ok를 terminal로 매핑해 재시도 없이 "Failed to load diff."를 띄우므로,
-// 그런 리포는 diff가 아예 뜨지 않는다. 이 리포는 이미 korean-filename.e2e.ts를
-// 갖고 있어 비ASCII git 식별자는 범위 안이다.
+// HTTP 헤더 값은 latin1이라 비ASCII base 이름을 그대로 실으면 Response 생성이 throw해 응답 전체가 500이 된다.
 describe("diff server non-latin1 base name", () => {
-	// 원격 없이 refs만 세워 hermetic하게 만든다: origin/HEAD -> origin/<한글>.
-	// resolveBaseRef의 defaultBranchName 갈래가 이걸 읽어 base를 낸다.
-	//
-	// refname을 반드시 ${보간}으로 넘길 것 — Bun 1.3.12의 $ 템플릿에 비ASCII를
-	// 리터럴로 적으면 "uAE30uB2A5" 같은 ASCII 텍스트로 뭉개져(실측: 코드포인트
-	// 75 41 45 33 30 …) 한글이 아닌 브랜치가 만들어지고, 테스트가 조용히
-	// 아무것도 검증하지 않게 된다.
+	// 원격 없이 origin/HEAD → origin/<한글> 참조만 세워 hermetic하게 만든다(resolveBaseRef가 이걸 읽는다).
+	// refname은 ${보간}으로 넘긴다 — Bun `$`에 비ASCII를 리터럴로 적으면 뭉개져 한글이 아닌 브랜치로 조용히 통과한다(testing.md).
 	const KOREAN_BRANCH = "기능";
 	const setUpKoreanBase = async (): Promise<void> => {
 		const head = (await $`git -C ${repo} rev-parse HEAD`.text()).trim();
@@ -731,10 +656,7 @@ describe("diff server prs route", () => {
 		expect(res.status).toBe(400);
 	});
 
-	// 기본 경로는 실제 `gh`를 부른다. GitHub 원격이 없는 리포(이 픽스처)나
-	// `gh`가 없는 환경에서는 실패하는데, 그건 에러가 아니라 "PR 없음"이다.
-	// GH_REPO가 설정된 환경이면 gh가 픽스처의 원격 부재를 무시하고 그 리포의
-	// 실제 PR을 답한다 — 그때는 이 단언이 성립하지 않는다.
+	// GH_REPO가 있으면 gh가 픽스처의 원격 부재를 무시하고 그 리포의 실제 PR을 답한다(testing.md).
 	test.skipIf(Boolean(process.env.GH_REPO))(
 		"without a GitHub remote the real lister answers no PRs",
 		async () => {
@@ -746,10 +668,8 @@ describe("diff server prs route", () => {
 		},
 	);
 
-	// 실패를 성공만큼 오래 두면 기동 순간의 끊김 한 번이 1분 동안 PR 표시를
-	// 지운다. 시계를 돌려 두 수명을 가른다(10초 뒤 실패는 다시 묻고 성공은 아니다).
+	// 실패를 성공만큼 캐시하면 기동 순간의 끊김 한 번이 1분 동안 PR 표시를 지운다.
 	test("a failed lookup is cached briefly, a successful one for a minute", async () => {
-		// 첫 호출만 실패하고 그 뒤로는 성공한다.
 		let calls = 0;
 		const listPrs = mock(() =>
 			Promise.resolve((calls++ === 0 ? null : PRS) as typeof PRS | null),
@@ -851,10 +771,7 @@ describe("diff server caller-supplied base", () => {
 		expect(res.status).toBe(400);
 	});
 
-	// Bun의 $는 셸을 이스케이프하지 git의 옵션 파싱을 막지 않는다. 첫 글자가
-	// "-"인 ref가 git diff에 도달하면 --output=<path>로 임의의 파일을 만들거나
-	// 비울 수 있다. refExists(rev-parse --verify)가 옵션 꼴을 거부하는 것이
-	// 그 통로를 닫는다.
+	// 보안 경계: `-`로 시작하는 ref가 git diff에 닿으면 --output=<path>로 아무 파일이나 쓴다 — verifyBaseRef가 먼저 끊는다(server.md).
 	test("refuses an option-shaped base and writes nothing", async () => {
 		const victim = join(cacheHome, "pwned.txt");
 		const res = await diff(`base=${encodeURIComponent(`--output=${victim}`)}`);
@@ -869,9 +786,7 @@ describe("diff server caller-supplied base", () => {
 	});
 });
 
-// 커밋이 하나도 없는 리포(unborn HEAD)는 diffdeck을 새 프로젝트에서 처음
-// 켜는 경로다. e2e 픽스처는 항상 base 커밋을 만들므로 이 상태를 원리적으로
-// 만들 수 없어, 여기서 지킨다.
+// e2e 픽스처는 늘 base 커밋을 만들어 unborn HEAD(새 프로젝트에서 처음 켠 상태)를 원리적으로 못 만든다 — 여기서 지킨다.
 describe("diff server unborn HEAD", () => {
 	let unborn: string;
 
@@ -885,8 +800,7 @@ describe("diff server unborn HEAD", () => {
 
 	afterEach(() => rmSync(unborn, { recursive: true, force: true }));
 
-	// 피커의 "Working tree" 행이 보내는 값이다. rev-parse --verify HEAD가
-	// unborn에서 실패하므로, 검증을 그대로 태우면 첫 화면이 실패 카드가 된다.
+	// 기본 요청이 보내는 값이다. unborn에서는 rev-parse --verify HEAD가 실패해, 검증을 태우면 첫 화면이 실패 카드가 된다.
 	test("base=HEAD serves the working tree instead of refusing", async () => {
 		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
 		const res = await fetch(
@@ -897,8 +811,6 @@ describe("diff server unborn HEAD", () => {
 		expect(files.map((f) => f.name)).toContain("a.txt");
 	});
 
-	// 레거시 wire가 내던 것과 같은 결과여야 한다 — 옛 링크와 새 기본값이
-	// 같은 화면을 보는 것이 이 값의 존재 이유다.
 	test("base=HEAD matches what the legacy mode=working wire returned", async () => {
 		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
 		const q = `repo=${encodeURIComponent(unborn)}&token=${token}&untracked=1`;
@@ -908,10 +820,7 @@ describe("diff server unborn HEAD", () => {
 	});
 });
 
-// 400이 두 종류인데 상태 코드가 같다. 클라이언트는 "고른 기준이 사라졌다"일
-// 때만 저장된 프리퍼런스를 버려야 하므로, 그 구분이 응답에 실려야 한다 —
-// 없으면 repo가 사라진 경우에도 프리퍼런스만 조용히 지워지고 화면은 그대로
-// 실패 카드다.
+// 클라이언트는 unknown-base일 때만 저장된 base를 버리므로 같은 400이라도 표식으로 종류가 갈려야 한다.
 describe("diff server 400 kinds are distinguishable", () => {
 	test("an unknown base ref is marked so the client can drop its preference", async () => {
 		const token = readTokenSync({ XDG_CACHE_HOME: cacheHome });
@@ -931,9 +840,7 @@ describe("diff server 400 kinds are distinguishable", () => {
 		expect(res.headers.get("x-diff-error")).toBe("not-a-repo");
 	});
 
-	// 브라우저 카드는 이 표식으로 "지워진 폴더"와 "리포 아님"을 가른다. 네
-	// 라우트가 같은 판정을 공유하는지 본다 — 하나만 옛 한 문장으로 남으면
-	// 이미지·요약·피커가 diff와 다른 이유를 말한다.
+	// 라우트마다 판정이 갈리면 이미지·요약·피커가 diff와 다른 실패 이유를 말한다.
 	test.each(["diff", "summary", "refs", "prs", "blob"])(
 		"/api/%s marks a missing directory as repo-missing",
 		async (route) => {
@@ -976,18 +883,14 @@ describe("head selection over HTTP", () => {
 		expect(files[0]?.newContents).toBe("three\n");
 	});
 
-	// 표식을 base와 가르는 이유는 클라이언트의 자가복구가 다르기 때문이다.
-	// 커버리지 게이트는 branch를 세지 않으므로(CLAUDE.md) 이 400 경로로
-	// 일부러 들어간다 — 초록불은 "이 분기가 나갔다"는 증거가 아니다.
+	// 표식을 base와 가르는 것은 클라이언트의 복구가 다르기 때문이다. 게이트는 branch를 세지 않아 이 400 경로로 일부러 들어간다.
 	test("an unknown head ref is refused with its own marker", async () => {
 		const res = await fetch(diffUrl("head=no-such-branch"));
 		expect(res.status).toBe(400);
 		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
 	});
 
-	// **보안 경계다.** head 값은 이제 `git diff`의 두 번째 인자로도 가므로,
-	// 첫 글자가 `-`인 참조가 닿으면 `--output=<path>`로 데몬이 쓸 수 있는
-	// 아무 경로나 만들거나 비운다. verifyBaseRef가 그 전에 끊어야 한다.
+	// 보안 경계: head도 git diff의 인자로 가므로 `-`로 시작하면 --output=<path>가 된다 — verifyBaseRef가 먼저 끊는다.
 	test("a head that looks like an option never reaches git", async () => {
 		const res = await fetch(
 			diffUrl(`head=${encodeURIComponent("--output=/tmp/diffdeck-pwned")}`),
@@ -997,10 +900,7 @@ describe("head selection over HTTP", () => {
 		expect(existsSync("/tmp/diffdeck-pwned")).toBe(false);
 	});
 
-	// **세 라우트가 각자 400을 내야 한다.** 예전엔 `/api/diff`만 이 경로로
-	// 들어가는 테스트가 있었고, 나머지 둘은 `resolveSelectionHead` 호출
-	// **라인**만 실행돼 라인 커버리지로는 초록이었다 — 게이트가 branch를 안
-	// 세므로 return이 한 번도 안 나가도 100%가 유지된다(CLAUDE.md).
+	// 라우트마다 따로 찌른다 — 게이트는 branch를 세지 않아 head 해석 호출 줄만 지나가도 초록이다.
 	test("summary refuses an unknown head with the same marker", async () => {
 		const res = await fetch(
 			`${base}/api/summary?repo=${encodeURIComponent(repo)}&token=${handle.token}&head=no-such-branch`,
@@ -1009,8 +909,7 @@ describe("head selection over HTTP", () => {
 		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
 	});
 
-	// blob은 이미지 전용이라 비-이미지 경로는 head 해석 **전에** 404다.
-	// 확장자가 .png여야 이 분기까지 도달한다.
+	// blob은 이미지 전용이라 경로가 .png여야 head 해석까지 도달한다(아니면 그 전에 404다).
 	test("blob refuses an unknown head with the same marker", async () => {
 		const res = await fetch(
 			`${base}/api/blob?repo=${encodeURIComponent(repo)}&token=${handle.token}&path=logo.png&side=new&head=no-such-branch`,
@@ -1019,9 +918,7 @@ describe("head selection over HTTP", () => {
 		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
 	});
 
-	// 이미지 카드가 텍스트 diff와 같은 축을 본다는 주장은 지금까지 유닛
-	// (`getFileBytes`)에만 있었다 — HTTP 레벨에서 head를 실어 부르는 테스트가
-	// 아예 없어서 라우트의 배선은 검증된 적이 없다.
+	// getFileBytes 유닛은 라우트가 head를 넘기는 배선까지는 보지 못한다.
 	test("blob reads the new side from the head revision", async () => {
 		await $`git -C ${repo} branch -M main`;
 		await $`git -C ${repo} checkout -qb feat`;
@@ -1029,7 +926,6 @@ describe("head selection over HTTP", () => {
 		await $`git -C ${repo} add logo.png`;
 		await $`git -C ${repo} commit -qm feat`;
 		await $`git -C ${repo} checkout -q main`;
-		// 워킹트리를 더럽힌다 — head가 rev면 이건 보이면 안 된다.
 		writeFileSync(join(repo, "logo.png"), "uncommitted\n");
 
 		const res = await fetch(

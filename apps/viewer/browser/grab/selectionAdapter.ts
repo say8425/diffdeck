@@ -1,10 +1,7 @@
-// 네이티브 Selection의 덕타입 파사드. Chrome의 사용자 드래그 선택은
-// window.getSelection() 끝점이 light DOM으로 rescope되므로(스펙 §경로 B),
-// primary는 getComposedRanges({shadowRoots}) — 반드시 옵션백 시그니처(가변인자
-// 레거시는 Chrome이 조용히 무시한다). fallback은 비표준 shadowRoot.getSelection()
-// (단일 root 한정). 덕타입인 이유: happy-dom엔 둘 다 없어, 게이트 안에서 fake로
-// 전 분기를 커버하려면 실 DOM 타입에 묶이면 안 된다.
-// 주의: outer selection.isCollapsed는 Chrome의 shadow rescope 때문에 신뢰 불가.
+// Chrome은 window.getSelection()의 끝점을 light DOM으로 rescope하므로
+// getComposedRanges({shadowRoots})를 먼저 쓴다 — 옵션 객체 시그니처여야 한다(가변
+// 인자 레거시는 Chrome이 조용히 무시한다). 덕타입인 것은 happy-dom에
+// getComposedRanges도 shadowRoot.getSelection도 없어서다.
 export interface RangeEndpoints {
 	startContainer: Node;
 	startOffset: number;
@@ -39,7 +36,8 @@ export const resolveSelectionRange = (
 	if (typeof selection.getComposedRanges === "function") {
 		const range = selection.getComposedRanges({ shadowRoots: roots })[0];
 		if (!range) return null;
-		// collapsed StaticRange(start == end)는 제외
+		// selection.isCollapsed는 shadow rescope 때문에 믿을 수 없어 끝점을 직접
+		// 비교한다.
 		if (
 			range.startContainer === range.endContainer &&
 			range.startOffset === range.endOffset

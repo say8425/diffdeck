@@ -1,8 +1,3 @@
-// [data-title]/[data-prev-name] visually truncate with CSS text-overflow:
-// ellipsis while their textContent always holds the full path (see
-// korean-filename.e2e.ts). This guards main.ts's ensureTitleTooltips, which
-// syncs a native `title` attribute onto those nodes from their own
-// textContent so hovering reveals the untruncated path.
 import { spawnSync } from "node:child_process";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
@@ -31,9 +26,8 @@ test("renamed file's header shows tooltips on both the old and new name", async 
 }) => {
 	const viewer = await launchViewer([], {});
 	try {
-		// hello.ts is edited in the fixture's working tree; revert that first so
-		// a pure rename (no content change) stays above git's similarity
-		// threshold and is reported as a rename instead of add+delete.
+		// Revert the fixture's edit first: only a pure rename of this one-line
+		// file stays above git's similarity threshold (else it's add+delete).
 		const checkout = spawnSync(
 			"git",
 			["-C", viewer.repoDir, "checkout", "--", "src/hello.ts"],

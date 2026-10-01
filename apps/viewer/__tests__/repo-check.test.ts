@@ -50,13 +50,8 @@ describe("classifyRepo (real git)", () => {
 	});
 });
 
-// git이 자기 테스트용으로 두는 스위치로 "소유자가 다르다"를 실제로 만든다
-// (다른 사용자 계정 없이). 그 메시지에 safe.directory가 실린다는 것까지 실측이다.
-//
-// **사용자·시스템 gitconfig를 반드시 끊는다.** `safe.directory = *`가 어디든
-// 있으면 git이 소유자 검사를 건너뛰어 이 테스트가 null을 받는다 — GitHub
-// 러너가 정확히 그랬다(로컬은 초록, CI만 빨강). 설정 파일이 아니라 git의
-// 기본 동작을 재는 테스트라 둘 다 비운다.
+// GIT_TEST_ASSUME_DIFFERENT_OWNER는 다른 계정 없이 소유자 불일치를 만드는 git의 테스트용 스위치다.
+// 사용자·시스템 gitconfig는 끊는다 — 어디든 `safe.directory = *`가 있으면(GitHub 러너) 소유자 검사를 건너뛴다.
 const ISOLATED_OWNER_ENV = {
 	GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
 	GIT_CONFIG_NOSYSTEM: "1",

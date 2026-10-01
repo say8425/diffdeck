@@ -60,8 +60,8 @@ describe("imageEntries", () => {
 				status: "renamed",
 				blobVersion: "v5",
 			}),
-			file({ name: "data.bin" }), // binary but not an image
-			file({ name: "code.ts", binary: false }), // text
+			file({ name: "data.bin" }),
+			file({ name: "code.ts", binary: false }),
 		];
 		const entries = imageEntries(files);
 		expect(entries.map((e) => e.name)).toEqual([
@@ -118,8 +118,7 @@ describe("blobUrl", () => {
 		expect(params.get("v")).toBe("v1");
 	});
 
-	// 이미지 카드와 텍스트 diff가 같은 비교를 보여줘야 한다 — 기준이 갈리면
-	// 한쪽은 고른 브랜치를, 다른 쪽은 워킹트리를 보여준다.
+	// 빠지면 이미지 카드와 텍스트 diff가 서로 다른 기준을 보여 준다.
 	test("carries the chosen compare base", () => {
 		const url = blobUrl({
 			repo: "/r",

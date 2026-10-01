@@ -20,8 +20,7 @@ const MAIN_WT = wt("/w/repo", "main");
 const FEAT_WT = wt("/w/repo/.claude/worktrees/feat", "feat");
 
 describe("buildHeadRows — worktrees", () => {
-	// 고를 것이 없으면 구역 자체가 없다. 제목만 남기고 목록을 비우면
-	// "뭔가 있어야 하는데 없다"로 읽힌다.
+	// 제목만 남기고 목록을 비우면 "있어야 할 것이 없다"로 읽힌다.
 	test("omits the worktree section when there is nothing to choose", () => {
 		const rows = buildHeadRows([MAIN_WT], [ref("main")], "main", {
 			repo: "/w/repo",
@@ -30,9 +29,7 @@ describe("buildHeadRows — worktrees", () => {
 		expect(rows.some((r) => r.section === "worktrees")).toBe(false);
 	});
 
-	// 숨김은 "고를 것이 없을 때"의 규칙이다. 브랜치를 head로 보고 있으면
-	// 워크트리는 지금 보고 있지 않은 것이므로 고를 대상이고, 숨기면 워크트리가
-	// 하나뿐인 리포에서 브랜치 뷰에 갇혀 돌아올 길이 사라진다.
+	// 숨기면 워크트리가 하나뿐인 리포에서 브랜치 뷰에 갇혀 돌아올 길이 없다.
 	test("keeps the section while a branch head is active, to get back", () => {
 		const rows = buildHeadRows([MAIN_WT], [ref("dev")], "main", {
 			repo: "/w/repo",
@@ -49,7 +46,6 @@ describe("buildHeadRows — worktrees", () => {
 		expect(rows.filter((r) => r.section === "worktrees")).toHaveLength(2);
 	});
 
-	// 어느 브랜치를 물고 있는지 행 자체가 말해야 한다.
 	test("each worktree names the branch it holds", () => {
 		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
 			repo: "/w/repo",
@@ -59,7 +55,6 @@ describe("buildHeadRows — worktrees", () => {
 		expect(feat?.note).toBe("feat");
 	});
 
-	// default 브랜치를 물고 있는 워크트리가 맨 위 — 브랜치 구역과 같은 규칙.
 	test("puts the worktree holding the default branch first", () => {
 		const rows = buildHeadRows([FEAT_WT, MAIN_WT], [], "main", {
 			repo: "/w/repo/.claude/worktrees/feat",
@@ -78,8 +73,7 @@ describe("buildHeadRows — worktrees", () => {
 		expect(rows.find((r) => r.selected)?.label).toBe("feat");
 	});
 
-	// repo는 기동 시점의 cwd라 리포 루트라는 보장이 없다. repoLabel의
-	// findWorktree와 **같은 판정**을 써야 답이 앱 안에 하나만 남는다.
+	// repo는 기동 시점의 cwd라 리포 루트가 아닐 수 있다 — repoLabel의 findWorktree와 같은 판정을 쓴다.
 	test("matches the viewed worktree from a subdirectory", () => {
 		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
 			repo: "/w/repo/.claude/worktrees/feat/src",
@@ -88,7 +82,6 @@ describe("buildHeadRows — worktrees", () => {
 		expect(rows.find((r) => r.selected)?.label).toBe("feat");
 	});
 
-	// 브랜치를 head로 보고 있으면 워크트리는 어느 것도 선택 상태가 아니다.
 	test("no worktree is selected while a branch is the head", () => {
 		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [ref("dev")], "main", {
 			repo: "/w/repo",
@@ -199,8 +192,7 @@ describe("filterPickerRows", () => {
 		expect(filterPickerRows(rows, "zzz")).toEqual([]);
 	});
 
-	// 워크트리 행의 **브랜치 이름**은 label이 아니라 note에 산다. label만 보면
-	// 이 목록에서 가장 자연스러운 검색어(브랜치명)로 워크트리를 못 찾는다.
+	// 워크트리 행의 브랜치 이름은 label이 아니라 note에 있다.
 	test("finds a worktree by the branch it holds", () => {
 		const held = filterPickerRows(rows, "feat").map((r) => r.value);
 		expect(held).toContain("/w/repo/.claude/worktrees/feat");
@@ -234,7 +226,6 @@ describe("buildHeadRows — pull requests", () => {
 		expect(rows.every((r) => r.pr === null)).toBe(true);
 	});
 
-	// 워크트리 행은 **물고 있는 브랜치**의 PR을 단다.
 	test("a worktree row carries the PR of the branch it holds", () => {
 		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", current, prs);
 		const feat = rows.find((r) => r.value === FEAT_WT.path);
@@ -257,7 +248,6 @@ describe("buildHeadRows — pull requests", () => {
 		expect(byValue("main")).toBeNull();
 	});
 
-	// 행에 보이는 글자는 전부 검색어가 된다.
 	test("filtering finds a row by PR number or title", () => {
 		const rows = buildHeadRows(
 			[MAIN_WT],

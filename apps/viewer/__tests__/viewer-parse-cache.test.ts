@@ -44,8 +44,7 @@ describe("createParseCache", () => {
 		const before = cache.resolve("a.ts", "v1", () => "A");
 		const bumped = cache.bump("a.ts");
 		expect(bumped).toBeGreaterThan(before.version);
-		// 같은 contentVersion의 다음 resolve는 재파싱 없이 bump된 version을 유지
-		// 해야 한다 — 아니면 CodeView가 폴드 직후 poll에서 아이템을 되돌린다.
+		// 옛 version으로 돌아가면 폴드 직후 poll에서 CodeView가 그 아이템을 바뀐 것으로 보고 다시 그린다.
 		let calls = 0;
 		const after = cache.resolve("a.ts", "v1", () => {
 			calls++;

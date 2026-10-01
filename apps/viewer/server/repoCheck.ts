@@ -2,13 +2,8 @@ import { existsSync } from "node:fs";
 import { $ } from "bun";
 
 /**
- * `repo` 파라미터가 왜 diff를 못 만드는가. 예전엔 전부 한 문장("not a git
- * repository")이었고 브라우저는 그마저 버리고 "Failed to load diff."만
- * 보여줬다 — 홈 디렉토리를 연 것인지, 지워진 워크트리를 연 것인지, git이
- * 아예 안 뜨는 것인지 화면에서 가를 방법이 없었다.
- *
- * 값은 응답의 `x-diff-error` 헤더로 나간다(unknown-base·unknown-head와 같은
- * 채널). 본문 문자열 매칭은 취약하므로 클라이언트는 이 표식만 읽는다.
+ * diff를 못 만드는 이유. `x-diff-error` 헤더로 나가고, 클라이언트는 본문이 아니라
+ * 이 표식을 읽는다.
  */
 export type RepoProblem =
 	| "no-repo" // URL에 repo가 없다
@@ -52,29 +47,23 @@ export const classifyRepo = async (
 	deps: RepoCheckDeps = REAL_REPO_CHECK_DEPS,
 ): Promise<RepoProblem | null> => {
 	if (!repo) return "no-repo";
-	// git보다 먼저 본다 — git은 없는 경로도 128("cannot change to")로 끝나서
-	// "리포가 아니다"와 갈리지 않는다.
+	// git보다 먼저 본다 — git은 없는 경로도 128로 끝나 "리포가 아니다"와 갈리지 않는다.
 	if (!deps.exists(repo)) return "repo-missing";
 	let result: RevParseResult;
 	try {
 		result = await deps.revParse(repo);
 	} catch {
-		// cwd가 삭제된 프로세스는 자식을 하나도 못 띄운다(posix_spawn ENOENT —
-		// .claude/rules/server.md "프로세스 cwd" 절). 이 경우 모든 repo가 여기로
-		// 온다.
+		// cwd가 삭제된 프로세스는 자식을 못 띄운다(posix_spawn ENOENT — .claude/rules/server.md).
 		return "git-unavailable";
 	}
 	if (result.exitCode === 0) {
-		// bare 리포와 .git 내부는 0으로 끝나며 `false`를 찍는다(실측).
+		// bare 리포와 .git 내부는 0으로 끝나며 `false`를 찍는다.
 		return result.stdout.trim() === "true" ? null : "no-worktree";
 	}
-	// 128은 git 자신의 fatal이다. 그 밖(셸의 command not found = 1 등)은 git이
-	// 제대로 뜨지 않았다는 뜻이다.
+	// 128은 git 자신의 fatal이다. 그 밖은 git이 제대로 뜨지 않았다는 뜻이다.
 	if (result.exitCode !== 128) return "git-unavailable";
-	// 같은 128이어도 이건 리포가 **맞다** — "Not a git repository"라고 하면
-	// 사용자가 엉뚱한 곳을 찾는다. 메시지는 로캘을 타지 않는 식별자
-	// (`safe.directory`)로 가른다: git은 번역된 본문에도 그 설정 이름을
-	// 그대로 싣는다.
+	// 같은 128이어도 리포는 맞다. 로캘을 타지 않는 설정 이름(`safe.directory`)으로 가른다 —
+	// git은 번역된 메시지에도 그 이름을 그대로 싣는다.
 	return result.stderr.includes("safe.directory")
 		? "unsafe-repo"
 		: "not-a-repo";
@@ -83,16 +72,14 @@ export const classifyRepo = async (
 const MESSAGES: Record<RepoProblem, string> = {
 	"no-repo": "missing repo parameter",
 	"repo-missing": "no such directory",
-	// not-a-repo만 예전 본문을 유지한다 — 외부 클라이언트가 읽고 있을 수 있다.
-	// 나머지(repo 누락·없는 경로·…)는 예전에도 이 문자열이었지만 이제 각자
-	// 이유를 말한다. 기계가 읽을 곳은 본문이 아니라 x-diff-error다.
+	// 이 본문만 옛 문자열 그대로 둔다 — 외부 클라이언트가 읽고 있을 수 있다.
 	"not-a-repo": "not a git repository",
 	"no-worktree": "git repository without a working tree",
 	"unsafe-repo": "git refuses this repository (safe.directory)",
 	"git-unavailable": "could not run git",
 };
 
-/** 네 라우트가 공유하는 400 응답. */
+/** repo를 받는 라우트(diff·summary·refs·prs·blob)가 공유하는 400 응답. */
 export const repoProblemResponse = (problem: RepoProblem): Response =>
 	new Response(MESSAGES[problem], {
 		status: 400,

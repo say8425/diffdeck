@@ -32,7 +32,7 @@ describe("prIconSvg", () => {
 		expect(svg).not.toContain("aria-hidden");
 	});
 
-	// 색을 못 가려도 구별돼야 한다 — 네 모양이 전부 달라야 한다.
+	// 색을 못 가리는 사람도 구별할 수 있어야 한다.
 	test("every state has its own shape", () => {
 		const shapes = STATES.map((s) =>
 			prIconSvg(s, 14).replace(/<svg[^>]*>/, ""),
@@ -79,7 +79,6 @@ describe("viewedPrBranch", () => {
 		expect(viewedPrBranch("fix/foo", "main", refs)).toBe("fix/foo");
 	});
 
-	// `head=HEAD`는 커밋된 HEAD를 본다 — 그 브랜치는 워크트리가 물고 있는 것이다.
 	test("head=HEAD means the worktree's branch", () => {
 		expect(viewedPrBranch("HEAD", "feat/x", refs)).toBe("feat/x");
 	});

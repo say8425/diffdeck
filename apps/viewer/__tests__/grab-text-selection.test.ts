@@ -22,7 +22,6 @@ const makeFile = (id: string): { host: HTMLElement; root: ShadowRoot } => {
 	return { host, root };
 };
 
-// pre[data-diff-type] > code(...cols) > div[data-line] 최소 재현
 const addColumn = (
 	root: ShadowRoot,
 	diffType: "single" | "split",
@@ -52,12 +51,7 @@ const addColumn = (
 	});
 };
 
-// a/b가 [data-line] 행 엘리먼트면 a.firstChild/b.firstChild는 그 행의 텍스트
-// 노드다. 즉 이 헬퍼가 만드는 끝점(offset 0..1)은 행 텍스트 안에 직접 떨어진
-// 실재하는 부분 선택("첫 글자")이지, 줄 전체를 뜻하는 게 아니다 — 진짜 브라우저
-// 드래그로도 같은 끝점이 나올 수 있다. 그래서 이 헬퍼를 쓰는 side/mixed 테스트는
-// (클램프가 없는 한) chars: { start: 0, end: 1 }이 붙는 게 게이팅 규칙상 정상이다.
-// 줄 전체(= chars 없음) 시나리오는 "클램프/무효 끝점" describe의 테스트들이 덮는다.
+// 끝점이 행 텍스트 노드 안(offset 0..1)에 떨어지므로, 클램프가 없으면 chars: { start: 0, end: 1 }이 붙는 게 맞다.
 const endpointsOf = (a: Node, b: Node) => ({
 	range: {
 		startContainer: a.firstChild ?? a,
@@ -307,9 +301,7 @@ describe("resolveTextTarget — split", () => {
 			{ line: 5, type: "context", index: "4,4" },
 		]);
 		const target = resolveTextTarget(endpointsOf(rows[0], rows[1]), "split");
-		// 두 끝점 다 같은 컬럼(data-deletions) 안이라 buildTarget의 same-side
-		// 분기를 탄다 — split 크로스 컬럼 clampToColumn 분기가 아니므로 클램프가
-		// 없고 chars가 붙는 게 정상이다(크로스 컬럼 케이스는 아래 두 테스트가 덮음).
+		// 같은 컬럼 안이라 클램프가 없어 chars가 붙는다.
 		expect(target?.range).toEqual({
 			kind: "side",
 			side: "old",
@@ -409,8 +401,6 @@ describe("charOffsetInRow", () => {
 	});
 
 	test("행 안이지만 텍스트 노드 워크에서 못 찾는 끝점(엘리먼트 자체)은 null", () => {
-		// node가 행에 포함돼 있어도(contains) 텍스트 노드가 아니면 TreeWalker가
-		// 절대 만나지 못한다 — 워커가 끝까지 순회한 뒤 정상 종료하는 경로.
 		const row = rowWithTokens();
 		const span = row.firstChild as Element;
 		expect(charOffsetInRow(row, span, 0)).toBeNull();
@@ -479,7 +469,6 @@ describe("resolveTextTarget — chars 게이팅", () => {
 		});
 	});
 
-	// 클램프가 일어난 경우 chars는 의미가 없다 → 생략해 줄 전체로 떨어진다
 	test("한쪽 끝점이 행 밖(클램프)이면 chars가 없다", () => {
 		const { root } = makeFile("src/a.ts");
 		const rows = addColumn(root, "single", "", [
@@ -550,11 +539,7 @@ describe("resolveTextTarget — chars 게이팅", () => {
 		});
 	});
 
-	// direct(own !== null)는 "[data-line] 조상이 있다"만 보장하지, 끝점이 텍스트
-	// 노드 안이라는 것까지는 보장하지 않는다 — 토큰 <span> 경계 자체를 가리키는
-	// 끝점도 direct다. charOffsetInRow가 그런 Element 끝점에서 null을 반환하므로
-	// (텍스트 워커가 절대 못 찾는다) chars는 조용히 생략되고 줄 전체로 떨어진다.
-	// Task 3가 이 안전망에 의존하므로 end-to-end로 고정해 둔다.
+	// direct는 [data-line] 조상만 보장한다 — 토큰 <span> 경계를 가리키는 끝점도 direct다.
 	test("direct하지만 끝점이 텍스트 노드가 아닌 토큰 엘리먼트면 chars가 없다", () => {
 		const { root } = makeFile("src/a.ts");
 		const rows = addColumn(root, "single", "", [

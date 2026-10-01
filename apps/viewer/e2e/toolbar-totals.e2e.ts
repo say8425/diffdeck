@@ -1,9 +1,5 @@
-// 툴바의 전체 변경량 — 개수(`n file(s)`) 오른쪽에서 "통틀어 몇 줄인가"를 말한다.
-//
-// 합산은 `browser/changeTotals.ts`(유닛 100%)가 하지만, `main.ts`는 커버리지
-// 게이트 밖이라 배선이 통째로 빠져도 유닛은 전부 초록이다. 여기가 그 구멍을
-// 막는다. 아울러 **숫자가 git과 같은가**는 실제 git 없이는 확인할 수 없으므로
-// 기대값을 스펙 안에서 git으로 직접 계산해 대조한다.
+// 기대값은 하드코딩하지 않고 스펙 안에서 git으로 계산한다 — 클라이언트의
+// 재-diff가 git과 갈리면 잡힌다.
 import { spawnSync } from "node:child_process";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
@@ -15,7 +11,7 @@ const capture = (dir: string, args: string[]): string => {
 	return r.stdout;
 };
 
-/** `git diff --numstat`의 합. 바이너리는 줄 수가 `-`로 나오므로 뺀다. */
+// 바이너리는 numstat에 `-`로 나와 뺀다.
 const gitTotals = (dir: string, rev: string): { add: number; del: number } => {
 	let add = 0;
 	let del = 0;
@@ -42,14 +38,12 @@ test.describe("toolbar change totals", () => {
 			await expect(page.locator("#change-add")).toHaveText(`+${add}`);
 			await expect(page.locator("#change-del")).toHaveText(`-${del}`);
 
-			// 사용자가 지정한 자리: 개수 **오른쪽**.
 			const afterStatus = await page.evaluate(
 				() => document.getElementById("status")?.nextElementSibling?.id ?? null,
 			);
 			expect(afterStatus).toBe("change-totals");
 
-			// 조각 사이에 공백 텍스트 노드가 끼면 `+7  -1`이 된다.
-			// toHaveText는 공백을 정규화하므로 textContent를 그대로 본다.
+			// toHaveText는 공백을 정규화해 조각 사이에 낀 공백 텍스트 노드를 못 잡는다.
 			expect(
 				await page.locator("#change-totals").evaluate((el) => el.textContent),
 			).toBe(`+${add} -${del}`);
@@ -58,9 +52,6 @@ test.describe("toolbar change totals", () => {
 		}
 	});
 
-	// 색이 add/del을 가른다 — 지우면 두 숫자가 같은 색이 되어 어느 쪽이
-	// 추가인지 부호에만 의존하게 된다. happy-dom에는 캐스케이드가 없어
-	// 유닛이 원리적으로 못 보는 계약이다.
 	test("colors additions and deletions apart", async ({ page }) => {
 		const { url, stop } = await launchViewer([]);
 		try {
@@ -76,7 +67,7 @@ test.describe("toolbar change totals", () => {
 					del: getComputedStyle(del).color,
 				};
 			});
-			// --vd-success(#3fb950) / #f85149 — 앱에 이미 있는 add·del 쌍.
+			// `--vd-success`(#3fb950)와 #f85149 — 앱의 add·del 색.
 			expect(colors.add).toBe("rgb(63, 185, 80)");
 			expect(colors.del).toBe("rgb(248, 81, 73)");
 		} finally {
@@ -84,22 +75,16 @@ test.describe("toolbar change totals", () => {
 		}
 	});
 
-	// 변경이 없으면 개수와 함께 자리를 통째로 비운다 — `+0 -0`이 남으면
-	// 아무 말도 아닌 숫자가 툴바를 차지한다.
 	test("clears the totals when a render lands with nothing to count", async ({
 		page,
 	}) => {
-		// **전이를 봐야 한다.** clean 리포로 띄우면 첫 렌더가 곧 빈 분기라
-		// #change-add/#change-del이 마크업 상태(빈 문자열) 그대로이고, 그러면
-		// `applyChangeTotals([])` 배선을 통째로 지워도 이 단언이 초록이다 —
-		// .claude/rules/e2e.md가 경고하는 빈 통과(vacuity) 구조다. 그래서
-		// 숫자가 실제로 **쓰인 뒤** 사라지는지를 본다.
+		// 숫자가 쓰인 뒤 사라지는 전이를 본다 — clean 리포로 띄우면 처음부터 비어
+		// 있어 비우는 배선을 지워도 통과한다.
 		const { url, repoDir, stop } = await launchViewer([]);
 		try {
 			await page.goto(url);
 			await expect(page.locator("#change-add")).not.toBeEmpty();
 
-			// 워킹트리를 되돌리면 볼 것이 없어진다.
 			capture(repoDir, ["checkout", "--", "."]);
 			await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 

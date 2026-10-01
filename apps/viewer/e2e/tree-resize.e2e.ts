@@ -1,11 +1,3 @@
-// Drag/keyboard resize of the file-tree sidebar. #tree-resizer sits between
-// #tree and #diff as its own grid track (browser/main.ts wires pointer +
-// keyboard events; browser/resize.ts holds the pure width math, both unit
-// tested). The live width lives in the `--vd-tree-w` CSS custom property on
-// #app, set directly via `style.setProperty` (not through a `var()` fallback
-// chain), so reading it back with getComputedStyle is an exact,
-// layout-independent way to assert a resize took effect -- no boundingBox
-// subpixel rounding to fight.
 import type { Page } from "@playwright/test";
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
@@ -19,6 +11,8 @@ const test = base.extend<{ treeRightUrl: string }>({
 	},
 });
 
+// main.ts sets `--vd-tree-w` on #app via style.setProperty, so reading it back
+// is exact — no bounding-box subpixel rounding.
 const readTreeWidth = (page: Page): Promise<number> =>
 	page
 		.locator("#app")
@@ -62,7 +56,6 @@ test("a mouse drag leaves the resizer focused for immediate keyboard follow-up",
 
 	await expect(page.locator("#tree-resizer")).toBeFocused();
 
-	// Immediate keyboard follow-up after the drag, with no extra Tab/click.
 	await page.keyboard.press("ArrowLeft");
 	await expect.poll(() => readTreeWidth(page)).toBe(startWidth + 40 - 10);
 });

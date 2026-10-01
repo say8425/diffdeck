@@ -28,10 +28,7 @@ describe("isLargeFile", () => {
 });
 
 describe("countChangedLines", () => {
-	// FileDiffMetadata.additionLines/deletionLines(string[])는 이름과 달리
-	// "변경된 줄"이 아니다: parseDiffFromFile로 만든 diff는 isPartial === false라
-	// 그 둘이 각각 새/옛 파일의 **전량**이다. 실제 +/- 줄 수는 hunk 쪽 동명
-	// 숫자 필드에만 있다.
+	// FileDiffMetadata의 동명 필드(string[])는 파일 전량이라 hunk의 숫자 필드를 센다(viewer.md).
 	test("sums the +/- line counts across hunks", () => {
 		expect(
 			countChangedLines([
@@ -44,8 +41,6 @@ describe("countChangedLines", () => {
 		expect(countChangedLines([])).toBe(0);
 	});
 	test("a long file with a small edit is not large", () => {
-		// headerlab의 CLAUDE.md 실측: 1166줄 파일에 +28/-2.
-		// 파일 전량(1166 + 1140 = 2306)을 세면 임계값을 넘어 접혔다.
 		expect(
 			isLargeFile(
 				"CLAUDE.md",

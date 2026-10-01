@@ -1,29 +1,13 @@
 [test]
 root = "."
-# Registers the reusable css-inline Bun plugin (scripts/css-inline-plugin.ts) so
-# `bun test` resolves the forked packages' `import styles from '../style.css?inline'`
-# to the real stylesheet text. Same plugin the build uses (scripts/parity/build.ts).
-#
-# NOTE: packages/trees/src/__tests__/happydom.ts (happy-dom global registration)
-# is intentionally NOT preloaded here. Registering happy-dom globally replaces
-# Node's fetch/http with happy-dom's implementations for the *entire* test run,
-# which broke apps/viewer's real HTTP server tests (diff-server, api/blob,
-# built-serving) with `NetworkError: ... Parse Error` out of happy-dom's fetch.
-# The blast radius scales with the suite: 21 failures when first hit, 58 when
-# re-measured on 2026-08-05 — don't treat the count as a constant, just keep
-# happy-dom out of this list. Trees view/DOM tests must instead
-# `import "./happydom";` at the top of each file that needs a DOM
-# (see happydom-smoke.test.ts).
+# Runtime css-inline plugin: lets `bun test` resolve the forked packages' `?inline` CSS.
+# Never preload happy-dom here — it swaps fetch etc. for the whole run and breaks the
+# real-HTTP server tests. DOM tests opt in per file with `import "./happydom";`
+# (.claude/rules/testing.md).
 preload = ["./scripts/parity/preload.ts"]
 
-# Coverage gate, scoped to diffdeck's owned runtime code
-# (apps/viewer/{browser,cli,server}). Only fires when `--coverage` is passed
-# (plain `bun test` stays fast), so `bun run test:coverage` enforces it.
-# Excluded: vendored packages/*, the source-map/parity tooling under scripts/,
-# the browser entry main.ts (integration entry — covered by the Playwright e2e
-# suite, not in-process), the build script, and the e2e specs themselves. The
-# threshold is aggregate over the remaining (owned) files, so 100% ⇔ every
-# owned runtime line is covered.
+# 100% gate on owned runtime code (apps/viewer/{browser,cli,server}); applies only with
+# `--coverage` (`bun run test:coverage`). main.ts is covered by e2e instead.
 coverageThreshold = { lines = 1, functions = 1, statements = 1 }
 coveragePathIgnorePatterns = [
 	"packages/**",

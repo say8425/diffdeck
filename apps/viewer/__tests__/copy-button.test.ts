@@ -6,19 +6,16 @@ const RESET_MS = 1200;
 const COPY_SVG_HINT = 'rect x="9" y="9" width="13" height="13" rx="2" ry="2"';
 const CHECK_SVG_HINT = 'polyline points="20 6 9 17 4 12"';
 
-// navigator.clipboard is a non-configurable-value prototype getter in
-// happy-dom; shadowing it with an own property (via defineProperty) and then
-// deleting that own property restores the prototype getter afterward.
+// happy-dom's navigator.clipboard is a prototype getter: shadow it with an own property, delete it to restore.
 const setClipboard = (value: unknown): void => {
 	Object.defineProperty(navigator, "clipboard", { value, configurable: true });
 };
 const restoreClipboard = (): void => {
-	// test-only cleanup of a shadowed own property
 	delete (navigator as { clipboard?: unknown }).clipboard;
 };
 
-// Two microtask ticks: one for the writeText() promise settling, one for the
-// .then(showCopied) callback it schedules.
+// Microtasks, not setTimeout: a setTimeout flush under fake timers never resolves and hangs the whole run.
+// Two ticks: writeText() settling, then the .then(showCopied) it schedules.
 const tick = async (): Promise<void> => {
 	await Promise.resolve();
 	await Promise.resolve();
@@ -82,13 +79,11 @@ describe("createCopyButton", () => {
 		expect(btn.getAttribute("aria-label")).toBe("Copied");
 		expect(writeText).toHaveBeenCalledTimes(2);
 
-		// The first timer would have fired here (800 + 400 = 1200ms since the
-		// first click) had the second click not cleared it.
+		// The first click's timer would have fired here had the second click not cleared it.
 		jest.advanceTimersByTime(400);
 		expect(btn.getAttribute("aria-label")).toBe("Copied");
 		expect(btn.innerHTML).toContain(CHECK_SVG_HINT);
 
-		// The restarted timer fires 1200ms after the *second* click.
 		jest.advanceTimersByTime(800);
 		expect(btn.getAttribute("aria-label")).toBe("Copy file path");
 		expect(btn.innerHTML).toContain(COPY_SVG_HINT);

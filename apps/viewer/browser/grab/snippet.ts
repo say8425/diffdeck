@@ -1,7 +1,6 @@
-// (side,라인범위) → 텍스트 재구성. DOM 무관·가상화 무관: isPartial=false 불변식
-// (additionLines[i] = new i+1행, deletionLines[i] = old i+1행)에만 의존한다.
-// buildGrabRows는 search/searchIndex.ts buildRows의 양측-커서 확장판 — hunk 사이
-// gap 커서는 각 hunk의 deletionStart/additionStart로 재설정(per-gap 델타).
+// isPartial=false(파일 전량으로 만든 diff)에 기댄다: additionLines[i]가 new
+// i+1행, deletionLines[i]가 old i+1행이다. buildGrabRows는
+// search/searchIndex.ts의 buildRows를 old/new 양쪽 커서로 넓힌 것이다.
 import type { FileDiffMetadata } from "@diffdeck/diffs";
 import type {
 	CharSpan,
@@ -36,10 +35,6 @@ export type Snippet =
 
 const stripEol = (line: string): string => line.replace(/\r?\n$/, "");
 
-/**
- * 문자 범위를 줄 배열에 적용한다. 첫 줄은 앞을, 끝 줄은 뒤를 자른다.
- * 한 줄이면 양쪽 모두. chars가 없으면 그대로 — 줄 전체 동작이 기본이다.
- */
 const applyChars = (lines: readonly string[], chars?: CharSpan): string[] => {
 	if (!chars || lines.length === 0) return [...lines];
 	if (lines.length === 1) return [lines[0].slice(chars.start, chars.end)];
@@ -164,7 +159,6 @@ export const extractSnippet = (
 			newEnd = Math.max(newEnd, r.newNo);
 		}
 	}
-	// 라인 번호는 원본 rows로 계산했다(자르기와 무관) — 반환의 rows만 잘린 텍스트로 바꾼다.
 	const sliced = applyChars(
 		rows.map((r) => r.text),
 		range.chars,

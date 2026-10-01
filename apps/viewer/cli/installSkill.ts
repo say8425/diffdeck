@@ -14,9 +14,7 @@ export const parseInstallArgs = (argv: string[]): InstallSkillOptions => ({
 	project: argv.includes("--project"),
 });
 
-// Target directories the skill is written into. Claude Code reads
-// <base>/.claude/skills/<name>/; Codex reads <base>/.agents/skills/<name>/.
-// base = cwd for --project (repo-local), else HOME (user-global).
+// Claude Code reads <base>/.claude/skills/<name>/, Codex <base>/.agents/skills/<name>/.
 export const resolveSkillTargets = (
 	opts: InstallSkillOptions,
 	env: Env = process.env,

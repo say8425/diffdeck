@@ -1,14 +1,7 @@
 import { expect, test } from "bun:test";
 import { pickForBatch } from "../server/diff.ts";
 
-/**
- * 어떤 blob을 `cat-file --batch`로 미리 읽을지. 배치가 아끼는 것은 프로세스 생성
- * 비용이라 작은 blob에서만 이득이고, 큰 blob까지 담으면 빌드 동안 diff의 모든
- * blob이 한 버퍼에 올라 메모리 상한이 사라진다(리뷰 실측: 25MB × 20에서 최대
- * 메모리 1GB → 3GB, 시간도 250 → 500ms). 잡는 깨짐: 크기 상한을 무시하는 선택,
- * 합계 상한을 무시하는 선택, 크기를 모르는(= 없는) 객체를 배치에 넣는 선택.
- */
-
+// 큰 blob까지 배치에 담으면 diff의 모든 blob이 한 버퍼에 올라 메모리 상한이 사라진다(server.md).
 const limits = { maxBlob: 100, maxTotal: 250 };
 
 test("keeps blobs at or under the per-blob limit, in request order", () => {
@@ -27,7 +20,6 @@ test("stops adding once the running total would pass the total limit", () => {
 		["c", 100],
 		["d", 10],
 	]);
-	// a+b = 200, c would make 300 > 250 → skipped; d fits (210)
 	expect(pickForBatch(["a", "b", "c", "d"], sizes, limits)).toEqual([
 		"a",
 		"b",

@@ -1,10 +1,3 @@
-// Two bundles:
-//  1) dist/cli.js       — bin entry (server + CLI), target bun.
-//  2) dist/viewer/*     — browser viewer bundle. The forked @diffdeck/* packages
-//                         import `../style.css?inline`, so the css-inline plugin
-//                         must stay attached (parity with the harness build.ts).
-// Layout mirrors cc-statusline: dist/cli.js + dist/viewer/{main.js,index.html}.
-// dist/viewer/fonts/ carries the vendored fonts (apps/viewer/fonts/README.md).
 import { chmodSync, rmSync } from "node:fs";
 import { cssInlineBundlerPlugin } from "../../scripts/css-inline-plugin.ts";
 
@@ -21,9 +14,8 @@ if (!cli.success) {
 	process.exit(1);
 }
 
-// Prepend a bun shebang + set the exec bit so the published bin runs via
-// npx/direct exec, not only `bunx`. Bun.build emits `// @bun` as line 1; the
-// shebang goes above it (bun skips the shebang line and still honors `// @bun`).
+// Shebang + exec bit so the bin also runs via npx/direct exec, not only `bunx`. It goes
+// above Bun.build's `// @bun` line, which bun still honors.
 const cliPath = `${dist}/cli.js`;
 const cliSource = await Bun.file(cliPath).text();
 if (!cliSource.startsWith("#!")) {
@@ -31,6 +23,7 @@ if (!cliSource.startsWith("#!")) {
 }
 chmodSync(cliPath, 0o755);
 
+// The forked packages import `../style.css?inline`, which needs the css-inline plugin.
 const viewer = await Bun.build({
 	entrypoints: [`${import.meta.dir}/browser/main.ts`],
 	target: "browser",
@@ -44,10 +37,8 @@ if (!viewer.success) {
 	process.exit(1);
 }
 
-// 워커 하이라이트 번들: vendored 워커 엔트리를 별도 모듈 워커로 빌드한다.
-// main.ts의 workerFactory가 new URL("worker.js", import.meta.url)로 로드.
-// worker.ts는 css를 import하지 않으므로 css-inline 플러그인은 불필요하다(viewer
-// 번들 블록에서 복붙됐던 흔적).
+// main.ts가 new URL("worker.js", import.meta.url)로 로드하므로 main.js 옆에 둔다.
+// worker.ts는 CSS를 import하지 않아 css-inline 플러그인이 필요 없다.
 const worker = await Bun.build({
 	entrypoints: [`${import.meta.dir}/../../packages/diffs/src/worker/worker.ts`],
 	target: "browser",
@@ -65,10 +56,8 @@ await Bun.write(
 	Bun.file(`${import.meta.dir}/index.html`),
 );
 
-// 폰트 파일과 그 라이선스(OFL은 폰트와 함께 배포하도록 요구한다).
-// fonts/README.md는 출처 기록이라 싣지 않는다. 먼저 비운다 — 파일을 바꾸거나
-// 지운 뒤 로컬에서 빌드·배포하면 옛 폰트가 tarball에 섞여 나간다(실측: 서브셋
-// 4개가 남아 20개 파일이 됐다).
+// 폰트와 OFL 라이선스를 싣는다(OFL은 함께 배포를 요구한다, README.md는 뺀다). 먼저
+// 비운다 — 지운 폰트가 남아 tarball에 섞이지 않게.
 rmSync(`${dist}/viewer/fonts`, { recursive: true, force: true });
 for await (const name of new Bun.Glob("*.{woff2,txt}").scan(
 	`${import.meta.dir}/fonts`,

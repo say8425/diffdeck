@@ -52,16 +52,14 @@ describe("encodeGrab", () => {
 			prompt: "",
 		});
 		expect(out).toContain("Lines: 7 (old side, base diff vs origin/main)");
-		expect(out.endsWith("```")).toBe(true); // 빈 프롬프트 생략
+		expect(out.endsWith("```")).toBe(true);
 	});
 	test("base 모드 + 베이스명 없음 → 'base diff'", () => {
 		expect(encodeGrab({ ...base, mode: "base", baseName: "" })).toContain(
 			"(new side, base diff)",
 		);
 	});
-	// 브랜치를 head로 보는 화면에서 잡은 줄은 그 브랜치의 **커밋된** 내용이다.
-	// 참조가 그걸 말하지 않으면 붙여넣기를 받은 에이전트가 자기 워킹트리의
-	// 같은 경로(다른 브랜치일 수 있다)를 열어 엉뚱한 줄을 고친다.
+	// 리비전을 말하지 않으면 받은 에이전트가 자기 워킹트리의 같은 경로(다른 브랜치일 수 있다)를 고친다.
 	test("head를 보고 있으면 어느 리비전인지 말한다", () => {
 		expect(
 			encodeGrab({ ...base, mode: "base", baseName: "main", head: "develop" }),
@@ -129,8 +127,7 @@ describe("encodeGrab", () => {
 });
 
 describe("plainSnippet", () => {
-	// ⌥⏎ 단순 복사 — 편집기에 바로 붙여넣을 수 있어야 하므로 펜스·헤더가
-	// 없고, 문자 슬라이스가 이미 적용된 lines가 그대로 나간다.
+	// ⌥⏎ 단순 복사는 편집기에 바로 붙여넣는 용도다.
 	test("side: 코드 줄만, 펜스·헤더 없음", () => {
 		expect(plainSnippet(sideSnip)).toBe("if (a) return;\nconst b = 1;");
 	});
@@ -155,7 +152,6 @@ describe("plainSnippet", () => {
 });
 
 describe("grabLabelParts", () => {
-	// 조각의 kind가 곧 색이다 — 여기가 틀리면 팝오버가 엉뚱한 색을 칠한다.
 	test("side: 파일 / 범위 / 구분자 / side 네 조각", () => {
 		expect(grabLabelParts(base.path, sideSnip).map((p) => p.kind)).toEqual([
 			"file",

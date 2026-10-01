@@ -1,16 +1,9 @@
-// 정보형 빈 상태 카드: diff가 0건일 때 "No changes." 대신 브랜치/베이스
-// 컨텍스트와 실개수 기반 액션(모드 전환·untracked 표시)을 보여준다
-// (browser/emptyState.ts + /api/summary). mode 드롭다운을 실제로 조작하는
-// 최초의 e2e이기도 하다.
-//
-// 트리 존재 확인은 render.e2e.ts와 같은 이유로 shadow root의
-// `data-item-path` 속성을 직접 본다 (트리 텍스트는 middle-truncation 때문에
-// 로케이터 텍스트 매칭이 불안정).
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
+// 트리의 이름은 middle-truncation으로 여러 노드에 쪼개져 텍스트로는 못 찾는다.
 const treeHasPath = (page: Page, path: string): Promise<boolean> =>
 	page
 		.locator("file-tree-container")
@@ -20,11 +13,8 @@ const treeHasPath = (page: Page, path: string): Promise<boolean> =>
 			path,
 		);
 
-/**
- * `#empty`가 거쳐 간 문구를 **첫 페인트 전부터** 기록한다. 깜박임은 최종
- * 상태로는 원리적으로 안 보이므로(끝나고 나면 옳은 카드가 떠 있다) 중간
- * 프레임을 붙잡아야만 잡힌다.
- */
+// `#empty`가 거쳐 간 문구를 첫 페인트 전부터 기록한다 — 깜박임은 최종 상태로는
+// 안 보인다.
 const recordEmptyTexts = async (page: Page): Promise<void> => {
 	await page.addInitScript(() => {
 		const seen: string[] = [];
@@ -34,8 +24,7 @@ const recordEmptyTexts = async (page: Page): Promise<void> => {
 			const text = el ? (el.textContent ?? "") : "";
 			if (text !== "" && seen[seen.length - 1] !== text) seen.push(text);
 		};
-		// `document`를 관찰한다 — 이 스크립트는 document-start에 도는데 그때
-		// `documentElement`는 아직 없을 수 있다(실측: 기록이 통째로 빈다).
+		// document-start에는 `documentElement`가 없을 수 있어 `document`를 관찰한다.
 		new MutationObserver(push).observe(document, {
 			childList: true,
 			subtree: true,
@@ -62,8 +51,7 @@ test.describe("informative empty state", () => {
 			await page.goto(url);
 			const card = page.locator("#empty.empty-card");
 			await expect(card).toBeVisible();
-			// untracked data.txt가 숨겨져 있으므로 "Working tree clean"이 아니라
-			// 측정한 것만 주장하는 헤드라인이어야 한다.
+			// untracked가 숨겨져 있을 뿐이라 "Working tree clean"이라고 하지 않는다.
 			await expect(card.locator(".empty-headline")).toHaveText(
 				"No tracked changes",
 			);
@@ -74,14 +62,12 @@ test.describe("informative empty state", () => {
 				hasText: "changed vs main",
 			});
 			await expect(switchBtn).toHaveText("1 file(s) changed vs main — view");
-			// 픽스처가 항상 남기는 untracked data.txt도 안내되어야 한다.
 			await expect(
 				card.locator("button.empty-action", { hasText: "untracked" }),
 			).toHaveText("1 untracked file(s) hidden — show");
 
-			// 클릭 → base가 자동 해석으로 바뀌고 커밋된 diff가 렌더된다.
-			// 피커 라벨은 이제 head를 말하므로 base의 증거가 아니다 — 관찰
-			// 가능한 신호는 카드가 사라지고 개수가 나타나는 것이다.
+			// 피커 라벨은 head를 말하므로 base 전환의 증거가 못 된다 — 카드가
+			// 사라지고 개수가 뜨는 것으로 본다.
 			await switchBtn.click();
 			await expect(page.locator("#empty")).toHaveCount(0);
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
@@ -114,7 +100,7 @@ test.describe("informative empty state", () => {
 			branches: ["develop"],
 		});
 		try {
-			// 픽스처가 항상 남기는 untracked data.txt를 지워 완전 무변경 상태로.
+			// 픽스처의 untracked data.txt까지 지워 완전 무변경으로 만든다.
 			rmSync(join(repoDir, "data.txt"));
 			await page.goto(url);
 			const card = page.locator("#empty.empty-card");
@@ -127,13 +113,9 @@ test.describe("informative empty state", () => {
 			await expect(card.locator(".empty-context")).toHaveText("on main");
 			await expect(card.locator("button.empty-action")).toHaveCount(0);
 
-			// 회귀: 304(unchanged) 응답이라도 빈 상태가 유지되는 동안엔 카드를
-			// 재계산해야 한다 — untracked 개수는 지문 밖 사실이라, 새 untracked
-			// 파일이 생겨도 diff 지문은 그대로(untracked=0은 -uno)여서 304가
-			// 온다. focus 리프레시 후 카드에 안내가 나타나야 한다.
-			//
-			// **head를 바꾸기 전에** 확인한다 — 커밋된 rev를 보고 있으면
-			// untracked는 재지 않은 값(null)이라 이 안내가 원리적으로 없다.
+			// untracked 개수는 지문 밖이라 새 untracked 파일에도 304가 오지만 카드는
+			// 다시 계산돼야 한다. head를 바꾸기 전에 본다 — 커밋된 rev에서는
+			// untracked를 재지 않아 이 안내가 없다.
 			writeFileSync(join(repoDir, "late.txt"), "new untracked\n");
 			await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 			await expect(
@@ -142,11 +124,8 @@ test.describe("informative empty state", () => {
 				}),
 			).toHaveText("1 untracked file(s) hidden — show");
 
-			// 회귀: 양쪽이 다 빈 상태에서 선택을 바꿔도 카드가 새 사실로
-			// 갱신되어야 한다 — 빈 payload의 etag가 선택과 무관하게 같아 304로
-			// 이전 카드에 고착되던 버그의 가드 (선택 변경 시 lastEtag 리셋).
-			// head를 바꾸면 요약의 branch가 **보고 있는 그 브랜치**를 말하므로
-			// 카드의 컨텍스트 줄이 그 증거다.
+			// 빈 diff의 etag는 선택과 무관해서, 선택을 바꿔도 304로 옛 카드에 고착될
+			// 수 있다(viewer.md "갱신과 캐시"). 컨텍스트 줄이 새 head를 말하는지 본다.
 			await page.locator("#ref-picker-btn").click();
 			await page
 				.locator("#ref-picker .ref-row")
@@ -161,10 +140,6 @@ test.describe("informative empty state", () => {
 		}
 	});
 
-	// 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어 기본 뷰(미커밋
-	// 변경)가 구조적으로 비어 있다. 워크트리를 팔 때마다 "볼 게 가장 많은
-	// 순간에 빈 화면"을 만나고 카드의 버튼을 한 번씩 눌러 줘야 했다 — 고른
-	// 적이 없다면 볼 것이 있는 쪽을 바로 연다.
 	test("nothing at all in the working view: opens the base diff instead", async ({
 		page,
 	}) => {
@@ -173,16 +148,14 @@ test.describe("informative empty state", () => {
 			featureBranchCommit: true,
 		});
 		try {
-			// 픽스처의 untracked 스크래치를 지운다 — 그게 남아 있으면 이 뷰에도
-			// (토글 뒤에) 볼 것이 있으므로 자동 전환이 의도적으로 억제된다.
+			// data.txt가 남아 있으면 (토글 뒤에) 볼 것이 있어 자동 전환이 억제된다.
 			rmSync(join(repoDir, "data.txt"));
 			await page.goto(url);
 
 			await expect(page.locator("#status")).toHaveText("1 file(s)");
 			await expect(page.locator("#empty")).toHaveCount(0);
 
-			// **저장하지 않는다** — 추론이지 사용자의 선택이 아니다. 저장해 버리면
-			// 고른 적 없는 프리퍼런스가 생겨 이후 판단이 영영 막힌다.
+			// 자동 전환은 저장하지 않는다 — 저장하면 이후 자동 전환이 영구히 막힌다.
 			const saved = await page.evaluate(() =>
 				Object.keys(localStorage).filter((k) => k.includes("compare-base")),
 			);
@@ -192,8 +165,6 @@ test.describe("informative empty state", () => {
 		}
 	});
 
-	// 자동 전환이 사용자의 선택을 덮으면 안 된다. URL의 `base=`는 명시적
-	// 선택이므로 워킹트리가 텅 비어도 그대로 둔다.
 	test("an explicit base choice is never overridden", async ({ page }) => {
 		const { url, repoDir, stop } = await launchViewer([], {
 			clean: true,
@@ -203,17 +174,13 @@ test.describe("informative empty state", () => {
 			rmSync(join(repoDir, "data.txt"));
 			await page.goto(`${url}&base=HEAD`);
 
-			// 카드가 그대로 떠 있다는 것이 "덮지 않았다"의 증거다 — 자동 전환이
-			// 걸렸다면 diff가 렌더되어 카드가 사라진다.
+			// 자동 전환이 걸렸다면 diff가 렌더되어 카드가 사라진다.
 			await expect(page.locator("#empty.empty-card")).toBeVisible();
 		} finally {
 			await stop();
 		}
 	});
-	// 빈 상태의 문구는 /api/summary가 와야 정해진다. 예전엔 "No changes."를
-	// 먼저 그려 놓고 60~80ms 뒤 카드로 덮었다 — 사용자에게는 없다고 한 번
-	// 말한 뒤 말을 바꾸는 것으로 보인다(실측: 673ms "No changes." → 753ms
-	// 카드). 최종 상태로는 원리적으로 안 보이므로 중간 프레임을 기록해 본다.
+
 	test("never says No changes before the card is ready", async ({ page }) => {
 		const { url, stop } = await launchViewer([], {
 			clean: true,
@@ -227,7 +194,6 @@ test.describe("informative empty state", () => {
 			).toHaveText("No tracked changes");
 
 			const texts = await emptyTexts(page);
-			// 로딩 표시에서 카드로 곧장 간다. 그 사이 어떤 문구도 끼면 안 된다.
 			expect(texts).not.toContain("No changes.");
 			expect(texts[0]).toContain("Loading diff…");
 		} finally {
@@ -235,8 +201,6 @@ test.describe("informative empty state", () => {
 		}
 	});
 
-	// 자동 base 전환이 걸리는 경우가 가장 나쁘다 — 볼 것이 있는데도 "없다"고
-	// 한 번 말한 뒤 diff가 뜬다.
 	test("the auto base switch shows no interim No changes", async ({ page }) => {
 		const { url, repoDir, stop } = await launchViewer([], {
 			clean: true,
@@ -254,8 +218,6 @@ test.describe("informative empty state", () => {
 		}
 	});
 
-	// 요약을 못 받아야만 폴백 문구로 내려앉는다 — 새로 생긴 분기라 일부러
-	// 그리로 들어간다(커버리지는 branch를 세지 않고, main.ts는 게이트 밖이다).
 	test("falls back to the bare line when the summary is unreachable", async ({
 		page,
 	}) => {

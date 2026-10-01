@@ -10,8 +10,7 @@ import type { SearchFile, SearchMatch } from "../browser/search/searchIndex.ts";
 
 const DEBOUNCE_MS = 120;
 
-// Same fixture shape as viewer-search-index.test.ts: 3 matches for "foo"
-// ordered deletions(line3) -> additions(line3) -> additions(line5).
+// Same fixture as viewer-search-index.test.ts: "foo" matches deletions:3, additions:3, additions:5.
 const fixture = (): FileDiffMetadata => {
 	const additionLines = [
 		"import a",
@@ -98,12 +97,8 @@ const keydown = (target: EventTarget, init: KeyboardEventInit): boolean =>
 		new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
 	);
 
-// findBar()의 window keydown 리스너는 명시적으로 destroy()해야 해제된다 —
-// happy-dom은 프로세스 전역으로 한 번만 등록되므로(happydom.ts), destroy 없이
-// 매 테스트가 새 인스턴스를 만들면 리스너가 테스트 파일 끝까지 계속 쌓인다.
-// 모든 테스트가 이 헬퍼로만 인스턴스를 만들어 afterEach가 자동으로 정리한다.
-// 테스트당 인스턴스 하나만 추적한다 — 한 테스트에서 두 번째 인스턴스를 만들면
-// 첫 번째가 activeFindBar에서 덮어써져 destroy 없이 새듯이 샌다.
+// window keydown 리스너는 destroy()로만 풀리고 happy-dom 전역은 프로세스 내내 살아 있다 — 인스턴스는 이 헬퍼로만 만든다.
+// 테스트당 하나만 추적하므로 한 테스트에서 둘을 만들면 첫 번째가 샌다.
 let activeFindBar: FindBar | null = null;
 const makeFindBar = (deps: FindBarDeps): FindBar => {
 	activeFindBar = createFindBar(deps);
@@ -162,7 +157,6 @@ describe("createFindBar", () => {
 			expect(deps.getFiles).toHaveBeenCalledTimes(1);
 			expect(deps.ensureVisible).toHaveBeenCalledTimes(1);
 			expect(deps.revealMatch).toHaveBeenCalledTimes(1);
-			// once inside goTo(), once again at the end of open()
 			expect(deps.reapplyHighlights).toHaveBeenCalledTimes(2);
 			expect(elements.count.textContent).toBe("1/3");
 		});
@@ -261,7 +255,7 @@ describe("createFindBar", () => {
 
 			deps.revealMatch.mockClear();
 			const result = keydown(elements.input, { key: "Enter" });
-			expect(result).toBe(false); // preventDefault() was called
+			expect(result).toBe(false);
 			expect(elements.count.textContent).toBe("2/3");
 			expect(deps.revealMatch).toHaveBeenCalledTimes(1);
 
@@ -291,7 +285,7 @@ describe("createFindBar", () => {
 		test("Enter with no matches does nothing", () => {
 			const { deps, elements } = makeDeps();
 			const fb = makeFindBar(deps);
-			fb.open(); // empty query -> no matches
+			fb.open();
 
 			deps.revealMatch.mockClear();
 			keydown(elements.input, { key: "Enter" });
@@ -414,7 +408,6 @@ describe("createFindBar", () => {
 
 			expect(fb.isOpen()).toBe(true);
 			expect(document.activeElement).toBe(elements.input);
-			// open() was not called again
 			expect(deps.setExpandAll).not.toHaveBeenCalled();
 			expect(deps.getFiles).not.toHaveBeenCalled();
 		});

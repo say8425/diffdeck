@@ -13,21 +13,13 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      # Plural on purpose — verified against the action's src/index.ts, which is
-      # byte-identical in v4.4.1 and v5.0.0. The action emits `releases_created`
-      # unconditionally, but its singular `release_created` is path-prefixed
-      # (`apps/viewer--release_created`) and omitted entirely when nothing is released.
-      # Reading the singular here would yield an empty value, the publish gate below
-      # would never match, and releases would stop reaching npm silently — the
-      # release/tag still get cut, so nothing goes red. Keep this name and the gate
-      # below in sync.
+      # Plural on purpose: the singular `release_created` is path-prefixed
+      # (`apps/viewer--release_created`) and omitted when nothing is released, so reading
+      # it would silently stop npm publishes. Keep in sync with the gate below.
       releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
-      # release-please opens/updates the release PR. It is merged by a human on
-      # purpose: a release is an npm publish, so it gets a review gate. Merging
-      # it by hand also sidesteps the GITHUB_TOKEN recursion guard — a push made
-      # by GITHUB_TOKEN would not re-trigger this workflow, so an auto-merged
-      # release PR would silently never publish.
+      # A human merges the release PR on purpose: a release is an npm publish, and a
+      # GITHUB_TOKEN merge would not re-trigger this workflow, so it would never publish.
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -36,7 +28,8 @@ jobs:
 
   publish:
     needs: release-please
-    # Name must match the release-please job output above; see the note there.
+    # Must match the output name above. Compare with == 'true': the action emits the
+    # string "false", which is truthy.
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -55,11 +48,8 @@ jobs:
       - name: Build the publishable package
         run: bun run build
         working-directory: apps/viewer
-      # Tokenless: the npm CLI detects the OIDC environment (id-token: write
-      # above) and authenticates via the trusted publisher configured for
-      # @say8425/diffdeck on npmjs.com (org say8425 / repo diffdeck / workflow
-      # release.yml). No NODE_AUTH_TOKEN. (0.1.0 was bootstrapped with a one-off
-      # manual token publish, since npm has no first-publish OIDC — npm/cli#8544.)
+      # Tokenless: npm authenticates via OIDC (id-token: write) against the trusted
+      # publisher registered on npmjs.com for this repo and workflow file (release.yml).
       - name: Publish to npm (trusted publishing + provenance)
         run: npm publish --provenance --access public
         working-directory: apps/viewer

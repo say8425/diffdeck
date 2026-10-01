@@ -50,8 +50,6 @@ describe("parsePrList", () => {
 		});
 	});
 
-	// 닫고 다시 올린 브랜치: 목록은 최신순이라 새 PR이 먼저 오지만, 순서가
-	// 뒤집혀도 열린 PR이 이겨야 한다.
 	test("an open PR beats a finished one on the same branch, in either order", () => {
 		const closedFirst = parse([
 			pr({ number: 9, state: "CLOSED" }),
@@ -89,8 +87,7 @@ describe("parsePrList", () => {
 		expect(parsePrList(JSON.stringify([fork]), "me").main).toBeUndefined();
 	});
 
-	// 포크 워크플로에서는 내 PR이 전부 cross-repository로 온다 — 빼면 그
-	// 사용자에게는 PR 표시가 통째로 사라진다.
+	// 포크 워크플로에서는 내 PR이 전부 cross-repository로 온다.
 	test("keeps PRs from my own fork (origin's owner)", () => {
 		const mine = pr({
 			isCrossRepository: true,
@@ -129,7 +126,6 @@ describe("parsePrList", () => {
 		expect(Object.keys(parsePrList('{"a":1}'))).toEqual([]);
 	});
 
-	// 브랜치 이름은 사용자가 정한다 — 프로토타입 키도 평범한 이름이어야 한다.
 	test("a branch named like a prototype key is an ordinary entry", () => {
 		const out = parse([
 			pr({ headRefName: "__proto__", number: 2 }),
@@ -227,8 +223,7 @@ describe("getPrs", () => {
 });
 
 describe("runGh", () => {
-	// gh가 실패로 끝나면(여기선 git 리포가 아닌 곳) 출력을 믿지 않는다.
-	// gh가 설치돼 있지 않은 환경에서도 스폰이 던져 같은 빈 결과가 된다.
+	// git 리포가 아닌 곳이라 gh가 실패로 끝난다(gh가 없는 환경에서도 스폰 실패로 같은 null이다).
 	test("a failing gh yields null", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "dd-prs-"));
 		try {
@@ -245,8 +240,7 @@ describe("runGh", () => {
 	});
 
 	test("a gh that succeeds yields its stdout", async () => {
-		// `gh --version`은 인증도 리포도 필요 없다. gh가 없는 환경이면 null이라
-		// 이 단언만 건너뛴다(스폰 실패 경로는 바로 위 테스트가 덮는다).
+		// `gh --version`은 인증도 리포도 필요 없다. gh가 없는 환경이면 단언만 건너뛴다.
 		const out = await runGh(tmpdir(), ["--version"]);
 		if (out !== null) expect(out).toContain("gh version");
 	});

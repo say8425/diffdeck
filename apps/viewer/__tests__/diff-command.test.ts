@@ -38,7 +38,6 @@ describe("getDiffFiles", () => {
 		expect(f.binary).toBe(false);
 		expect(f.oldContents).toContain("line1\n");
 		expect(f.newContents).toContain("LINE1\n");
-		// full content: an unchanged middle line is present in both
 		expect(f.oldContents).toContain("line30");
 		expect(f.newContents).toContain("line30");
 	});
@@ -94,12 +93,11 @@ describe("getDiffFiles", () => {
 		writeFileSync(join(repo, "bin.dat"), Buffer.from([0x41, 0x00]));
 		const first = await getDiffFiles(repo, { untracked: true });
 		for (const f of first) expect(f.contentVersion).toBeTruthy();
-		// 무변경 재실행 → 동일 (클라이언트 파싱 캐시의 키가 되므로 안정적이어야 한다)
+		// 클라이언트 파싱 캐시의 키라 무변경 재실행에서 같아야 한다.
 		const again = await getDiffFiles(repo, { untracked: true });
 		expect(again.map((f) => f.contentVersion)).toEqual(
 			first.map((f) => f.contentVersion),
 		);
-		// 내용 변경 → 해당 파일만 변화
 		writeFileSync(join(repo, "a.txt"), "changed more\n");
 		const after = await getDiffFiles(repo, { untracked: true });
 		const before = new Map(first.map((f) => [f.name, f.contentVersion]));
@@ -113,10 +111,7 @@ describe("getDiffFiles", () => {
 });
 
 describe("getDiffFiles non-ASCII and special filenames", () => {
-	// git의 기본값(core.quotePath=true)에서는 -z 없는 diff 목록(--raw/--name-status)·ls-files가
-	// 비-ASCII·특수문자 경로를 큰따옴표+8진 이스케이프로 인용해서 낸다
-	// (예: 한글.txt → "\355\225\234\352\270\200.txt"). 그 인용 문자열을 그대로
-	// 경로로 쓰면 git show/readFileSync가 못 찾아 내용이 빈 채로 렌더된다.
+	// -z 없이 목록을 읽으면 git이 비-ASCII 경로를 8진 이스케이프로 인용해 내용이 빈 채로 렌더된다.
 	test("modified file with a Korean filename carries full contents", async () => {
 		const name = "한글.txt";
 		writeFileSync(join(repo, name), "one\n");
@@ -159,9 +154,7 @@ describe("getDiffFiles non-ASCII and special filenames", () => {
 		writeFileSync(join(repo, "old-name.txt"), "rename me\n");
 		await $`git -C ${repo} add old-name.txt`;
 		await $`git -C ${repo} commit -qm before-rename`;
-		// Bun의 $ 셸은 템플릿 리터럴에 직접 박힌(보간되지 않은) 비-ASCII 텍스트를
-		// 깨뜨리므로 ${} 보간으로 전달해야 한다 (이 자체가 diff.ts 파싱과는 무관한
-		// Bun 셸 인용 이슈).
+		// Bun `$`에 비ASCII를 리터럴로 적으면 뭉개지므로 ${} 보간으로 넘긴다(testing.md).
 		await $`git -C ${repo} mv old-name.txt ${renamed}`;
 		const files = await getDiffFiles(repo);
 		const f = files.find((x) => x.name === renamed);
@@ -228,8 +221,6 @@ describe("getFileBytes", () => {
 		writeFileSync(join(repo, "pic.bin"), Buffer.from([8, 0, 8]));
 		await $`git -C ${repo} add pic.bin`;
 		await $`git -C ${repo} commit -qm feat-img`;
-		// Committed on the feature branch: vs HEAD the old side is the branch
-		// commit, but vs base (main) it must be the merge-base version.
 		const vsHead = await getFileBytes(repo, "pic.bin", "old");
 		const vsBase = await getFileBytes(repo, "pic.bin", "old", {
 			mode: "base",
@@ -287,9 +278,6 @@ describe("getDiffFiles base mode", () => {
 });
 
 describe("head selection (rev → rev)", () => {
-	// init -- A (main)
-	//      \-- B (feat)
-	// 브랜치를 head로 보면 "그 브랜치가 갈라진 뒤 한 일"만 보여야 한다.
 	const branchOffAndAdvanceMain = async (): Promise<void> => {
 		await $`git -C ${repo} branch -M main`;
 		await $`git -C ${repo} checkout -qb feat`;
@@ -303,7 +291,6 @@ describe("head selection (rev → rev)", () => {
 
 	test("shows the branch's committed work, not the working tree", async () => {
 		await branchOffAndAdvanceMain();
-		// 워킹트리를 더럽힌다 — head가 커밋된 rev면 이건 보이면 안 된다.
 		writeFileSync(join(repo, "a.txt"), "one\nuncommitted\n");
 
 		const files = await getDiffFiles(repo, {
@@ -315,10 +302,7 @@ describe("head selection (rev → rev)", () => {
 		expect(files[0]?.newContents).toBe("one\ntwo\n");
 	});
 
-	// **갈림점은 head 기준이어야 한다.** `merge-base(ref, HEAD)`로 재면 지금
-	// 워크트리의 HEAD(main)와 갈림점을 잡게 되는데, 그 둘은 아무 관계도 없다
-	// — 남의 브랜치를 보면서 내 위치를 기준 삼는 셈이다. 그러면 main이 그
-	// 사이 만든 b.txt가 "feat에서 삭제됨"으로 끼어든다.
+	// 갈림점을 지금 HEAD(main)로 재면 main이 그 사이 만든 b.txt가 "feat에서 삭제됨"으로 섞인다.
 	test("measures the merge base against the head, not the current HEAD", async () => {
 		await branchOffAndAdvanceMain();
 		const files = await getDiffFiles(repo, {
@@ -343,12 +327,8 @@ describe("head selection (rev → rev)", () => {
 		expect(files.some((f) => f.status === "untracked")).toBe(false);
 	});
 
-	// **참조 이름이 트래킹된 경로와 같을 때.** `docs`·`src`·`test` 같은 이름은
-	// 흔한데, `git diff <base> <ref>`에 `--`가 없으면 git이 rev인지 path인지
-	// 못 정해 `ambiguous argument`로 죽는다. 그 실패는 `2>/dev/null` +
-	// `.nothrow()`가 빈 문자열로 삼켜 **에러 없는 "변경 없음"** 이 된다 —
-	// 사용자는 피커에서 그 브랜치를 고르기만 해도 이 상태에 들어간다.
-	// 기존 픽스처의 `feat`/`main`은 원리적으로 이 결함을 못 잡는다.
+	// 브랜치 이름이 트래킹된 디렉토리 이름과 같아야 `--` 누락을 잡는다 — 없으면 git이 ambiguous argument로
+	// 죽고 그 실패가 에러 없는 "변경 없음"이 된다. feat/main 픽스처로는 원리적으로 못 잡는다.
 	test("a branch named like a tracked directory still diffs", async () => {
 		await $`git -C ${repo} branch -M main`;
 		mkdirSync(join(repo, "docs"));
