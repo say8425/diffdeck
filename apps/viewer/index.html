@@ -641,6 +641,8 @@
 				box-sizing: border-box;
 				position: relative;
 				min-height: 26px;
+				/* 목록이 max-height를 넘으면 행이 눌리지 않고 목록이 스크롤돼야 한다. */
+				flex-shrink: 0;
 				display: flex;
 				flex-direction: column;
 				justify-content: center;
