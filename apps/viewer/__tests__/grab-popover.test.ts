@@ -567,3 +567,58 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 		expect(send.type).toBe("button");
 	});
 });
+
+describe("닫기 버튼 — 라벨 줄 오른쪽 끝", () => {
+	const closeBtn = (pop: GrabPopover) =>
+		pop.element.querySelector(".grab-close") as HTMLButtonElement;
+
+	test("라벨과 같은 줄(.grab-head)에 산다 — 팝오버 높이를 늘리지 않는 자리", () => {
+		const { popover: pop } = makePopover();
+		const head = pop.element.querySelector(".grab-head");
+		expect(head?.parentElement).toBe(pop.element);
+		// 라벨 다음, 맨 끝 — 오른쪽 상단.
+		expect([...(head?.children ?? [])].map((c) => c.className)).toEqual([
+			"grab-label",
+			"grab-close",
+		]);
+	});
+
+	test("아이콘 전용 버튼이라 이름과 단축키 툴팁을 갖는다", () => {
+		const { popover: pop } = makePopover();
+		const btn = closeBtn(pop);
+		expect(btn.type).toBe("button");
+		// #find-close와 같은 어휘.
+		expect(btn.getAttribute("aria-label")).toBe("Close");
+		expect(btn.title).toBe("Close (Esc)");
+		// 텍스트가 없어야 다이얼로그·라벨의 textContent에 섞이지 않는다.
+		expect(btn.textContent).toBe("");
+		expect(btn.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+	});
+
+	test("클릭하면 닫히고 onClosed가 1회 — 다른 닫힘 경로와 같은 close()", () => {
+		openDefault();
+		closeBtn(popover).click();
+		expect(popover.isOpen()).toBe(false);
+		expect(popover.element.hidden).toBe(true);
+		expect(closed).toBe(1);
+		expect(writes).toEqual([]);
+	});
+
+	test("mousedown 기본동작을 막는다 — 보내기 버튼과 같은 포커스 계약", () => {
+		openDefault();
+		const event = new MouseEvent("mousedown", { cancelable: true });
+		closeBtn(popover).dispatchEvent(event);
+		expect(event.defaultPrevented).toBe(true);
+	});
+
+	test("자동 닫힘 대기 중에 눌러도 타이머가 두 번째 close를 부르지 않는다", async () => {
+		jest.useFakeTimers();
+		openDefault();
+		pressEnter();
+		await flush();
+		closeBtn(popover).click();
+		expect(closed).toBe(1);
+		jest.advanceTimersByTime(400);
+		expect(closed).toBe(1);
+	});
+});

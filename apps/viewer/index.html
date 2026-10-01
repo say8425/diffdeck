@@ -782,7 +782,18 @@
 			#grab-popover[hidden] {
 				display: none;
 			}
+			/* 라벨 + 닫기 버튼 한 줄. 높이를 라벨의 정수 행고(15px)로 못박는다 —
+			   버튼(18px)이 줄을 키우면 팝오버 높이가 POPOVER_SIZE와 어긋난다.
+			   버튼은 아래 음수 마진으로 줄 안에 눕는다. */
+			#grab-popover .grab-head {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 15px;
+			}
 			#grab-popover .grab-label {
+				flex: 1 1 auto;
+				min-width: 0;
 				font-size: 11px;
 				/* 라인박스를 정수로 못박는다 — 아래 textarea와 함께, 팝오버
 				   높이가 소수가 되지 않게 하는 두 축 중 하나. */
@@ -884,6 +895,39 @@
 			}
 			#grab-popover .grab-send[data-state="fail"] {
 				color: #f85149;
+			}
+			/* 닫기 — .grab-send와 같은 어휘(배경 없음, idle #6f6f7a, 4px radius,
+			   액센트 포커스 링). hover에만 옅은 배경을 깔아 누를 수 있는 자리를
+			   보인다: 보내기 버튼과 달리 상태색이 없어 색 변화만으로는 약하다.
+			   그 배경이 --vd-hover가 아닌 이유: 그 토큰은 페이지 배경(#141415)
+			   기반이라 팝오버 배경(#232329) 위에선 오히려 어둡게 가라앉는다.
+			   음수 마진 −2px(세로)이 18px 상자를 15px 줄 안에 눕히고, 오른쪽
+			   −3px은 아이콘 획을 패딩 안쪽 가장자리에 맞춘다. */
+			#grab-popover .grab-close {
+				flex: none;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 18px;
+				height: 18px;
+				margin: -2px -3px -2px 0;
+				padding: 0;
+				border: none;
+				border-radius: 4px;
+				background: none;
+				color: #6f6f7a;
+				cursor: pointer;
+				transition:
+					color 0.12s,
+					background-color 0.12s;
+			}
+			#grab-popover .grab-close:hover {
+				color: var(--vd-fg);
+				background: #2c2c33;
+			}
+			#grab-popover .grab-close:focus-visible {
+				outline: 2px solid var(--vd-accent);
+				outline-offset: 1px;
 			}
 			#grab-popover .grab-send svg {
 				display: none;

@@ -7,7 +7,7 @@
 // 입력 영역 **안**에 산다:
 //
 //   ┌ #grab-popover ────────────────┐  8px  ← 떠 있는 패널(앱에서 유일)
-//   │ popover.ts:53 · new side      │
+//   │ popover.ts:53 · new side   [✕]│       ← .grab-head: 라벨 + 닫기 버튼
 //   │ ┌ .grab-field ──────────────┐ │  6px  ← --vd-radius, 표준 컨트롤
 //   │ │ textarea        [.grab-send]│ │  4px  ← 컨테이너 안쪽 버튼
 //   │ └───────────────────────────┘ │
@@ -54,6 +54,10 @@ const SEND_LABEL = "Copy to clipboard";
 const SEND_TITLE = "Copy (⏎) · Shift+⏎ for new line · ⌥⏎ for plain code";
 const KEYS_KEY = "⌥⏎";
 const KEYS_TEXT = "Copy code only";
+// 툴팁은 #find-close와 같다. 이름은 그쪽("Close search")과 달리 대상을 말하지
+// 않는다 — 다이얼로그 안의 버튼이라 "Close"만으로 무엇을 닫는지 분명하다.
+const CLOSE_LABEL = "Close";
+const CLOSE_TITLE = "Close (Esc)";
 // 복사 성공 확인("Copied" + 초록 체크)의 체류 시간. 예전엔 copyButton의
 // RESET_MS(1200)와 맞췄지만, 제출 후 팝오버가 빨리 사라지는 게 요청돼서
 // 확인으로서의 최소한만 남긴다.
@@ -66,6 +70,10 @@ const ICONS =
 	'<svg class="i-send" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>' +
 	'<svg class="i-ok" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>' +
 	'<svg class="i-fail" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 17h.01" /></svg>';
+
+// 닫기 아이콘 — 보내기 화살표와 같은 획 굵기(2.4)라 한 창 안에서 같은 무게로 읽힌다.
+const CLOSE_ICON =
+	'<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>';
 
 type SendState = "idle" | "ready" | "ok" | "fail";
 
@@ -85,6 +93,21 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	label.className = "grab-label";
 	label.id = `grab-popover-label-${(popoverSeq += 1)}`;
 	element.setAttribute("aria-labelledby", label.id);
+
+	// 닫기 버튼은 라벨 줄 오른쪽 끝에 산다. 따로 헤더 띠를 세우지 않는 이유는
+	// 팝오버 높이를 늘리지 않기 위해서다 — 배치는 open() 때 POPOVER_SIZE로 한 번만
+	// 계산되므로 높이가 바뀌면 그 상수도 따라 움직여야 한다. 줄 높이(15px)에
+	// 맞추는 것은 CSS의 음수 마진 몫이다.
+	const closeBtn = doc.createElement("button");
+	closeBtn.type = "button";
+	closeBtn.className = "grab-close";
+	closeBtn.setAttribute("aria-label", CLOSE_LABEL);
+	closeBtn.title = CLOSE_TITLE;
+	closeBtn.innerHTML = CLOSE_ICON;
+
+	const head = doc.createElement("div");
+	head.className = "grab-head";
+	head.append(label, closeBtn);
 
 	// 입력 영역 — 테두리·배경·radius는 이 래퍼가 갖는다. textarea는 그 안에서
 	// 투명하게 눕고, 버튼이 같은 상자를 공유한다.
@@ -151,7 +174,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 		hint.textContent = "";
 	};
 
-	element.append(label, field, keys, hint);
+	element.append(head, field, keys, hint);
 
 	let opened = false;
 	let buildOutput: ((prompt: string) => string) | null = null;
@@ -267,6 +290,14 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	});
 	send.addEventListener("click", () => {
 		submit();
+	});
+	// 보내기 버튼과 같은 계약 — 마우스로 눌러도 포커스가 버튼으로 옮겨가지
+	// 않는다. 포커스 정리(input.blur)는 close() 한 곳이 맡는다.
+	closeBtn.addEventListener("mousedown", (event) => {
+		event.preventDefault();
+	});
+	closeBtn.addEventListener("click", () => {
+		close();
 	});
 
 	const onDocDismiss = (event: Event): void => {
