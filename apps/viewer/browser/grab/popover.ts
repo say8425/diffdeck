@@ -54,7 +54,8 @@ const SEND_LABEL = "Copy to clipboard";
 const SEND_TITLE = "Copy (⏎) · Shift+⏎ for new line · ⌥⏎ for plain code";
 const KEYS_KEY = "⌥⏎";
 const KEYS_TEXT = "Copy code only";
-// #find-close와 같은 어휘 — 닫기 버튼은 앱에 이미 있는 이름·툴팁을 쓴다.
+// 툴팁은 #find-close와 같다. 이름은 그쪽("Close search")과 달리 대상을 말하지
+// 않는다 — 다이얼로그 안의 버튼이라 "Close"만으로 무엇을 닫는지 분명하다.
 const CLOSE_LABEL = "Close";
 const CLOSE_TITLE = "Close (Esc)";
 // 복사 성공 확인("Copied" + 초록 체크)의 체류 시간. 예전엔 copyButton의
