@@ -77,6 +77,10 @@
 					U+D7B0-D7FF, U+FFA0-FFDC, U+FFE6;
 			}
 			:root {
+				/* 뷰어는 다크 전용이다. 페이지가 선언해야 스크롤바·캐럿·placeholder·
+				   포커스 링 같은 UA 기본값도 OS 설정과 무관하게 다크로 그려진다(파일
+				   트리는 아래 `file-tree-container` 규칙이 따로 맡는다). */
+				color-scheme: dark;
 				/* 끝의 시스템 폰트들은 폰트 파일을 못 받았을 때(서빙 실패)의 폴백이다. */
 				--vd-font-ui:
 					"Pretendard Variable", system-ui, -apple-system, "Segoe UI",
@@ -727,6 +731,17 @@
 				grid-column: 1;
 				overflow: auto;
 				padding-top: 8px;
+			}
+			/* 파일 트리 엔진은 `:host { color-scheme: light dark }`를 선언하고 색을
+			   light-dark()로 고른다. diff 엔진의 `themeType` 같은 전용 옵션이 없어서,
+			   OS가 라이트 모드면 사이드바만 하얗게(#f8f8f8) 그려졌다. :root의
+			   color-scheme은 상속될 뿐이라 host에 직접 걸린 :host 선언을 이기지
+			   못한다 — host에 바로 건다(`!important`가 아닌 한 바깥 문서의 규칙이
+			   :host 규칙을 이긴다). 트리의 `unsafeCSS` 옵션으로도 덮을 수 있지만, 다크
+			   전용이라는 정책은 페이지 CSS 한곳에 둔다. 엔진 코드는 손대지 않는다.
+			   회귀망: color-scheme.e2e.ts. */
+			file-tree-container {
+				color-scheme: dark;
 			}
 			#tree-resizer {
 				grid-row: 2;
