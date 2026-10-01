@@ -1,10 +1,17 @@
-// vendored 예외 2와 뷰어의 하이라이트 상한(tokenizeMaxLength)의 회귀망. 메인
-// 스레드 하이라이터 경로에서 재려고 worker.js를 막는다(e2e.md).
+// vendored 예외 2와 뷰어의 하이라이트 상한(tokenizeMaxLength)의 회귀망
+// (vendored-packages.md). 메인 스레드 하이라이터 경로에서 재려고 worker.js를
+// 막는다(e2e.md).
 import type { Page } from "@playwright/test";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
+let blockedWorkerLoads = 0;
+
 test.beforeEach(async ({ page }) => {
-	await page.route("**/worker.js", (route) => route.abort());
+	blockedWorkerLoads = 0;
+	await page.route("**/worker.js", (route) => {
+		blockedWorkerLoads++;
+		return route.abort();
+	});
 });
 
 // 워커가 없으니 하이라이트 색은 메인 스레드 하이라이터가 칠한 것이다.
@@ -23,11 +30,36 @@ const waitForMainThreadHighlight = async (page: Page): Promise<void> => {
 			{ timeout: 20_000 },
 		)
 		.toBe(true);
+	// 라우트가 빗나가면 워커 경로로 돌아가 빈 통과가 된다.
+	expect(blockedWorkerLoads).toBeGreaterThan(0);
+};
+
+const waitForFileHighlight = async (
+	page: Page,
+	path: string,
+): Promise<void> => {
+	await expect
+		.poll(
+			() =>
+				page.evaluate(
+					(target) =>
+						[...document.querySelectorAll("diffs-container")]
+							.find(
+								(el) =>
+									el.querySelector<HTMLElement>("[data-fold]")?.dataset.fold ===
+									target,
+							)
+							?.shadowRoot?.querySelector("pre span[style]") != null,
+					path,
+				),
+			{ timeout: 20_000 },
+		)
+		.toBe(true);
 };
 
 type Action = "jump-to-bottom" | "expand-lockfile";
 
-// 동작은 측정 창(120프레임) 안에서 실행해야 그 동작이 낳은 정지가 잡힌다.
+// 동작은 측정 창 안에서 실행해야 그 동작이 낳은 정지가 잡힌다.
 const perform = (
 	page: Page,
 	action: Action,
@@ -86,7 +118,12 @@ const runAction = async (page: Page, action: Action): Promise<void> => {
 
 const lockfileState = (
 	page: Page,
-): Promise<{ hasHeader: boolean; height: number; preTextLen: number }> =>
+): Promise<{
+	mounted: boolean;
+	hasHeader: boolean;
+	height: number;
+	preTextLen: number;
+}> =>
 	page.evaluate(() => {
 		const lockfile = [...document.querySelectorAll("diffs-container")].find(
 			(el) =>
@@ -94,6 +131,7 @@ const lockfileState = (
 				"pnpm-lock.yaml",
 		);
 		return {
+			mounted: lockfile != null,
 			hasHeader:
 				lockfile?.shadowRoot?.querySelector("[data-diffs-header]") != null,
 			height: Math.round(lockfile?.getBoundingClientRect().height ?? 0),
@@ -103,31 +141,42 @@ const lockfileState = (
 	});
 
 const mountLockfileAtBottom = async (page: Page): Promise<void> => {
-	await runAction(page, "jump-to-bottom");
+	const box = await page.locator("#diff").boundingBox();
+	if (!box) throw new Error("#diff not visible");
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 	await expect
-		.poll(async () => (await lockfileState(page)).hasHeader)
+		.poll(async () => {
+			await page.mouse.wheel(0, 100_000);
+			return (await lockfileState(page)).hasHeader;
+		})
 		.toBe(true);
 };
 
 test("mounting a collapsed highlightable lockfile must not freeze the frame", async ({
 	page,
 }) => {
-	// 하이라이트 상한(20k줄) 아래여야 예외 2를 판별한다(e2e.md).
+	// 하이라이트 상한 아래여야 하고(e2e.md), yaml 문법이 먼저 붙어 있어야 한다 —
+	// 없으면 sync 경로가 어차피 plain으로 그려 그 경로의 회귀를 가르지 못한다.
 	const viewer = await launchViewer([], {
 		bulkFiles: 2,
 		lockfileLines: 15_000,
+		yamlFile: true,
 	});
 	try {
 		await page.goto(viewer.url);
 		await waitForMainThreadHighlight(page);
+		await waitForFileHighlight(page, ".github/ci.yaml");
 
 		const gapMs = await maxFrameGapDuring(page, "jump-to-bottom");
 
 		// 안 그려서 통과하지 않도록 lockfile 헤더가 실제로 마운트됐는지 본다.
-		expect((await lockfileState(page)).hasHeader).toBe(true);
-		// 정상 프레임(~16ms)에 CI 여유를 크게 둔 상한 — 동기 토크나이즈는 초 단위라
-		// 그래도 갈린다.
-		expect(gapMs).toBeLessThan(300);
+		expect(await lockfileState(page)).toMatchObject({
+			mounted: true,
+			hasHeader: true,
+		});
+		// 점프는 이웃 파일도 메인 스레드에서 하이라이트한다. 상한은 그 정상 비용과
+		// lockfile 전체 토크나이즈(회귀) 사이에 둔다.
+		expect(gapMs).toBeLessThan(1000);
 	} finally {
 		await viewer.stop();
 	}
@@ -149,6 +198,7 @@ test("expanding a lockfile over the highlight cutoff must not freeze the frame",
 
 		// 하이라이트 포기가 "안 그림"으로 새지 않도록 코드 행이 그려졌는지 본다.
 		const state = await lockfileState(page);
+		expect(state.mounted).toBe(true);
 		expect(state.height).toBeGreaterThan(200);
 		expect(state.preTextLen).toBeGreaterThan(1000);
 		expect(gapMs).toBeLessThan(1500);
@@ -161,7 +211,8 @@ test("expanding a collapsed highlightable lockfile renders without an engine err
 	page,
 }) => {
 	// 빈 윈도우의 zero-line 결과를 펼침 렌더가 재사용하면 엔진이 console.error를
-	// 찍는다. 행은 곧 자가복구되므로 판별자는 console.error다.
+	// 찍는다. 행은 곧 자가복구되므로 판별자는 console.error다. yaml 문법이 붙어
+	// 있으면 펼침이 표식 없이도 다시 그려 판별하지 못하므로 yaml 파일을 두지 않는다.
 	const viewer = await launchViewer([], { bulkFiles: 2, lockfileLines: 8000 });
 	try {
 		await page.goto(viewer.url);
