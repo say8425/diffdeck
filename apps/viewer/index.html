@@ -89,6 +89,13 @@
 				   `var(--diffs-font-family, 기본값)`·`--trees-font-family-override`로
 				   읽도록 이미 열어 둔 자리다(엔진 코드는 손대지 않는다). */
 				--diffs-font-family: var(--vd-font-code);
+				/* 리거처를 끈다. JetBrains Mono는 `calt`로 `=>`·`!==`·`->`를 한
+				   모양으로 잇는데, diff 뷰어는 문자 단위로 칠하는 곳이 셋이다(줄 안
+				   변경 강조·찾기 하이라이트·grab 문자 범위) — 그 경계가 리거처 한가운데
+				   떨어지면 반쪽만 칠해지고, 무엇보다 diff는 실제 글자를 보여줘야 한다.
+				   엔진이 `font-feature-settings: var(--diffs-font-features)`로 읽는
+				   자리라 엔진 코드는 손대지 않는다. */
+				--diffs-font-features: "calt" 0, "liga" 0;
 				--diffs-header-font-family: var(--vd-font-ui);
 				--trees-font-family-override: var(--vd-font-ui);
 				--vd-bg: #141415;

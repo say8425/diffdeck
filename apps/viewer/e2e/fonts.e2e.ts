@@ -70,6 +70,24 @@ test.describe("fonts", () => {
 		}
 	});
 
+	// 리거처는 꺼져 있다 — 엔진이 읽는 `--diffs-font-features`로 넘긴다.
+	test("⑤ code renders without ligatures", async ({ page }) => {
+		const { url, stop } = await launchViewer([]);
+		try {
+			await page.goto(url);
+			await expect
+				.poll(() =>
+					page
+						.locator("diffs-container [data-line]")
+						.first()
+						.evaluate((el) => getComputedStyle(el).fontFeatureSettings),
+				)
+				.toBe('"calt" 0, "liga" 0');
+		} finally {
+			await stop();
+		}
+	});
+
 	test("② Hangul in code falls back to D2Coding", async ({ page }) => {
 		const { url, repoDir, stop } = await launchViewer([]);
 		try {
