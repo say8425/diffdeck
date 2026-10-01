@@ -13,6 +13,7 @@ paths:
   - "apps/viewer/e2e/toolbar-*.e2e.ts"
   - "apps/viewer/e2e/ref-picker.e2e.ts"
   - "apps/viewer/e2e/pr-badge.e2e.ts"
+  - "apps/viewer/e2e/picker-scroll.e2e.ts"
 ---
 
 # 툴바와 피커
@@ -34,6 +35,7 @@ paths:
 - 구역 제목·구분선·빈 문구는 `role="presentation"`이다(listbox의 자식은 option/group뿐이다).
 - 행에 파일 개수를 달지 않는다.
 - 피커는 툴바에 앵커한 절대 위치 패널이고 자기 dismiss(바깥 mousedown, Escape + IME 가드)를 가진다. 오버플로 메뉴의 리스너에 얹지 않는다.
+- 목록(`#ref-picker-list`)은 세로 flex라 자식(행·구분선)에 `flex-shrink: 0`을 둔다. 빠지면 목록이 넘칠 때 행이 최소 높이로 눌려 PR 줄이 다음 행을 덮고 구분선이 사라진다. 회귀망 `picker-scroll.e2e.ts`.
 
 ## 트리거 라벨 (`#ref-picker-label`)
 

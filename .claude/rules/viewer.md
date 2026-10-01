@@ -13,6 +13,7 @@ paths:
   - "apps/viewer/e2e/error-cards.e2e.ts"
   - "apps/viewer/e2e/large-file-collapse.e2e.ts"
   - "apps/viewer/e2e/worker-highlight.e2e.ts"
+  - "apps/viewer/e2e/color-scheme.e2e.ts"
 ---
 
 # 뷰어 프런트 (`apps/viewer/browser/`, `index.html`)
@@ -22,6 +23,7 @@ paths:
 - `bun build`는 최상위 `let`을 `var`로 바꿔 TDZ 오류를 가린다. `main.ts`의 최상위 실행 코드가 아직 선언되지 않은 `let`을 읽어도 번들에서는 조용히 돈다 — 선언 순서를 지킨다.
 - `hidden`으로 숨기는 요소에 author `display`를 선언했으면 `[hidden] { display: none }` 짝을 함께 둔다(`#grab-popover`·`#ref-picker`·`#pr-chip`). author 규칙이 UA 규칙을 이겨 영구히 보인다. happy-dom은 레이아웃이 없어 잡지 못한다.
 - "내용 없음"을 나타내는 텍스트 노드는 `hidden` 대신 빈 문자열로 둔다(위 함정을 피하고, 라이브 리전은 hidden이면 읽히지 않는다).
+- 뷰어는 다크 전용이다. `:root`와 `file-tree-container`에 `color-scheme: dark`를 둔다. 파일 트리 엔진은 `:host { color-scheme: light dark }`로 OS 설정을 따르는데, `:root` 값은 상속될 뿐이라 host의 선언을 이기지 못한다(diff 엔진은 `themeType: "dark"`로 고정된다). 엔진 코드는 고치지 않는다. 회귀망 `color-scheme.e2e.ts`.
 
 ## CodeView 수명과 스크롤
 
