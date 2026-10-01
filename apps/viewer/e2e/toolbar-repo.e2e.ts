@@ -4,7 +4,7 @@
 // 하고 유닛(`repo-label.test.ts`)이 덮지만, `browser/main.ts`는 커버리지 게이트
 // 밖이고 루트 typecheck의 include에도 없어서(bunfig.toml / tsconfig) 배선이
 // 통째로 빠져도 유닛·커버리지·타입체크가 전부 초록으로 남는다 — `isLargeFile`
-// 사건과 같은 구조다(CLAUDE.md). 여기가 그 구멍을 막는 유일한 지점이다.
+// 사건과 같은 구조다(.claude/rules/viewer.md). 여기가 그 구멍을 막는 유일한 지점이다.
 //
 // 아울러 happy-dom이 원리적으로 못 보는 계약도 함께 잡는다: 라벨이 실제로
 // 페인트되는가, 조각 사이에 공백 텍스트 노드가 끼지 않았는가(포매터가

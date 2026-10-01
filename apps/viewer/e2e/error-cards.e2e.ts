@@ -165,7 +165,7 @@ test("a watch poll surfaces the reason in the status while a diff is on screen",
 			"Failed to load diff: folder not found",
 			{ timeout: 15_000 },
 		);
-		// 살아 있는 CodeView는 덮어쓰지 않는다(CLAUDE.md innerHTML 항목).
+		// 살아 있는 CodeView는 덮어쓰지 않는다(.claude/rules/viewer.md의 innerHTML 항목).
 		await expect(page.locator("diffs-container")).toHaveCount(rendered);
 		await expect(card(page)).toHaveCount(0);
 	} finally {

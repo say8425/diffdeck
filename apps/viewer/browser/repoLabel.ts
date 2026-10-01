@@ -10,7 +10,7 @@
  * 왜 `main.ts`가 아니라 별도 모듈인가: `main.ts`는 커버리지 게이트 밖이라
  * (bunfig.toml의 `coveragePathIgnorePatterns`) 거기 문자열 조립을 두면 게이트가
  * 100% 초록인 채로 버그가 산다 — `isLargeFile`/`countChangedLines` 사건과
- * 정확히 같은 구조다(CLAUDE.md). 이 파일은 게이트 **안**이라 분기마다 유닛이
+ * 정확히 같은 구조다(.claude/rules/viewer.md). 이 파일은 게이트 **안**이라 분기마다 유닛이
  * 붙는다. 그래서 **DOM에 닿는 문자열 전부**를 여기서 만들고 main.ts는 배선만 한다.
  *
  * 타입체크는 어느 쪽도 못 본다 — `apps/viewer/tsconfig.json`의 include는
@@ -165,7 +165,7 @@ const suffixOf = (parts: readonly (string | null)[]): string =>
  * 워크트리 목록이 아직 안 왔거나(부트스트랩 첫 프레임) `/api/refs`가 실패해도
  * **이름은 즉시 말한다** — repo 경로는 URL에 이미 있기 때문이다. 그래서 라벨을
  * `hidden`으로 토글할 일이 없고, author `display`와 `[hidden]` 짝을 잊는
- * 함정(CLAUDE.md — `#grab-popover`·`.grab-hint`에서 두 번 밟았다)에 애초에
+ * 함정(.claude/rules/viewer.md — `#grab-popover`·`.grab-hint`에서 두 번 밟았다)에 애초에
  * 들어가지 않는다. "모름"은 hidden이 아니라 **빈 텍스트**다.
  */
 export const repoLabelView = (

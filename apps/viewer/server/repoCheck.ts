@@ -60,7 +60,7 @@ export const classifyRepo = async (
 		result = await deps.revParse(repo);
 	} catch {
 		// cwd가 삭제된 프로세스는 자식을 하나도 못 띄운다(posix_spawn ENOENT —
-		// CLAUDE.md "프로세스 cwd가 삭제되면" 항목). 이 경우 모든 repo가 여기로
+		// .claude/rules/server.md "프로세스 cwd" 절). 이 경우 모든 repo가 여기로
 		// 온다.
 		return "git-unavailable";
 	}

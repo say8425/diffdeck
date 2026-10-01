@@ -1442,8 +1442,8 @@ const fetchDiff = async (): Promise<FetchDiffOutcome> => {
 		if (result.kind === "data" || result.kind === "unchanged") return result;
 		if (result.kind === "terminal") {
 			// attempt를 되돌린다 — 복구 직후의 재요청이 503을 만나면 남은
-			// 1회 재시도가 필요하고, 그것이 CLAUDE.md "Loading… 자가치유"
-			// 3요소 중 클라이언트 몫이다.
+			// 1회 재시도가 필요하고, 그것이 .claude/rules/server.md의 flight
+			// 회복 장치 셋 중 클라이언트 몫이다.
 			if (recoverFromStaleBase(result.failure.marker === "unknown-base")) {
 				attempt--;
 				continue;
@@ -1944,7 +1944,7 @@ compareBase =
 	(storedLegacyMode === "base" ? "@auto" : "HEAD");
 // 이름은 repo 경로에서 즉시 알 수 있으므로 첫 프레임부터 그린다. 브랜치는
 // /api/refs가 도착하면 채워지고, 그때까지는 빈 텍스트다 — 그래서 라벨을
-// hidden으로 토글할 일이 없다(CLAUDE.md의 author display + [hidden] 함정).
+// hidden으로 토글할 일이 없다(.claude/rules/viewer.md의 author display + [hidden] 함정).
 //
 // **이 호출은 `currentHead` 선언보다 뒤에 있어야 한다**(PR 칩도 그 값을 읽는다). 한때
 // 선언부(284·291행)보다 앞인 242행에 있었는데, 그때 살아 있던 이유는
