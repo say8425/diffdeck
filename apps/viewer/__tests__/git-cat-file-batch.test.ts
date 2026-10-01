@@ -119,8 +119,9 @@ const settleWithin = async <T>(work: Promise<T>, ms: number): Promise<T> => {
 	}
 };
 
-// Bun 1.3.x `$` never-settle의 회귀망이다(testing.md). 배치 호출은 실제로 겹치므로(다른 선택의 요청·prewarm·watch 폴)
-// 동시에 부르고, WAYS를 줄이면 판별력이 떨어진다.
+// Bun 1.3.x `$` never-settle의 회귀망이다(testing.md). 배치 호출은 실제로
+// 겹치므로(다른 선택의 요청·prewarm·watch 폴) 동시에 부르고, WAYS를 줄이면
+// 판별력이 떨어진다.
 const ROUNDS = 5;
 const WAYS = 16;
 const SETTLE_MS = 10_000;

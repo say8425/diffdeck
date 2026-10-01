@@ -23,7 +23,8 @@ describe("resolveSelectionRange", () => {
 		expect(resolveSelectionRange(sel, [{}])).toBeNull();
 	});
 	test("Chrome 실측: outer isCollapsed=true지만 getComposedRanges는 유효한 range → resolve", () => {
-		// Chrome은 shadow root 안의 선택을 바깥 Selection에서 collapsed로 보이므로 isCollapsed를 믿지 않는다.
+		// Chrome은 shadow root 안의 선택을 바깥 Selection에서 collapsed로 보이므로
+		// isCollapsed를 믿지 않는다.
 		const sel: SelectionLike = {
 			isCollapsed: true,
 			direction: "forward",

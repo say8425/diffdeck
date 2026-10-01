@@ -24,9 +24,11 @@ const extractOptionsFlags = (help: string): string[] => {
 	return [...new Set(tokens)].filter((flag) => !metaFlags.has(flag));
 };
 
-// 플래그는 코드 스팬(`--split`, `--port <n>`)으로 적힌다. 여는 백틱은 산문 속 우연한 일치를, 뒤의 백틱·공백은
-// `--tree-right`가 `--tree-right-foo`에 걸리는 것을 막는다. 표 문법에는 앵커를 걸지 않아(번역마다 컬럼 폭이
-// 다르고 SKILL.md는 표가 아니다) 위치가 아니라 언급만 증명한다. 다른 한계는 docs-sync.md에 있다.
+// 플래그는 코드 스팬(`--split`, `--port <n>`)으로 적힌다. 여는 백틱은 산문 속
+// 우연한 일치를, 뒤의 백틱·공백은 `--tree-right`가 `--tree-right-foo`에 걸리는
+// 것을 막는다. 표 문법에는 앵커를 걸지 않아(번역마다 컬럼 폭이 다르고
+// SKILL.md는 표가 아니다) 위치가 아니라 언급만 증명한다. 다른 한계는
+// docs-sync.md에 있다.
 const documents = (content: string, flag: string): boolean =>
 	new RegExp(`\`${flag}[\`\\s]`).test(content);
 
@@ -42,7 +44,8 @@ describe("CLI flag parity between cli.ts HELP and every doc that lists flags", (
 		expect(flags).not.toContain("--version");
 	});
 
-	// 파일은 test 콜백 안에서 읽는다 — describe 본문에서 읽으면 경로 하나만 틀려도 수집 단계에서 통째로 터진다.
+	// 파일은 test 콜백 안에서 읽는다 — describe 본문에서 읽으면 경로 하나만
+	// 틀려도 수집 단계에서 통째로 터진다.
 	for (const doc of DOCS) {
 		for (const flag of flags) {
 			test(`${doc} documents ${flag}`, () => {

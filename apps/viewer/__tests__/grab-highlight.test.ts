@@ -236,7 +236,8 @@ describe("rowsInRange — mixed kind", () => {
 		).toEqual([]);
 	});
 
-	// split의 행 목록은 컬럼별로 묶여 있어 문서순 슬라이스가 컬럼 경계를 넘으면 반대 컬럼의 무관한 구간까지 칠한다.
+	// split의 행 목록은 컬럼별로 묶여 있어 문서순 슬라이스가 컬럼 경계를 넘으면
+	// 반대 컬럼의 무관한 구간까지 칠한다.
 	test("split이면 mixed 조합은 무조건 빈 배열이다", () => {
 		const got = rowsInRange(
 			rows,
@@ -251,8 +252,9 @@ describe("rowsInRange — mixed kind", () => {
 	});
 });
 
-// rowsInRange 단독 테스트는 기대값을 구현과 같은 오해로 적기 쉬워 extractSnippet과 행 수를 대조한다.
-// 전제: 범위가 파일 길이 안이고(행 목록엔 클램프가 없다) 모든 대상 행이 렌더돼 있다.
+// rowsInRange 단독 테스트는 기대값을 구현과 같은 오해로 적기 쉬워
+// extractSnippet과 행 수를 대조한다. 전제: 범위가 파일 길이 안이고(행 목록엔
+// 클램프가 없다) 모든 대상 행이 렌더돼 있다.
 describe("extractSnippet과의 교차 검증", () => {
 	const OLD = ["keep-a", "drop-1", "keep-b", "keep-c", "drop-2", "keep-d"].join(
 		"\n",
@@ -402,7 +404,8 @@ describe("rowsInRange — chars", () => {
 		expect(got).toEqual([{ el: rows[0].el }, { el: rows[1].el }]);
 	});
 
-	// 가상화: 선택 경계 행이 렌더 밖이면 보이는 첫/끝 행은 선택의 중간이라, 오프셋을 붙이면 엉뚱한 곳이 잘린다.
+	// 가상화: 선택 경계 행이 렌더 밖이면 보이는 첫/끝 행은 선택의 중간이라,
+	// 오프셋을 붙이면 엉뚱한 곳이 잘린다.
 	test("side: 시작 경계 행이 안 보이면 보이는 첫 행엔 시작 오프셋을 안 붙인다", () => {
 		const rows = [row("new", 15), row("new", 16), row("new", 17)];
 		const got = rowsInRange(

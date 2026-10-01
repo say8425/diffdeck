@@ -39,7 +39,7 @@ jobs:
 
   # 다른 잡은 setup-bun 기본값(최신 Bun)으로 돈다. Bun 1.3.x `$`의 never-settle 회귀는
   # 최신 Bun에서 보이지 않으므로 그 회귀망만 1.3.x 마지막 판으로 고정해 돈다. 지원 하한이
-  # 1.4 이상이 되면 이 잡과 룰셋 항목을 함께 지운다(.claude/rules/ci-release.md).
+  # 1.4 이상이 되면 이 잡과 룰셋 항목을 함께 지운다(ci-release.md).
   test-bun13:
     runs-on: ubuntu-latest
     # 러너나 Bun 다운로드가 매달려도 기본 상한까지 태우지 않게.

@@ -22,7 +22,8 @@ afterEach(() => {
 });
 
 describe("repoFingerprint", () => {
-	// 다른 head 테스트만으로도 라인 커버리지는 초록이라(게이트는 branch를 안 센다) 이 시나리오는 따로 찌른다.
+	// 다른 head 테스트만으로도 라인 커버리지는 초록이라(게이트는 branch를 안
+	// 센다) 이 시나리오는 따로 찌른다.
 	test("a moving head branch changes the fingerprint", async () => {
 		await $`git -C ${repo} checkout -qb feat`;
 		writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
@@ -99,7 +100,8 @@ describe("repoFingerprint", () => {
 		writeFileSync(join(repo, "b.txt"), "renamed edit one\n");
 		const fp3 = await repoFingerprint(repo);
 		expect(fp3).not.toBe(fp2);
-		// 두 번째 편집부터는 status 출력(RM)이 그대로라, -z rename 토큰 스킵이 새 경로를 stat해야만 잡힌다.
+		// 두 번째 편집부터는 status 출력(RM)이 그대로라, -z rename 토큰 스킵이 새
+		// 경로를 stat해야만 잡힌다.
 		writeFileSync(join(repo, "b.txt"), "renamed edit two, longer\n");
 		const fp4 = await repoFingerprint(repo);
 		expect(fp4).not.toBe(fp3);

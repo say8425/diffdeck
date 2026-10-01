@@ -44,7 +44,8 @@ describe("createParseCache", () => {
 		const before = cache.resolve("a.ts", "v1", () => "A");
 		const bumped = cache.bump("a.ts");
 		expect(bumped).toBeGreaterThan(before.version);
-		// 옛 version으로 돌아가면 폴드 직후 poll에서 CodeView가 그 아이템을 바뀐 것으로 보고 다시 그린다.
+		// 옛 version으로 돌아가면 폴드 직후 poll에서 CodeView가 그 아이템을 바뀐
+		// 것으로 보고 다시 그린다.
 		let calls = 0;
 		const after = cache.resolve("a.ts", "v1", () => {
 			calls++;

@@ -43,7 +43,8 @@ describe("changeTotalsView", () => {
 	test("추가와 삭제를 각자의 자리에 넣는다", () => {
 		const v = changeTotalsView([file(17022, 435)]);
 		expect(v.additions).toBe("+17022");
-		// 구분 공백은 삭제 조각이 품는다 — span 사이에 공백 텍스트 노드를 두지 않는다(viewer-toolbar.md).
+		// 구분 공백은 삭제 조각이 품는다 — span 사이에 공백 텍스트 노드를 두지
+		// 않는다(viewer-toolbar.md).
 		expect(v.deletions).toBe(" -435");
 	});
 

@@ -37,7 +37,8 @@ const pressEnter = (init: KeyboardEventInit = {}) =>
 	input().dispatchEvent(
 		new KeyboardEvent("keydown", { key: "Enter", cancelable: true, ...init }),
 	);
-// fake timers 중 setTimeout flush는 끝나지 않아 런 전체가 멈춘다 — 마이크로태스크 2틱으로 흘린다(copy-button.test.ts의 tick).
+// fake timers 중 setTimeout flush는 끝나지 않아 런 전체가 멈춘다 —
+// 마이크로태스크 2틱으로 흘린다(copy-button.test.ts의 tick).
 const flush = async (): Promise<void> => {
 	await Promise.resolve();
 	await Promise.resolve();

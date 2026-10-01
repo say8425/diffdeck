@@ -48,7 +48,7 @@ const PRS_TTL_MS = 60_000;
 const PRS_FAILURE_TTL_MS = 10_000;
 // base 해석(`gh pr view`)은 느려서 repo별로 캐시한다. 모듈 스코프에 둔다 —
 // diff-server.test.ts의 diffFlight 타임아웃 테스트는 다른 서버가 데운 항목을 봐야
-// diffFlight까지 간다. 옮기면 실패 없이 다른 가드만 증명한다(.claude/rules/server.md).
+// diffFlight까지 간다. 옮기면 실패 없이 다른 가드만 증명한다(server.md).
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
@@ -66,7 +66,7 @@ const flightTimeoutResponse = (): Response =>
 
 /**
  * 타임아웃만 503으로 바꾸고 다른 에러는 다시 던진다. singleFlight의 키 해제·브라우저
- * 재시도와 함께여야 매달린 flight에서 회복한다(.claude/rules/server.md).
+ * 재시도와 함께여야 매달린 flight에서 회복한다(server.md).
  */
 export const awaitFlight = async <T>(
 	promise: Promise<T>,

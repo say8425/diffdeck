@@ -3,7 +3,7 @@ root = "."
 # Runtime css-inline plugin: lets `bun test` resolve the forked packages' `?inline` CSS.
 # Never preload happy-dom here — it swaps fetch etc. for the whole run and breaks the
 # real-HTTP server tests. DOM tests opt in per file with `import "./happydom";`
-# (.claude/rules/testing.md).
+# (testing.md).
 preload = ["./scripts/parity/preload.ts"]
 
 # 100% gate on owned runtime code (apps/viewer/{browser,cli,server}); applies only with

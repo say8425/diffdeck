@@ -116,7 +116,7 @@ export const renderEmptyState = (
 
 // 판정을 따로 세우지 않고 카드의 액션을 읽는다. 사용자가 base를 고른 적
 // 있거나 이 뷰에도 볼 것(untracked)이 있으면 옮기지 않는다
-// (.claude/rules/viewer.md).
+// (viewer.md).
 export const shouldAutoViewBase = (
 	model: EmptyStateModel,
 	opts: { hasExplicitBase: boolean; alreadyTried: boolean },

@@ -6,7 +6,8 @@ const RESET_MS = 1200;
 const COPY_SVG_HINT = 'rect x="9" y="9" width="13" height="13" rx="2" ry="2"';
 const CHECK_SVG_HINT = 'polyline points="20 6 9 17 4 12"';
 
-// happy-dom's navigator.clipboard is a prototype getter: shadow it with an own property, delete it to restore.
+// happy-dom's navigator.clipboard is a prototype getter: shadow it with an own
+// property, delete it to restore.
 const setClipboard = (value: unknown): void => {
 	Object.defineProperty(navigator, "clipboard", { value, configurable: true });
 };
@@ -14,8 +15,9 @@ const restoreClipboard = (): void => {
 	delete (navigator as { clipboard?: unknown }).clipboard;
 };
 
-// Microtasks, not setTimeout: a setTimeout flush under fake timers never resolves and hangs the whole run.
-// Two ticks: writeText() settling, then the .then(showCopied) it schedules.
+// Microtasks, not setTimeout: a setTimeout flush under fake timers never
+// resolves and hangs the whole run. Two ticks: writeText() settling, then the
+// .then(showCopied) it schedules.
 const tick = async (): Promise<void> => {
 	await Promise.resolve();
 	await Promise.resolve();

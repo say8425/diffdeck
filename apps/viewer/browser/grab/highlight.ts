@@ -1,4 +1,4 @@
-// grab 전용 CSS Custom Highlight 채널(.claude/rules/grab.md). 의존성을 덕타입으로
+// grab 전용 CSS Custom Highlight 채널(grab.md). 의존성을 덕타입으로
 // 받는 것은 happy-dom에 CSS.highlights도 Highlight도 없어서다.
 import type {
 	CharSpan,

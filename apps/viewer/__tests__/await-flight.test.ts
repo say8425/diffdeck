@@ -34,7 +34,8 @@ describe("awaitFlight", () => {
 		}
 	});
 
-	// 손으로 만든 에러만으로는 진짜 singleFlight 타임아웃이 instanceof 검사를 통과한다는 것이 증명되지 않는다.
+	// 손으로 만든 에러만으로는 진짜 singleFlight 타임아웃이 instanceof 검사를
+	// 통과한다는 것이 증명되지 않는다.
 	test("a real single-flight timeout becomes a 503 through awaitFlight", async () => {
 		const flight = createSingleFlight<string>(5);
 		const result = await awaitFlight(flight("k", neverSettles));

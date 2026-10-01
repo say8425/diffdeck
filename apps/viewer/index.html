@@ -20,7 +20,7 @@
 			crossorigin
 		/>
 		<style>
-			/* 폰트는 .claude/rules/fonts.md. swap이라 폭을 재서 고정하는 곳(PR 칩)은
+			/* 폰트는 fonts.md. swap이라 폭을 재서 고정하는 곳(PR 칩)은
 			   main.ts가 loadingdone에서 다시 잰다. */
 			@font-face {
 				font-family: "Pretendard Variable";
@@ -114,13 +114,13 @@
 				align-items: center;
 				gap: 8px;
 			}
-			/* 오른쪽은 조작만 담고 순서가 계약이다(.claude/rules/viewer-toolbar.md).
+			/* 오른쪽은 조작만 담고 순서가 계약이다(viewer-toolbar.md).
 			   그룹이 오른쪽 끝에 붙어 있어 find 바가 펼쳐지면 그 왼쪽 이웃만
 			   밀리므로 찾기가 맨 앞이어야 한다. */
 			.tb-right {
 				margin-left: auto;
 			}
-			/* 트리거 폭 사슬의 첫 마디(.claude/rules/viewer-toolbar.md) — 기본
+			/* 트리거 폭 사슬의 첫 마디(viewer-toolbar.md) — 기본
 			   min-width:auto면 라벨 폭만큼 툴바의 최소 폭이 늘어 좁은 창에서
 			   .tb-right가 화면 밖으로 밀린다. */
 			.tb-left {
@@ -133,7 +133,7 @@
 				flex: none;
 			}
 			/* 줄어드는 순서가 계약이다: 칩 제목이 먼저, 트리거가 나중. 100000은
-			   트리거가 1px도 내주지 않을 만큼 큰 값이다(1000으로는 모자랐다).
+			   트리거가 1px도 내주지 않을 만큼 큰 값이다(viewer-toolbar.md).
 			   바닥 폭은 main.ts가 재서 인라인 min-width로 건다. overflow: hidden은
 			   그보다 더 눌렸을 때 내용이 #status 위로 새지 않게 한다. */
 			#toolbar #pr-chip {
@@ -152,7 +152,7 @@
 				border-radius: var(--vd-radius);
 				text-decoration: none;
 			}
-			/* author display의 [hidden] 짝(.claude/rules/viewer.md) — 빠지면 PR 없는
+			/* author display의 [hidden] 짝(viewer.md) — 빠지면 PR 없는
 			   브랜치에서 빈 칩이 남는다. */
 			#toolbar #pr-chip[hidden] {
 				display: none;
@@ -474,7 +474,7 @@
 			}
 			/* display: flex가 계약이다 — 블록이면 안쪽 버튼이 flex item이 아니어서
 			   줄어든 몫을 받지 못하고 라벨이 잘리지 않는다. max-width는 두지
-			   않는다(.claude/rules/viewer-toolbar.md). */
+			   않는다(viewer-toolbar.md). */
 			#toolbar .tb-picker {
 				display: flex;
 				flex: 0 1 auto;
@@ -516,7 +516,7 @@
 				border-radius: var(--vd-radius);
 				box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 			}
-			/* author display의 [hidden] 짝(.claude/rules/viewer.md) — 빠지면 패널이
+			/* author display의 [hidden] 짝(viewer.md) — 빠지면 패널이
 			   영구히 열린 채 남는다. */
 			#ref-picker[hidden] {
 				display: none;
@@ -844,7 +844,7 @@
 				resize: none;
 				overflow-y: auto;
 			}
-			/* 배경 없이 색으로만 상태를 말한다(.claude/rules/grab.md). */
+			/* 배경 없이 색으로만 상태를 말한다(grab.md). */
 			#grab-popover .grab-send {
 				flex: none;
 				display: inline-flex;

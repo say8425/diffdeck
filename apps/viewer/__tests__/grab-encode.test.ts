@@ -59,7 +59,8 @@ describe("encodeGrab", () => {
 			"(new side, base diff)",
 		);
 	});
-	// 리비전을 말하지 않으면 받은 에이전트가 자기 워킹트리의 같은 경로(다른 브랜치일 수 있다)를 고친다.
+	// 리비전을 말하지 않으면 받은 에이전트가 자기 워킹트리의 같은 경로(다른
+	// 브랜치일 수 있다)를 고친다.
 	test("head를 보고 있으면 어느 리비전인지 말한다", () => {
 		expect(
 			encodeGrab({ ...base, mode: "base", baseName: "main", head: "develop" }),

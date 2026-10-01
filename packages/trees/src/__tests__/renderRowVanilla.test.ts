@@ -220,11 +220,7 @@ test("flattened row: content wraps segments in data-item-flattened-subitems with
 	expect(button.getAttribute("data-item-path")).toBe("src/deep.ts");
 });
 
-// [diffdeck] GitHub-style flattened-path truncation: segments render as plain
-// text (no per-segment Truncate widgets) inside a single clip element, so the
-// whole joined path clips once at its end via CSS text-overflow instead of
-// each segment collapsing to "…" independently. The wrapper/clip split keeps
-// the row's intrinsic min-content at zero (see buildFlattenedSegments).
+// [diffdeck] Exception 4 (vendored-packages.md).
 test("flattened row: segments are plain text in one clip element, no per-segment truncate widgets", () => {
 	const row = baseRow({
 		isFlattened: true,
@@ -255,9 +251,7 @@ test("flattened row: segments are plain text in one clip element, no per-segment
 	expect(clip?.textContent).toBe("src / deep");
 });
 
-// [diffdeck] Guard for the untouched half of deviation #4: non-flattened
-// rows keep upstream's extension-preserving middle-truncate widget (only
-// flattened chains switched to the single end-clip).
+// [diffdeck] Exception 4 leaves non-flattened rows on upstream's widget.
 test("non-flattened row: name still renders through the upstream middle-truncate widget", () => {
 	const button = buildRow(
 		baseRow({ name: "longfilename.ts", path: "longfilename.ts" }),
@@ -269,9 +263,7 @@ test("non-flattened row: name still renders through the upstream middle-truncate
 	).not.toBeNull();
 });
 
-// [diffdeck] Hovering any row shows its full path as a native tooltip — the
-// visual text can be ellipsis-clipped (flattened chains, narrow sidebar), so
-// the row button carries `title` with the untruncated path.
+// [diffdeck] Exception 4.
 test("row button carries title with the full path for hover tooltip", () => {
 	const fileButton = buildRow(
 		baseRow({ name: "deep.ts", path: "src/mid/deep.ts" }),

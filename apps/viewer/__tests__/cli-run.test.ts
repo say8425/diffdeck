@@ -245,7 +245,8 @@ describe("run — normal startup", () => {
 		});
 	});
 
-	// 순서가 계약이다: cwd()보다 먼저 이탈하면 repo가 "/"가 되고, startServer보다 늦으면 기동 디렉토리가 지워질 틈이 남는다.
+	// 순서가 계약이다: cwd()보다 먼저 이탈하면 repo가 "/"가 되고, startServer보다
+	// 늦으면 기동 디렉토리가 지워질 틈이 남는다.
 	test("repo를 읽은 뒤, 서버를 띄우기 전에 안전 cwd로 이탈한다", () => {
 		const calls: string[] = [];
 		const deps = makeDeps({
@@ -380,7 +381,8 @@ describe("realDeps", () => {
 		expect(realDeps.cwd()).toBe(process.cwd());
 	});
 
-	// bun test는 모든 파일을 한 프로세스에서 돌려 chdir이 뒤 테스트 파일로 샌다 — finally에서 반드시 되돌린다.
+	// bun test는 모든 파일을 한 프로세스에서 돌려 chdir이 뒤 테스트 파일로 샌다 —
+	// finally에서 반드시 되돌린다.
 	test("realDeps.toSafeCwd가 프로세스를 안전 경로로 옮긴다", () => {
 		const before = process.cwd();
 		try {
@@ -408,7 +410,8 @@ describe("realDeps", () => {
 
 	test("installSkill parses argv, resolves --project targets under cwd, and writes SKILL.md", () => {
 		const tmp = mkdtempSync(join(tmpdir(), "dd-realdeps-cwd-"));
-		// 소스 트리에서 돌면 installSkill이 apps/viewer/skills/를 읽는데, 그 경로는 빌드 산출물에만 있어 직접 만든다.
+		// 소스 트리에서 돌면 installSkill이 apps/viewer/skills/를 읽는데, 그 경로는
+		// 빌드 산출물에만 있어 직접 만든다.
 		const skillSourceDir = join(import.meta.dir, "..", "skills", "diffdeck");
 		mkdirSync(skillSourceDir, { recursive: true });
 		writeFileSync(

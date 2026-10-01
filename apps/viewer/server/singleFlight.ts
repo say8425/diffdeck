@@ -1,10 +1,7 @@
 /**
- * 같은 키의 작업이 동시에 오면 한 번만 돌리고 결과를 공유한다.
- *
- * flight는 타임아웃과 race한다. fn()이 영영 settle하지 않아도(Bun 1.3.x `$`, 네트워크를
- * 기다리는 `gh pr view`) 키를 풀어야 다음 호출이 죽은 프라미스에 합류하지 않는다.
- * ShellPromise에는 `.timeout()`/`.kill()`이 없어 race가 유일한 레버다. 큰 출력의 `$`를
- * 옮긴 뒤에도 지우지 않는 안전망이다(.claude/rules/server.md).
+ * 같은 키의 동시 작업을 한 번만 돌리고 결과를 공유한다. flight는 타임아웃과
+ * race해 fn()이 settle하지 않아도 키를 푼다 — 안 풀면 이후 호출이 죽은 프라미스에
+ * 합류한다. ShellPromise에는 `.timeout()`/`.kill()`이 없다(server.md).
  */
 
 export type SingleFlight<T> = (key: string, fn: () => Promise<T>) => Promise<T>;

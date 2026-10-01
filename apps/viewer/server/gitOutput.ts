@@ -1,12 +1,9 @@
 /**
- * git을 `$`가 아니라 `Bun.spawn`으로 부른다. Bun 1.3.x의 `$`는 64KB가 넘는 stdout을
- * 받으면 자식이 끝났는데도 promise가 영영 settle하지 않을 수 있다(1.4.0에서 수정).
- * 출력이 리포 크기를 따라 커질 수 있는 호출은 전부 여기를 탄다 — `$`로 되돌리지 않는다
- * (회귀망은 Bun 1.3.x에서만 판별력이 있다: .claude/rules/testing.md).
- *
- * 종료 코드를 보지 않고 stdout만 읽는다(stderr는 버리고, 실패는 빈 출력이다). 스폰
- * 자체가 실패하면(cwd 삭제) throw한다. stdout을 다 읽은 뒤 `exited`를 기다린다(파이프
- * 교착 방지). 인자는 argv로 그대로 가므로 옵션 꼴 ref를 막는 건 호출자 몫이다(`verifyBaseRef`).
+ * 출력이 리포 크기를 따라 커질 수 있는 git 호출은 `$`가 아니라 여기(`Bun.spawn`)를
+ * 탄다 — Bun 1.3.x의 `$`는 64KB가 넘는 stdout에서 영영 settle하지 않을 수 있다
+ * (server.md). 종료 코드는 보지 않는다(실패는 빈 출력, 스폰 실패만 throw).
+ * stdout을 다 읽은 뒤 `exited`를 기다린다(파이프 교착). 옵션 꼴 ref는 호출자가
+ * 막는다(`verifyBaseRef`).
  */
 export interface GitRunResult {
 	stdout: Uint8Array<ArrayBuffer>;

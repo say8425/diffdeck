@@ -6,10 +6,12 @@ import { getDiffFiles } from "../server/diff.ts";
 import { repoFingerprint } from "../server/fingerprint.ts";
 import { getRefs } from "../server/refs.ts";
 
-// 64KB 넘는 출력을 내는 호출처마다 서버 함수를 동시에 여러 번 불러 Bun 1.3.x `$` never-settle 회귀를 잡는다
-// (CI test-bun13, testing.md). 동시 호출은 실제로 일어난다(선택이 다른 /api/diff·prewarm·watch 폴).
-// for-each-ref는 좁은 출력 구간에서만 멈춰 8-way로는 잘 안 잡히므로 16-way로 겹친다. worktree list는 멈춤을
-// 재현하지 못해 지키지 않는다. 픽스처는 `$` 대신 Bun.spawnSync로 만든다 — 1.3.x에서 셋업이 먼저 멈추면 안 된다.
+// 64KB 넘는 출력을 내는 호출처마다 서버 함수를 동시에 여러 번 불러 Bun 1.3.x
+// `$` never-settle 회귀를 잡는다 (CI test-bun13, testing.md). 동시 호출은
+// 실제로 일어난다(선택이 다른 /api/diff·prewarm·watch 폴). for-each-ref는 좁은
+// 출력 구간에서만 멈춰 8-way로는 잘 안 잡히므로 16-way로 겹친다. worktree
+// list는 멈춤을 재현하지 못해 지키지 않는다. 픽스처는 `$` 대신 Bun.spawnSync로
+// 만든다 — 1.3.x에서 셋업이 먼저 멈추면 안 된다.
 
 // 각 호출의 출력이 64KB 파이프 버퍼를 넘어야 한다.
 const STAGED = 1000;

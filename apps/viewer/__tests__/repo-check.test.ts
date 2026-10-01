@@ -50,8 +50,9 @@ describe("classifyRepo (real git)", () => {
 	});
 });
 
-// GIT_TEST_ASSUME_DIFFERENT_OWNER는 다른 계정 없이 소유자 불일치를 만드는 git의 테스트용 스위치다.
-// 사용자·시스템 gitconfig는 끊는다 — 어디든 `safe.directory = *`가 있으면(GitHub 러너) 소유자 검사를 건너뛴다.
+// GIT_TEST_ASSUME_DIFFERENT_OWNER는 다른 계정 없이 소유자 불일치를 만드는 git의
+// 테스트용 스위치다. 사용자·시스템 gitconfig는 끊는다 — 어디든 `safe.directory
+// = *`가 있으면(GitHub 러너) 소유자 검사를 건너뛴다.
 const ISOLATED_OWNER_ENV = {
 	GIT_TEST_ASSUME_DIFFERENT_OWNER: "1",
 	GIT_CONFIG_NOSYSTEM: "1",

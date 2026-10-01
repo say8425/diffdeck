@@ -1,5 +1,5 @@
 // Render-parity harness: renders a fixed fixture with the forked CodeView + FileTree for
-// eyeballing before/after (.claude/rules/vendored-packages.md).
+// eyeballing before/after (vendored-packages.md).
 import { CodeView, parseDiffFromFile } from "@diffdeck/diffs";
 import { FileTree } from "@diffdeck/trees";
 import fixture from "./fixture.json";

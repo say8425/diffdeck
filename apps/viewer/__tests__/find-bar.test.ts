@@ -97,8 +97,9 @@ const keydown = (target: EventTarget, init: KeyboardEventInit): boolean =>
 		new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
 	);
 
-// window keydown 리스너는 destroy()로만 풀리고 happy-dom 전역은 프로세스 내내 살아 있다 — 인스턴스는 이 헬퍼로만 만든다.
-// 테스트당 하나만 추적하므로 한 테스트에서 둘을 만들면 첫 번째가 샌다.
+// window keydown 리스너는 destroy()로만 풀리고 happy-dom 전역은 프로세스 내내
+// 살아 있다 — 인스턴스는 이 헬퍼로만 만든다. 테스트당 하나만 추적하므로 한
+// 테스트에서 둘을 만들면 첫 번째가 샌다.
 let activeFindBar: FindBar | null = null;
 const makeFindBar = (deps: FindBarDeps): FindBar => {
 	activeFindBar = createFindBar(deps);

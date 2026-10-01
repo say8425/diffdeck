@@ -51,7 +51,8 @@ const addColumn = (
 	});
 };
 
-// 끝점이 행 텍스트 노드 안(offset 0..1)에 떨어지므로, 클램프가 없으면 chars: { start: 0, end: 1 }이 붙는 게 맞다.
+// 끝점이 행 텍스트 노드 안(offset 0..1)에 떨어지므로, 클램프가 없으면 chars: {
+// start: 0, end: 1 }이 붙는 게 맞다.
 const endpointsOf = (a: Node, b: Node) => ({
 	range: {
 		startContainer: a.firstChild ?? a,

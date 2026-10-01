@@ -240,14 +240,11 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
   }
 
   public recycle(): void {
-    // [diffdeck] Deviation from upstream @pierre/diffs: mirror the constructor
-    // (see above) instead of unconditionally dropping the highlighter. A
-    // recycled renderer is about to be re-mounted by the virtualizer, and on
-    // the non-worker path the shared highlighter is a loaded singleton — with
-    // it re-acquired synchronously, the first render after re-mount paints
-    // synchronously (header included). Dropping it forced that render to bail
-    // and wait for an async highlight 1+ frames later, which painted mounted
-    // files headerless/0-height and read as blank bands during fast scrolls.
+    // [diffdeck] Exception 1 (vendored-packages.md): re-acquire the
+    // highlighter like the constructor instead of dropping it. On the
+    // non-worker path the first render after re-mount must paint synchronously,
+    // header included; dropping it painted headerless 0-height files during
+    // fast scrolls.
     if (this.workerManager?.isWorkingPool() !== true) {
       this.highlighter = areThemesAttached(this.options.theme ?? DEFAULT_THEMES)
         ? getHighlighterIfLoaded()
@@ -256,25 +253,14 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       this.highlighter = undefined;
     }
     this.diff = undefined;
-    // [diffdeck] Deviation from upstream @pierre/diffs: keep a fully
-    // highlighted render cache across recycle instead of dropping it
-    // unconditionally. The viewer runs the non-worker path, where
-    // renderDiffWithHighlighter re-tokenizes the ENTIRE file (both sides,
-    // range ignored for syntax correctness) synchronously on the main thread
-    // — so every re-entry into the overscan window froze the mounting frame
-    // for hundreds of ms (measured 333-359ms for a 1.5k-line file). Keeping
-    // the cache is safe: renderDiff re-validates it against the incoming
-    // diff/options on every render (areDiffTargetsEqual /
-    // areDiffRenderOptionsEqual) and force-rehighlights on mismatch, and
-    // expandHunk already relies on the same "highlighted caches stay"
-    // invariant. Partial (non-highlighted) and empty-window (collapsed,
-    // zero-line) caches are still dropped, exactly as before — the latter
-    // also naturally bounds memory: massive plain-text files never keep an
-    // AST. One subtlety: renderDiff's argless default (diff =
-    // this.renderCache?.diff) now resolves to the retained diff after a
-    // recycle instead of undefined — audited all call sites (they all pass
-    // diff explicitly), but keep that in mind if an argless call ever
-    // appears. Regression net: retokenize-cache.e2e.ts.
+    // [diffdeck] Exception 3 (vendored-packages.md): keep a fully highlighted
+    // render cache across recycle so re-entering the overscan window does not
+    // re-tokenize the whole file (a frozen frame on the non-worker path,
+    // unhighlighted text until the worker answers on the worker path).
+    // renderDiff re-validates the cache against the incoming diff/options.
+    // Partial and empty-window caches are still dropped. An argless
+    // renderDiff() now sees the retained diff after a recycle — every current
+    // caller passes diff explicitly.
     if (
       this.renderCache?.highlighted !== true ||
       this.renderCache.emptyWindow === true
@@ -530,15 +516,11 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     };
     const hasContent =
       diff.additionLines.length > 0 || diff.deletionLines.length > 0;
-    // [diffdeck] Deviation from upstream @pierre/diffs: an empty window
-    // (totalLines 0 — a collapsed item showing only its header) renders as
-    // plain text with a zero range. Highlighted renders ignore the range and
-    // tokenize the ENTIRE file both sides (renderDiffWithHighlighter
-    // overrides startingLine/totalLines for syntax correctness), which for a
-    // sub-massive lockfile (e.g. 52k lines — under the 100k isDiffMassive
-    // cutoff) froze the main thread for seconds to draw one header line.
-    // Plain text honors the range, so a zero window does zero tokenize work;
-    // expanding the item changes the range and re-renders highlighted.
+    // [diffdeck] Exception 2 (vendored-packages.md): an empty window (a
+    // collapsed item showing only its header) renders as plain text with a
+    // zero range. Highlighted renders ignore the range and tokenize the whole
+    // file, which froze the main thread for seconds on a large collapsed
+    // lockfile; plain text honors the range. Expanding re-renders highlighted.
     const emptyWindow = renderRange.totalLines === 0;
     const forcePlainText =
       !hasContent ||
@@ -608,10 +590,9 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
         (forceHighlight ||
           forcePlainText ||
           (!this.renderCache.highlighted && canHighlight) ||
-          // [diffdeck] a pool cached by an empty-window render has zero lines
-          // — a non-empty window must refresh it (plain text when the
-          // language isn't attached yet) or processDiffResult would index
-          // into empty arrays and throw on expand.
+          // [diffdeck] A pool cached by an empty-window render has zero lines;
+          // a non-empty window must refresh it or processDiffResult throws on
+          // expand.
           (this.renderCache.emptyWindow === true && !emptyWindow) ||
           this.renderCache.result == null)
       ) {
@@ -637,10 +618,9 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
       // and languages
       if (!hasThemes || (!forcePlainText && !hasLangs)) {
         // [diffdeck] see emptyWindow above — the async leg must honor it too:
-        // a collapsed item whose instance was constructed before the shared
-        // highlighter finished loading lands here on first mount, and an
-        // unbounded asyncHighlight would tokenize the entire file on the main
-        // thread anyway (the await only defers it, it does not unblock it).
+        // an item constructed before the shared highlighter loaded lands here
+        // on first mount, and an unbounded asyncHighlight would still tokenize
+        // the whole file on the main thread.
         void this.asyncHighlight(
           diff,
           emptyWindow ? renderRange : undefined
@@ -651,10 +631,8 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
             this.renderCache.highlighted = false;
           }
           this.onHighlightSuccess(diff, result, options, !forcePlainText);
-          // [diffdeck] onHighlightSuccess rebuilt the cache — when this async
-          // render was an empty window, mark its zero-line pool as such so a
-          // later expand refreshes instead of consuming it (see the sync
-          // branch's matching guard).
+          // [diffdeck] Mark an async empty-window pool too, so a later expand
+          // refreshes it (see the sync branch's guard).
           if (this.renderCache != null) {
             this.renderCache.emptyWindow = emptyWindow;
           }
@@ -732,10 +710,8 @@ export class DiffHunksRenderer<LAnnotation = undefined> {
     diff: FileDiffMetadata,
     highlighter: DiffsHighlighter,
     forcePlainText = false,
-    // [diffdeck] Only ever passed for an empty window (totalLines 0): plain
-    // text honors the range, so this renders zero lines instead of building
-    // the full-file AST. All other callers keep the full-render semantics
-    // the render cache is built around.
+    // [diffdeck] Only passed for an empty window: plain text honors the range,
+    // so this renders zero lines. Other callers keep full-render semantics.
     emptyWindowRange?: RenderRange
   ): RenderDiffResult {
     const { options } = this.getRenderOptions(diff);

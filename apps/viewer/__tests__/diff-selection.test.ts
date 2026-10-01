@@ -41,7 +41,8 @@ describe("parseSelection", () => {
 });
 
 describe("selectionCacheKey", () => {
-	// 키에는 flight 클로저가 읽는 입력이 빠짐없이 들어가야 한다 — 빠지면 다른 선택이 같은 슬롯에 합류해 남의 diff를 받는다.
+	// 키에는 flight 클로저가 읽는 입력이 빠짐없이 들어가야 한다 — 빠지면 다른
+	// 선택이 같은 슬롯에 합류해 남의 diff를 받는다.
 	test("distinguishes two auto selections whose base resolved differently", () => {
 		const sel = parseSelection(params("repo=/r&mode=base"));
 		expect(selectionCacheKey(sel, "origin/main")).not.toBe(
@@ -102,7 +103,8 @@ describe("parseSelection with an explicit base", () => {
 		});
 	});
 
-	// 중복처럼 보여도 지우지 않는다: 커밋 없는 리포에서 참조 검증이 실패하고, prewarm이 데운 슬롯과 키가 갈린다(server.md).
+	// 중복처럼 보여도 지우지 않는다: 커밋 없는 리포에서 참조 검증이 실패하고,
+	// prewarm이 데운 슬롯과 키가 갈린다(server.md).
 	test("base=HEAD normalizes to the head selector, not a ref named HEAD", () => {
 		expect(parseSelection(params("repo=/r&base=HEAD")).base).toEqual({
 			kind: "head",

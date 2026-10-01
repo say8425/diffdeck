@@ -327,8 +327,9 @@ describe("head selection (rev → rev)", () => {
 		expect(files.some((f) => f.status === "untracked")).toBe(false);
 	});
 
-	// 브랜치 이름이 트래킹된 디렉토리 이름과 같아야 `--` 누락을 잡는다 — 없으면 git이 ambiguous argument로
-	// 죽고 그 실패가 에러 없는 "변경 없음"이 된다. feat/main 픽스처로는 원리적으로 못 잡는다.
+	// 브랜치 이름이 트래킹된 디렉토리 이름과 같아야 `--` 누락을 잡는다 — 없으면
+	// git이 ambiguous argument로 죽고 그 실패가 에러 없는 "변경 없음"이 된다.
+	// feat/main 픽스처로는 원리적으로 못 잡는다.
 	test("a branch named like a tracked directory still diffs", async () => {
 		await $`git -C ${repo} branch -M main`;
 		mkdirSync(join(repo, "docs"));

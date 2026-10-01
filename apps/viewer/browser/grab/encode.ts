@@ -78,7 +78,7 @@ export const grabLabelParts = (
 };
 
 // 프로덕션에서 부르지 않지만 지우지 않는다 — 테스트가 이 함수로 조각을 이어
-// 붙인 문자열을 단언한다(.claude/rules/grab.md).
+// 붙인 문자열을 단언한다(grab.md).
 export const grabLabel = (path: string, snippet: Snippet): string =>
 	grabLabelParts(path, snippet)
 		.map((part) => part.text)

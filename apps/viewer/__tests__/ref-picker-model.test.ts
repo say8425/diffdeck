@@ -73,7 +73,8 @@ describe("buildHeadRows — worktrees", () => {
 		expect(rows.find((r) => r.selected)?.label).toBe("feat");
 	});
 
-	// repo는 기동 시점의 cwd라 리포 루트가 아닐 수 있다 — repoLabel의 findWorktree와 같은 판정을 쓴다.
+	// repo는 기동 시점의 cwd라 리포 루트가 아닐 수 있다 — repoLabel의
+	// findWorktree와 같은 판정을 쓴다.
 	test("matches the viewed worktree from a subdirectory", () => {
 		const rows = buildHeadRows([MAIN_WT, FEAT_WT], [], "main", {
 			repo: "/w/repo/.claude/worktrees/feat/src",

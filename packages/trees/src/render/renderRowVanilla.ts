@@ -144,25 +144,15 @@ const buildRowDecoration = (
 	]);
 };
 
-// Read-only remainder of formatFlattenedSegments (FileTreeView.tsx:82-119):
-// renameInput and dragTargetFlattenedSegmentPath are always null/absent here,
-// so the drag-target attribute never appears.
+// Read-only port of formatFlattenedSegments: there is no rename input or drag
+// target here.
 //
-// [diffdeck] Upstream wraps every segment in a `<Truncate>` widget, so a long
-// flattened chain in a narrow sidebar degrades into per-segment ellipses
-// ("eng… / r… / … / p…"). We render segments as plain text inside a single
-// clip element instead, so the joined path clips once at its end via CSS
-// text-overflow, matching GitHub's tree ("apps/cms/src/…").
-//
-// The wrapper/clip split matters: a nowrap text run's intrinsic min-content
-// is its full width, and that minimum propagates up the row's flex chain, so
-// a naive nowrap ellipsis container widens the whole row past the sidebar
-// (measured 715px in a 300px sidebar — git dot off-screen, no ellipsis ever
-// renders). The wrapper is therefore a grid with a single
-// `minmax(0, max-content)` column (the same intrinsic-min-zeroing trick the
-// upstream Truncate grid uses, style.css `[data-truncate-container]`), and
-// the inner clip element carries nowrap + text-overflow: ellipsis.
-// Regression net: renderRowVanilla.test.ts + tree-path-tooltip.e2e.ts.
+// [diffdeck] Exception 4 (vendored-packages.md): segments render as plain text
+// in one clip element, so the joined path clips once at its end (GitHub-style)
+// instead of per-segment Truncate widgets ("eng… / r… / … / p…"). The wrapper
+// is a grid with one `minmax(0, max-content)` column: a nowrap run's
+// min-content is its full width and would otherwise widen the row past the
+// sidebar.
 const buildFlattenedSegments = (row: FileTreeVisibleRow): Node | string => {
 	const segments = row.flattenedSegments;
 	if (segments == null || segments.length === 0) {
@@ -311,11 +301,9 @@ export const buildRow = (
 		state,
 	});
 
-	// [diffdeck] Native tooltip with the full (untruncated) path on hover — the
-	// visible text can be ellipsis-clipped (flattened chains, narrow sidebar).
-	// For flattened rows targetPath is the terminal segment's full path, same
-	// as data-item-path. Regression net: renderRowVanilla.test.ts +
-	// tree-path-tooltip.e2e.ts.
+	// [diffdeck] Exception 4: a native tooltip with the full path, since the
+	// visible text can be clipped. For flattened rows targetPath is the
+	// terminal segment's full path, same as data-item-path.
 	return el("button", { ...attrs, type: "button", title: targetPath }, [
 		buildRowContent(row, ctx),
 	]) as HTMLButtonElement;

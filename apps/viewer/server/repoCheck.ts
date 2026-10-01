@@ -53,7 +53,7 @@ export const classifyRepo = async (
 	try {
 		result = await deps.revParse(repo);
 	} catch {
-		// cwd가 삭제된 프로세스는 자식을 못 띄운다(posix_spawn ENOENT — .claude/rules/server.md).
+		// cwd가 삭제된 프로세스는 자식을 못 띄운다(posix_spawn ENOENT — server.md).
 		return "git-unavailable";
 	}
 	if (result.exitCode === 0) {

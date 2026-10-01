@@ -352,10 +352,8 @@
     &[data-item-focused="true"], &:focus-visible {
       z-index: 2;
 
-      /* [diffdeck] Dead since the flattened subtree stopped rendering
-       * Truncate widgets (renderRowVanilla.ts buildFlattenedSegments) — only
-       * [data-truncate-marker] internals read this var. Kept to stay close
-       * to upstream. */
+      /* [diffdeck] Dead since flattened segments stopped rendering Truncate
+       * widgets (exception 4); kept to stay close to upstream. */
       & [data-item-flattened-subitems] {
         --truncate-marker-block-inset: var(--trees-focus-ring-width);
       }
@@ -416,15 +414,10 @@
     border-top-right-radius: 0;
   }
 
-  /* [diffdeck] Upstream lays segments out as inline-flex so each one shrinks
-   * through its own Truncate widget ("eng… / r… / … / p…"). The segments are
-   * now plain text (renderRowVanilla.ts buildFlattenedSegments), clipped once
-   * at the end of the joined path, GitHub-style ("apps/cms/src/…"). The
-   * single minmax(0, max-content) column zeroes the wrapper's intrinsic
-   * min-content contribution — a nowrap run's min-content is its full text
-   * width and would otherwise propagate up the row's flex chain and widen
-   * the row past the sidebar (same trick as the upstream Truncate grid
-   * below). */
+  /* [diffdeck] Exception 4 (vendored-packages.md): plain-text segments clipped
+   * once at the end. The single minmax(0, max-content) column zeroes the
+   * wrapper's min-content so a nowrap run can't widen the row past the
+   * sidebar. */
   [data-item-flattened-subitems] {
     grid-template-columns: minmax(0, max-content);
     min-width: 0;

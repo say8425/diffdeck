@@ -44,6 +44,6 @@ test("watch polling 304s while idle and re-renders an edited file on the next po
 		.poll(() => diffHasText(page, "hello, watched world"), { timeout: 15_000 })
 		.toBe(true);
 
-	// "Working-tree edit"는 편집하지 않은 README.md의 내용이다.
+	// 이 테스트가 고치지 않은 README.md도 갱신 뒤에 그대로 그려져 있어야 한다.
 	expect(await diffHasText(page, "Working-tree edit")).toBe(true);
 });

@@ -12,7 +12,8 @@ describe("isCwdAlive", () => {
 		expect(isCwdAlive({ cwd: () => "/gone", exists: () => false })).toBe(false);
 	});
 
-	// existsSync(".")·statSync(".")는 열린 cwd 디스크립터 때문에 디렉토리가 지워져도 true다(server.md).
+	// existsSync(".")·statSync(".")는 열린 cwd 디스크립터 때문에 디렉토리가
+	// 지워져도 true다(server.md).
 	test('"." 이 아니라 해석된 cwd 경로를 검사한다', () => {
 		const seen: string[] = [];
 		isCwdAlive({

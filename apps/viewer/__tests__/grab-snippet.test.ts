@@ -8,7 +8,8 @@ const fd = (oldText: string, newText: string) =>
 		{ name: "a.ts", contents: newText },
 	);
 
-// 두 편집 사이의 unchanged 줄(l3~l14)이 context 병합 임계(4줄×2)보다 길어야 hunk가 둘로 갈려 gap 델타를 검증한다.
+// 두 편집 사이의 unchanged 줄(l3~l14)이 context 병합 임계(4줄×2)보다 길어야
+// hunk가 둘로 갈려 gap 델타를 검증한다.
 const OLD = [
 	"l1",
 	"l2-old",

@@ -90,7 +90,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.rows = 1;
 	input.className = "grab-input";
 	// 단축키는 placeholder가 아니라 .grab-keys·버튼 title·aria-keyshortcuts가
-	// 알린다(.claude/rules/grab.md).
+	// 알린다(grab.md).
 	input.placeholder = "Prompt…";
 	input.setAttribute("aria-label", "Grab prompt");
 	input.setAttribute("aria-keyshortcuts", "Enter Shift+Enter Alt+Enter Escape");
@@ -215,7 +215,7 @@ export const createGrabPopover = (deps: GrabPopoverDeps): GrabPopover => {
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") {
 			// 분기 순서가 계약이다: IME 가드 → alt → shift → 제출
-			// (.claude/rules/grab.md).
+			// (grab.md).
 			if (event.isComposing || event.keyCode === 229) return;
 			if (event.altKey) {
 				event.preventDefault();

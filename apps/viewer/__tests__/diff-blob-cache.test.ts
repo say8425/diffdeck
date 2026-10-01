@@ -61,8 +61,9 @@ const branchFeat = async (): Promise<void> => {
 const HEAD_OPTS = { mode: "base" as const, ref: "main", head: "feat" };
 
 test("a failed git show is not cached", async () => {
-	// head 모드에서 재현한다 — 워킹트리와 비교하는 git diff는 stat이 바뀐 파일의 old blob을 목록 단계에서 읽어
-	// git show보다 먼저 죽는다. 커밋끼리 비교하면 목록은 트리의 OID만 본다.
+	// head 모드에서 재현한다 — 워킹트리와 비교하는 git diff는 stat이 바뀐 파일의
+	// old blob을 목록 단계에서 읽어 git show보다 먼저 죽는다. 커밋끼리 비교하면
+	// 목록은 트리의 OID만 본다.
 	await branchFeat();
 	const oid = (await $`git -C ${repo} rev-parse main:a.txt`.text()).trim();
 	const loose = join(repo, ".git", "objects", oid.slice(0, 2), oid.slice(2));
@@ -95,8 +96,9 @@ test("head mode reads both sides through the cache and matches the uncached resu
 	expect(blobs.stats()).toMatchObject({ entries: 3, hits: 3 });
 });
 
-// 첫 캐시 미스(has든 get이든)에서 한 번 onMiss를 부른다. getDiffFiles는 목록을 뽑은 뒤에야 캐시를 보고 배치 선읽기 전에도
-// has를 부르므로, 여기서 ref를 움직이면 "목록과 읽기 사이에 ref가 움직인" 경합이 결정론적으로 생긴다.
+// 첫 캐시 미스(has든 get이든)에서 한 번 onMiss를 부른다. getDiffFiles는 목록을
+// 뽑은 뒤에야 캐시를 보고 배치 선읽기 전에도 has를 부르므로, 여기서 ref를
+// 움직이면 "목록과 읽기 사이에 ref가 움직인" 경합이 결정론적으로 생긴다.
 const racingCache = (onMiss: () => void): BlobCache => {
 	const inner = createBlobCache();
 	let fired = false;
@@ -168,7 +170,8 @@ test("keys entries by the full object id", async () => {
 });
 
 test("an id the batch could not read falls back to reading by that id, never by name", async () => {
-	// 목록이 볼 feat:a.txt blob을 지우고 목록 뒤에 feat을 전진시킨다 — 이름으로 읽으면 전진한 내용이 읽혀 버린다.
+	// 목록이 볼 feat:a.txt blob을 지우고 목록 뒤에 feat을 전진시킨다 — 이름으로
+	// 읽으면 전진한 내용이 읽혀 버린다.
 	await branchFeat();
 	gitSync(["checkout", "-q", "feat"]);
 	writeFileSync(join(repo, "a.txt"), "feat moved on\n");

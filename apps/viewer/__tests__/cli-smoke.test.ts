@@ -70,7 +70,8 @@ afterAll(() => {
 });
 
 describe("packaged cli.js", () => {
-	// 공유 proc을 마지막에 SIGINT로 끝내므로 단계들을 한 test에 묶는다 — 쪼개면 선언 순서 실행에 기대게 된다.
+	// 공유 proc을 마지막에 SIGINT로 끝내므로 단계들을 한 test에 묶는다 — 쪼개면
+	// 선언 순서 실행에 기대게 된다.
 	test("the shared CLI process: tokened URL, executable shebang, ping/shell/diff endpoints, then clean SIGINT shutdown", async () => {
 		expect(token.length).toBeGreaterThan(0);
 

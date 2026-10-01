@@ -14,7 +14,8 @@ import {
 const wt = (...records: string[][]): string =>
 	`${records.map((lines) => lines.map((l) => `${l}\0`).join("")).join("\0")}\0`;
 
-// `for-each-ref --format=...%00...%00` 형식: 필드마다 NUL, 레코드 사이에 리터럴 개행이 하나 들어간다.
+// `for-each-ref --format=...%00...%00` 형식: 필드마다 NUL, 레코드 사이에 리터럴
+// 개행이 하나 들어간다.
 const refs = (...records: string[][]): string =>
 	records.map((fields) => `${fields.join("\0")}\0`).join("\n");
 
@@ -32,7 +33,8 @@ describe("parseRepoRoot", () => {
 		expect(parseRepoRoot(raw)).toBe("/repo");
 	});
 
-	// parseWorktreeList는 bare를 걸러내 첫 항목이 링크된 워크트리가 된다 — 필터 전 원본을 읽는 이유다.
+	// parseWorktreeList는 bare를 걸러내 첫 항목이 링크된 워크트리가 된다 — 필터
+	// 전 원본을 읽는 이유다.
 	test("keeps the bare main worktree that parseWorktreeList drops", () => {
 		const raw = wt(
 			["worktree /srv/myproj.git", "bare"],
@@ -79,7 +81,8 @@ describe("parseWorktreeList", () => {
 		]);
 	});
 
-	// 디렉토리가 사라져도 git은 그 등록을 branch 줄까지 달고 낸다 — 고르게 두면 없는 경로로 이동해 빠져나올 수 없다.
+	// 디렉토리가 사라져도 git은 그 등록을 branch 줄까지 달고 낸다 — 고르게 두면
+	// 없는 경로로 이동해 빠져나올 수 없다.
 	test("drops a worktree whose directory is gone", () => {
 		const out = parseWorktreeList(
 			wt(
@@ -178,7 +181,8 @@ describe("parseRefList", () => {
 	});
 });
 
-// 위 픽스처 문자열은 git이 실제로 그렇게 낸다는 것까지는 증명하지 않으므로 진짜 git 출력으로도 본다.
+// 위 픽스처 문자열은 git이 실제로 그렇게 낸다는 것까지는 증명하지 않으므로 진짜
+// git 출력으로도 본다.
 describe("getRefs against a real repository", () => {
 	let root: string;
 	let repo: string;

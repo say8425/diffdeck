@@ -79,6 +79,8 @@ const bulkFileLines = (marker: string, length = 200): string =>
 			`export const ${marker}_${i} = ${i}; // ${marker} filler line ${i}`,
 	).join("\n")}\n`;
 
+// 옛·새 줄 수의 합이 LARGE_FILE_LINE_THRESHOLD를 넘어야 large-file-collapse ①이
+// 파일 길이로 세는 회귀를 잡는다.
 const LONG_FILE_LINES = 2000;
 const LONG_FILE_EDITED_LINES = 3;
 

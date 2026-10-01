@@ -87,7 +87,7 @@ export const run = (argv: string[], deps: CliDeps): void => {
 
 	// repo를 읽은 직후에 cwd를 떠난다(먼저 떠나면 repo가 `/`가 된다). 이후 git·gh 호출은
 	// 모두 repo를 명시하므로, 대개 지워질 워크트리인 이 디렉토리가 삭제돼도 데몬이
-	// 산다 — cwd가 삭제된 프로세스는 자식 프로세스를 띄울 수 없다(.claude/rules/server.md).
+	// 산다 — cwd가 삭제된 프로세스는 자식 프로세스를 띄울 수 없다(server.md).
 	deps.toSafeCwd();
 
 	let handle: ReturnType<typeof startDiffServer>;

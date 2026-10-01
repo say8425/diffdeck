@@ -10,8 +10,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// 결과 바이트로는 배치와 파일별 읽기가 갈리지 않아 실제로 뜬 git 프로세스를 센다.
-// Bun.spawn은 실행 중에 바꾼 PATH를 따르지 않으므로 git 심을 PATH 앞에 둔 자식 bun에서 부른다(testing.md).
+// 결과 바이트로는 배치와 파일별 읽기가 갈리지 않아 실제로 뜬 git 프로세스를
+// 센다. Bun.spawn은 실행 중에 바꾼 PATH를 따르지 않으므로 git 심을 PATH 앞에 둔
+// 자식 bun에서 부른다(testing.md).
 
 const FILES = 12;
 // 배치 상한(PREFETCH_LIMITS)을 넘는 파일 하나 — 이것만 파일별 `git show`로 떨어져야 한다.

@@ -4,7 +4,8 @@ import {
 	SingleFlightTimeoutError,
 } from "../server/singleFlight.ts";
 
-// bun-types가 `.rejects.toThrow()`를 void로 선언해 await하면 oxlint의 await-thenable이 오탐한다 — try/catch로 받는다.
+// bun-types가 `.rejects.toThrow()`를 void로 선언해 await하면 oxlint의
+// await-thenable이 오탐한다 — try/catch로 받는다.
 const rejectionOf = async (p: Promise<unknown>): Promise<Error> => {
 	try {
 		await p;
@@ -86,7 +87,8 @@ describe("createSingleFlight", () => {
 		);
 	});
 
-	// fake timers 중 setTimeout을 흘리면 bun test 전체가 멈출 수 있어 실제 타이머와 주입한 5ms 타임아웃을 쓴다.
+	// fake timers 중 setTimeout을 흘리면 bun test 전체가 멈출 수 있어 실제
+	// 타이머와 주입한 5ms 타임아웃을 쓴다.
 	test("a flight that never settles rejects with the timeout error and frees the key for the next call", async () => {
 		const flight = createSingleFlight<string>(5);
 		const err = await rejectionOf(flight("k", neverSettles));
