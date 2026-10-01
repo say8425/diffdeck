@@ -15,7 +15,7 @@ Un visor de diff local, construido sobre un fork vendorizado de los paquetes de 
 
 diffdeck es el visor de diff local que originalmente estaba embebido en [cc-statusline](https://github.com/say8425/cc-statusline), ahora extraído como un producto propio. En lugar de depender de los paquetes originales de Pierre — que evolucionan rápido (`@pierre/diffs` cambia mucho; `@pierre/trees` está en beta pre-1.0) y cuyo markup interno ya estaba fuertemente acoplado a nuestro código —, diffdeck **recupera el TypeScript original a partir de los source maps de los paquetes y lo vendoriza**, de modo que somos dueños por completo del motor de renderizado.
 
-El resultado es un monorepo de workspaces de Bun donde un motor de diff sólido y agnóstico de framework (el `CodeView` de Pierre — las ~29 500 líneas de `packages/diffs`) se mantiene tal cual, mientras que las partes que personalizamos viven en nuestro propio código.
+El resultado es un monorepo de workspaces de Bun donde un motor de diff sólido y agnóstico de framework (el `CodeView` de Pierre — las ~30 000 líneas de `packages/diffs`) se mantiene tal cual, mientras que las partes que personalizamos viven en nuestro propio código.
 
 ## Características
 
@@ -29,27 +29,28 @@ Lo que ofrece el motor de renderizado de diffs:
 - **Renderizado virtualizado** que se mantiene fluido en diffs grandes, con cabeceras de archivo fijas (sticky).
 - **Encapsulación con Shadow DOM** por archivo, de modo que los estilos del visor nunca se filtran a la página.
 
-El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada, watch/auto-actualización, y un selector de base de comparación con búsqueda — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck.
+El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada y watch/auto-actualización — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck, junto con un selector de worktrees y ramas con búsqueda, insignias de pull request y Grab.
 
 ![El visor de diffdeck — árbol de archivos con insignias de estado de git y diffs con resaltado de sintaxis](screenshot.png)
 
-### Comparar contra cualquier rama
+### Ver cualquier rama o worktree
 
-El selector de la barra de herramientas decide contra qué se mide el diff: tu trabajo sin confirmar (**Working tree**), o cualquier rama local o remota. Escribe para filtrar.
+El selector a la izquierda de la barra de herramientas elige qué estás viendo, y su etiqueta siempre dice dónde estás: `repo · branch` en el worktree principal, `repo / worktree · branch` en uno vinculado. Escribe para filtrar por nombre, número de PR o título de PR.
 
-![El selector de base de comparación abierto, con Working tree junto a las ramas del repositorio](ref-picker.png)
+![El selector abierto, con los worktrees y las ramas del repositorio](ref-picker.png)
 
-Dos etiquetas te ahorran un momento de desconcierto. La rama que este worktree tiene activa lleva `HEAD` — comparar contra ella siempre se ve vacío, porque es donde ya estás. La rama por defecto del repositorio lleva `default`, así que la elección habitual se encuentra de inmediato.
+- Elegir un **worktree** abre los cambios de ese worktree.
+- Elegir una **rama** muestra los commits de esa rama desde que se bifurcó de la base — normalmente la rama por defecto del repositorio, marcada con `default` en la lista.
 
-Al elegir una rama, la comparación es contra la **merge base**: el commit del que se bifurcó tu trabajo. Así ves solo tus propios cambios, y no todo lo que haya llegado a la otra rama desde entonces.
+Un worktree sin cambios sin confirmar se abre con los commits de su rama frente a la base, en lugar de una pantalla vacía. Las ramas con un pull request muestran su número y título en la lista, y mientras ves una, una insignia junto al selector abre el PR en GitHub.
 
 ### Grab — envía una selección del diff a tu agente de código
 
-Selecciona código en el diff y se abre un cuadro de prompt justo donde soltaste el arrastre. Pulsa <kbd>Enter</kbd> y diffdeck copia **un solo bloque** al portapapeles — la referencia del archivo, las líneas exactas que elegiste y tu prompt — listo para pegar en Claude Code, Codex o cualquier chat. ¿Solo quieres el código? Pulsa <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> en Windows/Linux) y diffdeck copia únicamente las líneas elegidas — sin prompt, sin delimitadores de código ni encabezado de archivo — para pegarlas directamente en un editor. Eso sí, una selección que abarque ambos lados del diff llega sin sus marcadores `+`/`-`, de modo que las versiones antigua y nueva de una misma línea quedan una tras otra.
+Selecciona código en el diff y se abre un cuadro de prompt justo donde terminaste de seleccionar. Pulsa <kbd>Enter</kbd> y diffdeck copia **un solo bloque** al portapapeles — la referencia del archivo, las líneas exactas que elegiste y tu prompt — listo para pegar en Claude Code, Codex o cualquier chat. ¿Solo quieres el código? Pulsa <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> en Windows/Linux) y diffdeck copia únicamente las líneas elegidas — sin prompt, sin delimitadores de código ni encabezado de archivo — para pegarlas directamente en un editor. Eso sí, una selección que abarque ambos lados del diff llega sin sus marcadores `+`/`-`, de modo que las versiones antigua y nueva de una misma línea quedan una tras otra.
 
 ![Grab — líneas resaltadas en el diff con el cuadro de prompt abierto al lado](grab.png)
 
-Dos formas de entrar: **arrastrar el texto del código**, o usar la selección de líneas del margen y su botón `+`. Un arrastre de texto copia exactamente los caracteres resaltados; la vía del margen toma líneas completas. En ambos casos el resaltado muestra con precisión qué se copiará.
+Dos formas de entrar: **seleccionar el texto del código** (arrastrando, con doble clic o con triple clic), o usar la selección de líneas del margen y su botón `+`. Una selección de texto copia exactamente los caracteres resaltados; la vía del margen toma líneas completas. En ambos casos el resaltado muestra con precisión qué se copiará.
 
 Lo que llega al portapapeles:
 
@@ -79,7 +80,7 @@ O instálalo globalmente para obtener el comando `diffdeck`:
 bun install -g @say8425/diffdeck
 ```
 
-Requiere [Bun](https://bun.sh); `git` (y `gh` para la detección de branch-vs-base) en tu `PATH`.
+Requiere [Bun](https://bun.sh) y `git` en tu `PATH`. [`gh`](https://cli.github.com) es opcional: con él, diffdeck usa tus pull requests para elegir la base de comparación y mostrar insignias de PR.
 
 ## CLI
 
@@ -96,7 +97,7 @@ Opciones:
 | Flag               | Descripción                                                                      |
 | ------------------ | --------------------------------------------------------------------------------- |
 | `--port <n>`       | Puerto en el que servir (predeterminado: `$DIFFDECK_PORT` o `49573`)              |
-| `--no-open`        | No abrir un navegador automáticamente (imprime la URL)                            |
+| `--no-open`        | No abrir un navegador automáticamente (la URL se imprime igual)                   |
 | `--untracked`      | Iniciar incluyendo archivos sin seguimiento (untracked)                           |
 | `--watch`          | Iniciar con watch (auto-actualización) activado                                   |
 | `--no-flatten`     | Iniciar con el árbol de archivos sin aplanar (flatten está activo por defecto)    |
