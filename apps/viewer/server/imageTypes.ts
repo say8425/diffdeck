@@ -1,5 +1,4 @@
-// 이미지 diff 대상 확장자와 MIME 매핑 (서버 content-type과 뷰어 필터가 공유).
-// SVG는 텍스트라 일반 diff가 더 유용하므로 의도적으로 제외.
+// 서버 content-type과 뷰어의 이미지 필터가 공유한다. SVG는 텍스트 diff가 더 유용해 뺐다.
 const IMAGE_MIME: Record<string, string> = {
 	png: "image/png",
 	jpg: "image/jpeg",

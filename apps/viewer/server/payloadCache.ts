@@ -1,8 +1,7 @@
 /**
- * /api/diff 응답 payload 캐시. (repo, untracked, mode) 키마다 마지막 응답의
- * {fingerprint, etag, body}를 보관하고, 지문이 일치하는 동안 diff 파이프라인
- * 없이 재사용한다. etag는 파일 식별자(name/oldName/status/contentVersion)만으로
- * 계산해 수십 MB짜리 body 해싱을 피한다 — contentVersion이 내용을 대변한다.
+ * /api/diff 응답 캐시. 선택(`selectionCacheKey`)마다 마지막 응답을 두고 지문이 같은
+ * 동안 재사용한다. etag는 파일 식별자와 contentVersion으로만 계산한다 — 수십 MB body를
+ * 해싱하지 않는다.
  */
 import type { DiffFile } from "./diff.ts";
 
@@ -27,7 +26,7 @@ export const payloadEtag = (files: readonly DiffFile[]): string =>
 			.join("\x01"),
 	).toString(36);
 
-// body가 수십 MB일 수 있으므로 엔트리 수를 작게 캡한다 (LRU: Map 삽입 순서).
+// body가 수십 MB일 수 있어 엔트리 수를 작게 묶는다(LRU: Map 삽입 순서).
 export const createPayloadCache = (maxEntries = 8): PayloadCache => {
 	const entries = new Map<string, PayloadCacheEntry>();
 	return {

@@ -1,6 +1,3 @@
-// 트리거/팝오버 공용 fixed 배치. 숫자 전용(순수) — happy-dom은 rect가 전부 0이라
-// rect 읽기를 main.ts에 두고 여기는 게이트 안에서 전 분기를 테이블 테스트한다.
-
 export interface AnchorRect {
 	left: number;
 	top: number;

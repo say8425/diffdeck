@@ -1,21 +1,3 @@
-// Launch-flag -> in-app toggle sync: CLI flags become URL params
-// (cli.ts -> server/link.ts's `buildDiffViewerUrl`), which main.ts's prefs.ts
-// resolvers (`resolveUntracked`/`resolveWatch`/`resolveFlatten`/
-// `resolveTreeSide`/`resolveDiffStyle`/`resolveTreeHidden`/
-// `resolveFoldWithTree`) read at boot to seed both the rendering state
-// (diffStyle, treeSide, treeHidden, foldWithTree, ...) and the toolbar
-// controls that mirror it. This spec launches with a non-default flag on
-// every axis and asserts the DOM reflects all seven.
-//
-// The six checkbox toggles (`#toggle-untracked`, `#toggle-watch`,
-// `#toggle-flatten`, `#toggle-tree-side`, `#toggle-tree-hidden`,
-// `#toggle-fold-with-tree`) live inside `#overflow-menu`, which starts
-// `hidden` -- but main.ts sets their `.checked` property at boot regardless
-// of the menu's open state, and non-visibility assertions (like reading a
-// property via `page.evaluate`) don't require the element to be visible. The
-// Unified/Split segmented control, `#app`'s `data-tree-side`, and
-// `#tree-toggle-btn`/`data-tree-hidden` live in the always-visible
-// toolbar/app shell.
 import { expect, launchViewer, test as base } from "./fixtures/app.ts";
 
 const FLAGS = [
@@ -43,6 +25,8 @@ test("launch flags are reflected in the in-app toggle state", async ({
 	await page.goto(flagsUrl);
 	await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 
+	// The checkboxes sit in the still-hidden #overflow-menu; main.ts sets
+	// `.checked` at boot regardless, so reading the property needs no open menu.
 	const readState = () =>
 		page.evaluate(() => ({
 			untracked: (
@@ -76,8 +60,6 @@ test("launch flags are reflected in the in-app toggle state", async ({
 			)?.checked,
 		}));
 
-	// Web-first: the toolbar/prefs wiring runs synchronously at module load,
-	// but poll anyway rather than asserting once immediately after `goto`.
 	await expect.poll(readState).toEqual({
 		untracked: true,
 		watch: true,
@@ -91,9 +73,7 @@ test("launch flags are reflected in the in-app toggle state", async ({
 	});
 });
 
-// 메뉴 최하단의 버전 줄. 값은 /api/ping의 x-diffdeck-version 헤더에서 오는데,
-// 브라우저는 원래 그 라우트를 부르지 않았으므로 이 배선이 유일한 소비자다.
-// main.ts는 커버리지 게이트 밖이라 여기서만 지켜진다.
+// 버전 값은 /api/ping의 x-diffdeck-version 헤더에서 온다.
 test("the overflow menu ends with a version line linking to the repository", async ({
 	page,
 }) => {
@@ -108,9 +88,7 @@ test("the overflow menu ends with a version line linking to the repository", asy
 			"href",
 			"https://github.com/say8425/diffdeck",
 		);
-		// 새 탭으로 여는 링크는 opener를 끊어야 한다.
 		await expect(link).toHaveAttribute("rel", /noopener/);
-		// 서버가 실제로 보고한 버전이어야 한다 — 하드코딩된 문자열이 아니라.
 		await expect(page.locator("#version-value")).toHaveText(/^v\d+\.\d+\.\d+/);
 	} finally {
 		await stop();

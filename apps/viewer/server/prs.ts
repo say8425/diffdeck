@@ -1,14 +1,6 @@
 /**
- * 브랜치 → 그 브랜치의 PR. 피커 행과 툴바 칩이 읽는다.
- *
- * `gh pr list` 한 번으로 리포의 최근 PR을 받아 head 브랜치 이름으로 묶는다.
- * 브랜치마다 `gh pr view`를 부르면 목록 길이만큼 네트워크 왕복이 생긴다.
- *
- * **부가 정보다** — `gh`가 없거나, 로그인이 안 됐거나, 원격이 GitHub이 아니거나,
- * 네트워크가 느리면 빈 결과를 돌려주고 화면은 PR 표시만 뺀다. 그래서 어떤
- * 실패도 던지지 않는다. 다만 "PR 없음"과 "못 받음"은 가른다(`getPrs`가 null) —
- * 서버가 실패를 성공만큼 오래 캐시하면 기동 순간의 네트워크 한 번 끊김이
- * 1분 동안 모든 PR 표시를 지운다.
+ * 브랜치 → PR. `gh pr list` 한 번으로 받아 head 브랜치 이름으로 묶는다(브랜치마다
+ * `gh pr view`를 부르지 않는다). 부가 정보라 어떤 실패도 던지지 않는다.
  */
 import { gitText } from "./gitOutput.ts";
 
@@ -24,18 +16,10 @@ export interface PrRecord {
 /** head 브랜치 이름(원격 접두 없음) → PR. */
 export type PrsByBranch = Record<string, PrRecord>;
 
-/**
- * 받아 올 PR 수의 상한. merged·closed는 리포 나이만큼 쌓이므로 전부 받지
- * 않는다 — 오래된 브랜치가 PR 표시를 잃는 것이 목록 전체를 느리게 하는 것보다
- * 낫다. `gh pr list`는 최신순으로 준다.
- */
+/** merged·closed는 리포 나이만큼 쌓이므로 최신순으로 이만큼만 받는다. */
 export const PR_LIST_LIMIT = 100;
 
-/**
- * `gh`를 기다리는 상한. 네트워크를 타므로 느릴 수 있는데, 이 호출은 flight
- * 안에서 돌기 때문에 매달리면 그 flight의 타임아웃(45초)까지 목록이 비어 있다.
- * 부가 정보에 그만큼 기다릴 이유가 없다.
- */
+/** flight 안에서 돌므로 매달리면 flight 타임아웃까지 목록이 빈다 — 부가 정보라 짧게 끊는다. */
 export const GH_TIMEOUT_MS = 10_000;
 
 const GH_FIELDS =
@@ -73,23 +57,14 @@ const stateOf = (pr: GhPr): PrState | null => {
 	return null;
 };
 
-/** 열려 있는 PR(draft 포함)이 끝난 PR보다 앞선다. */
 const isLive = (state: PrState): boolean =>
 	state === "open" || state === "draft";
 
 /**
- * `gh pr list --json …` 출력을 브랜치별로 묶는다.
- *
- * 한 브랜치에 PR이 여럿이면(닫고 다시 연 경우) **열린 것**이 이기고, 둘 다
- * 열렸거나 둘 다 끝났으면 먼저 온 것 — `gh`가 최신순으로 주므로 가장 최근
- * 것이 이긴다.
- *
- * **남의 포크에서 온 PR은 뺀다.** 그 head는 남의 리포 브랜치라 이름이 같아도
- * 이 리포의 브랜치가 아니다 — 포크의 `main`에서 올린 PR이 우리 `main` 행에
- * 붙는다. **내 포크는 예외다**(`ownFork` = `origin`의 소유자): 포크 워크플로
- * (`gh repo fork --clone`)에서는 `gh`가 기준 리포를 upstream으로 풀어서 내 PR이
- * 전부 cross-repository로 오는데, 그걸 빼면 그 사용자들에게는 PR 표시가 통째로
- * 사라진다. 그들의 로컬 브랜치는 `origin`(= 내 포크)의 브랜치다.
+ * 한 브랜치에 PR이 여럿이면 열린 것(draft 포함)이 이기고, 같은 부류끼리는 먼저 온 것
+ * (`gh`가 최신순이라 가장 최근)이 이긴다. 남의 포크 PR은 뺀다 — 포크의 `main`이 우리
+ * `main` 행에 붙는다. 단 `ownFork`(`origin` 소유자)의 PR은 남긴다: 포크 워크플로에서는
+ * 내 PR이 전부 cross-repository로 온다.
  */
 export const parsePrList = (
 	raw: string,
@@ -102,8 +77,7 @@ export const parsePrList = (
 		return {};
 	}
 	if (!Array.isArray(list)) return {};
-	// 프로토타입 없는 객체 — 브랜치 이름이 `__proto__`·`constructor`여도
-	// 상속된 값을 "이미 있는 PR"로 읽거나 프로토타입을 바꾸지 않는다.
+	// 프로토타입 없는 객체 — 브랜치 이름이 `__proto__`·`constructor`일 수 있다.
 	const out: PrsByBranch = Object.create(null) as PrsByBranch;
 	for (const pr of list as GhPr[]) {
 		if (pr === null || typeof pr !== "object") continue;
@@ -163,8 +137,8 @@ export const readOriginUrl = (repo: string): Promise<string> =>
 	gitText(["-C", repo, "remote", "get-url", "origin"]);
 
 /**
- * 브랜치별 PR. **null은 "못 받았다"**(`gh` 없음·인증 없음·GitHub 원격 아님·
- * 타임아웃)이고 빈 객체는 "PR이 없다"다 — 호출자가 캐시 수명을 가르는 근거다.
+ * null은 "못 받았다"(`gh` 없음·인증 없음·GitHub 원격 아님·타임아웃)이고 빈 객체는
+ * "PR이 없다"다 — 서버가 이것으로 실패만 짧게 캐시한다.
  */
 export const getPrs = async (
 	repo: string,

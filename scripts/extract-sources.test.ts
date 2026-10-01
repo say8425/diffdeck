@@ -4,11 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extractSources } from "./extract-sources.ts";
 
-// Hermetic fixture. This used to read a sibling checkout's
-// `~/dev/cc-statusline/node_modules/@pierre/trees/dist`, which fails in CI (the
-// path doesn't exist) and would break locally too once cc-statusline drops its
-// @pierre dependency. The real Pierre maps only ever exercised the logic below,
-// so we synthesize maps of the same shape instead.
+// Synthetic maps shaped like Pierre's dist maps, so the test needs no external checkout.
 const OWN = "export const getFlattenedChildDirectoryId = () => 1;\n";
 const OTHER = "export const toHex = () => '#fff';\n";
 

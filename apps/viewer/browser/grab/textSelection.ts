@@ -1,7 +1,3 @@
-// 컴포즈드 셀렉션 끝점(RangeEndpoints)을 (fileId, NormalizedRange)로 해석한다.
-// 규칙 전문은 스펙 §경로 B. 여기의 DOM 계약: 행 = [data-line][data-line-type]
-// [data-line-index], 파일 host = <diffs-container> + light-DOM [data-fold],
-// split 컬럼 = code[data-deletions|data-additions].
 import type {
 	CharSpan,
 	GrabPoint,
@@ -19,7 +15,6 @@ interface Endpoint {
 	root: ShadowRoot;
 	fileId: string;
 	rowEl: Element | null;
-	/** 끝점이 [data-line] 안에 직접 떨어졌는가 (거터 복구가 아닌가). */
 	direct: boolean;
 	node: Node;
 	offset: number;
@@ -50,19 +45,14 @@ const classify = (node: Node, offset: number): Endpoint | null => {
 	return { root, fileId, rowEl, direct: own !== null, node, offset };
 };
 
-/**
- * 행 요소 안에서 (node, offset) 끝점이 몇 번째 문자인지. 행 밖이면 null.
- *
- * 엔진은 코드 행을 토큰별 <span>으로 쪼개 렌더하지만 행의 textContent는 파일
- * 원본 라인과 정확히 일치한다(탭 포함, 삽입 문자 없음 — 실측). 그래서 텍스트
- * 노드 길이를 문서순으로 누적하면 원본 라인 기준 오프셋이 나온다.
- */
+// 행의 textContent는 원본 라인과 정확히 같아서(탭 포함, 삽입 문자 없음) 텍스트
+// 노드 길이를 누적하면 원본 라인 기준 오프셋이 된다.
 export const charOffsetInRow = (
 	rowEl: Element,
 	node: Node,
 	offset: number,
 ): number | null => {
-	// 끝점이 행 요소 자체를 가리키는 경우(offset = 자식 인덱스)
+	// 끝점이 행 요소 자체면 offset은 자식 인덱스다.
 	if (node === rowEl) {
 		let acc = 0;
 		const upto = Math.min(offset, rowEl.childNodes.length);
@@ -108,7 +98,6 @@ const rowPoint = (
 	line: Number(rowEl.getAttribute("data-line")),
 });
 
-/** 같은 shadow root 안의 두 끝점 사이에 걸친 [data-line] 행들 (문서순). */
 const rowsBetween = (root: ShadowRoot, a: Endpoint, b: Endpoint): Element[] => {
 	const range = root.host.ownerDocument.createRange();
 	range.setStart(a.node, a.offset);
@@ -122,7 +111,6 @@ const allRows = (root: ShadowRoot): Element[] => [
 	...root.querySelectorAll("[data-line]"),
 ];
 
-/** split 크로스 컬럼: anchor 행의 code 컬럼 안에서 두 행 사이 구간을 클램프. */
 const clampToColumn = (
 	anchorRow: Element,
 	first: Element,
@@ -162,7 +150,7 @@ const buildTarget = (
 		};
 	}
 	if (diffStyle === "split") {
-		// 컬럼 클램프 — 문자 오프셋의 의미가 사라진다
+		// 컬럼으로 클램프하면 문자 오프셋이 뜻을 잃어 chars를 싣지 않는다.
 		const anchorRow = backward ? rowEnd : rowStart;
 		const clamped = clampToColumn(anchorRow, rowStart, rowEnd);
 		const points = clamped.map((el) => rowPoint(el, diffStyle));
@@ -198,7 +186,6 @@ export const resolveTextTarget = (
 	const end = classify(range.endContainer, range.endOffset);
 	if (!start && !end) return null;
 
-	// 같은 파일 root 안에 양 끝점이 있는 경우
 	if (start && end && start.root === end.root) {
 		let rowStart = start.rowEl;
 		let rowEnd = end.rowEl;
@@ -208,8 +195,7 @@ export const resolveTextTarget = (
 			rowStart ??= rows[0];
 			rowEnd ??= rows[rows.length - 1];
 		}
-		// 두 끝점이 행 안에 직접 떨어졌고 클램프가 없었을 때만 문자 범위를 세운다.
-		// getComposedRanges의 start/end는 문서순이므로 방향 정규화가 따로 필요 없다.
+		// getComposedRanges의 start/end는 문서순이라 방향을 따로 맞추지 않는다.
 		let chars: CharSpan | undefined;
 		if (
 			start.direct &&
@@ -231,7 +217,7 @@ export const resolveTextTarget = (
 		);
 	}
 
-	// 크로스 파일(양쪽 유효) 또는 한쪽만 유효 → 소유 파일 확정 + 방향 클램프
+	// 크로스 파일이면 앵커 쪽 파일, 한쪽 끝점만 파일 안이면 그 파일로 클램프한다.
 	const anchorEp = backward ? end : start;
 	const owner = start && end ? anchorEp : (start ?? end);
 	if (!owner?.rowEl) return null;

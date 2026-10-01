@@ -4,7 +4,6 @@ import type { SearchMatch } from "./searchIndex.ts";
 const HIT = "cc-find-hit";
 const ACTIVE = "cc-find-hit--active";
 
-/** Remove all mark.cc-find-hit wrappers under root, restoring original text. */
 const unwrap = (root: HTMLElement | ShadowRoot): void => {
 	const marks = root.querySelectorAll<HTMLElement>(`mark.${HIT}`);
 	for (const mark of marks) {
@@ -18,23 +17,10 @@ const unwrap = (root: HTMLElement | ShadowRoot): void => {
 const sideOf = (lineType: string | undefined): "additions" | "deletions" =>
 	lineType?.includes("deletion") ? "deletions" : "additions";
 
-/**
- * Wrap query matches inside root's code content lines in <mark>. Idempotent:
- * unwraps previous marks first; empty query → unwrap only. Scopes to Pierre's
- * `[data-line]` rows (excludes the gutter) and derives each row's 1-based line
- * number and side.
- *
- * Matching runs against the row's FULL concatenated text — the same string
- * the search index counts on (searchIndex.ts) — not per text node: rendered
- * lines are fragmented into many text nodes by intraline word-diff spans and
- * (once async highlight lands) syntax token spans, so a per-node search
- * silently drops every match that crosses a node boundary while the counter
- * still reports it ("1/1" with nothing highlighted on screen). Each global
- * match range is split back into per-node segments, one <mark> per covered
- * segment — visually contiguous across span boundaries. The active occurrence
- * (fileId + side + lineNumber + column) carries `--active` on all of its
- * segments.
- */
+// Match against the row's full text (the string searchIndex.ts counts), not per
+// text node: token and word-diff spans split a line into many nodes, and a
+// per-node search drops matches that cross them while the counter still
+// reports them. Each match is then split into one <mark> per covered node.
 export const highlightDom = (
 	root: HTMLElement | ShadowRoot,
 	query: string,
@@ -69,10 +55,8 @@ export const highlightDom = (
 		const ranges = findRanges(fullText, query);
 		if (ranges.length === 0) continue;
 
-		// Nodes and ranges are both sorted, so a range that ended before this
-		// node's offset can never matter to a later node either — advance a
-		// persistent cursor instead of rescanning from ranges[0] per node
-		// (O(nodes + ranges), this runs on every post-render while find is open).
+		// Both lists are sorted, so keep a cursor instead of rescanning ranges per
+		// node — this runs on every post-render while find is open.
 		let firstLiveRange = 0;
 		for (const { node, offset } of nodes) {
 			const text = node.nodeValue ?? "";
@@ -83,9 +67,6 @@ export const highlightDom = (
 			) {
 				firstLiveRange++;
 			}
-			// This node's slices of the global match ranges, in node-local
-			// coordinates. Ranges are sorted and non-overlapping, so segments are
-			// too.
 			const segments: { start: number; end: number; isActive: boolean }[] = [];
 			for (let i = firstLiveRange; i < ranges.length; i++) {
 				const range = ranges[i];

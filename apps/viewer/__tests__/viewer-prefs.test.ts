@@ -176,8 +176,7 @@ describe("compare base preference", () => {
 		).toBe("main");
 	});
 
-	// null이면 base 파라미터를 아예 보내지 않고 서버가 자동 해석한다 —
-	// 오늘의 기본 동작이 그대로 유지된다.
+	// null은 "고른 적 없음"이다 — 자동 base 전환이 이 값으로 사용자의 선택 여부를 가른다.
 	test("resolves to null when neither layer has a value", () => {
 		expect(resolveCompareBase(null, store({}), "/r")).toBeNull();
 	});
@@ -188,8 +187,6 @@ describe("compare base preference", () => {
 		).toBe("main");
 	});
 
-	// 워크트리마다 견주는 기준이 다르다. 네임스페이스가 없으면 한 워크트리의
-	// 선택이 다른 워크트리로 새어 나간다(기존 여섯 키가 그 상태다).
 	test("keeps each repository's choice separate", () => {
 		const get = store({ [compareBaseKey("/a")]: "main" });
 		expect(resolveCompareBase(null, get, "/a")).toBe("main");

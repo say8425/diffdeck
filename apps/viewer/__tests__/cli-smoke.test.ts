@@ -70,17 +70,13 @@ afterAll(() => {
 });
 
 describe("packaged cli.js", () => {
-	// 이 다섯 단계는 beforeAll이 띄운 단일 공유 proc의 생존을 순서대로
-	// 전제한다(토큰 파싱 → ping/shell/diff 응답 → 마지막에 SIGINT로 종료
-	// 확인). 개별 test()로 쪼개면 bun:test의 파일 내 선언 순서 실행에 암묵적으로
-	// 기대는 꼴이라 재정렬·병렬화에 취약해진다 — 하나의 test 안에 순차 assert로
-	// 묶어 그 의존을 코드 구조 자체로 강제한다.
+	// 공유 proc을 마지막에 SIGINT로 끝내므로 단계들을 한 test에 묶는다 — 쪼개면
+	// 선언 순서 실행에 기대게 된다.
 	test("the shared CLI process: tokened URL, executable shebang, ping/shell/diff endpoints, then clean SIGINT shutdown", async () => {
 		expect(token.length).toBeGreaterThan(0);
 
 		const contents = readFileSync(cliPath, "utf8");
 		expect(contents.startsWith("#!/usr/bin/env bun\n")).toBe(true);
-		// Bun.build's `// @bun` marker survives on the line after the shebang.
 		expect(contents.split("\n")[1]).toContain("@bun");
 		expect(statSync(cliPath).mode & 0o100).toBe(0o100);
 
@@ -96,7 +92,6 @@ describe("packaged cli.js", () => {
 			`${baseUrl}/api/diff?repo=${encodeURIComponent(repo)}&token=${token}`,
 		);
 		expect(diff.status).toBe(200);
-		// DiffFile's field is `name`, not `path` — see apps/viewer/server/diff.ts.
 		const files = (await diff.json()) as Array<{ name: string }>;
 		expect(files.some((f) => f.name === "a.txt")).toBe(true);
 

@@ -10,20 +10,17 @@ import {
 	parseWorktreeList,
 } from "../server/refs.ts";
 
-// `git worktree list --porcelain -z`의 실측 형식(git 2.54.0): 속성 한 줄마다
-// NUL이 붙고, 레코드 사이는 빈 항목이다.
+// `git worktree list --porcelain -z` 형식: 속성 한 줄마다 NUL이 붙고, 레코드 사이는 빈 항목이다.
 const wt = (...records: string[][]): string =>
 	`${records.map((lines) => lines.map((l) => `${l}\0`).join("")).join("\0")}\0`;
 
-// `for-each-ref --format=...%00...%00`의 실측 형식: 필드마다 NUL, 레코드
-// 사이에 리터럴 개행이 하나 들어간다.
+// `for-each-ref --format=...%00...%00` 형식: 필드마다 NUL, 레코드 사이에 리터럴
+// 개행이 하나 들어간다.
 const refs = (...records: string[][]): string =>
 	records.map((fields) => `${fields.join("\0")}\0`).join("\n");
 
 describe("parseRepoRoot", () => {
-	// git은 메인 워크트리를 **항상 먼저** 낸다 — 링크된 워크트리나 중첩
-	// 워크트리에서 명령을 실행해도 그렇다(실측: 평범·bare·중첩 셋 다).
-	// 그래서 리포 루트는 git 호출을 늘리지 않고 첫 레코드에서 얻는다.
+	// git은 링크·중첩 워크트리에서 실행해도 메인 워크트리를 항상 먼저 낸다.
 	test("takes the first record — the main worktree", () => {
 		const raw = wt(
 			["worktree /repo", "HEAD abc", "branch refs/heads/main"],
@@ -36,10 +33,8 @@ describe("parseRepoRoot", () => {
 		expect(parseRepoRoot(raw)).toBe("/repo");
 	});
 
-	// **bare가 정확히 이 함수가 필요한 이유다.** parseWorktreeList는 bare를
-	// 걸러내므로(워킹트리가 없어 고를 수 없다) 그 결과의 첫 항목은 메인이
-	// 아니라 링크된 워크트리다 — 실측으로 확인했다. 필터 전 원본을 읽어야
-	// 리포 이름을 옳게 말한다.
+	// parseWorktreeList는 bare를 걸러내 첫 항목이 링크된 워크트리가 된다 — 필터
+	// 전 원본을 읽는 이유다.
 	test("keeps the bare main worktree that parseWorktreeList drops", () => {
 		const raw = wt(
 			["worktree /srv/myproj.git", "bare"],
@@ -86,9 +81,8 @@ describe("parseWorktreeList", () => {
 		]);
 	});
 
-	// 이 레포에서 실제로 밟은 상태다. 디렉토리가 사라져도 등록은 남고,
-	// branch 줄까지 그대로 달고 나온다 — 고를 수 있게 두면 워크트리가 없는
-	// 경로로 이동해 빠져나올 수 없는 화면이 된다.
+	// 디렉토리가 사라져도 git은 그 등록을 branch 줄까지 달고 낸다 — 고르게 두면
+	// 없는 경로로 이동해 빠져나올 수 없다.
 	test("drops a worktree whose directory is gone", () => {
 		const out = parseWorktreeList(
 			wt(
@@ -144,8 +138,7 @@ describe("parseRefList", () => {
 		expect(out[0]?.worktreePath).toBe("/wt-a");
 	});
 
-	// for-each-ref는 죽은 워크트리 경로도 그대로 실어 보낸다(실측). 살아 있는
-	// 워크트리 집합과 교차 확인하지 않으면 목록이 그 경로를 광고하게 된다.
+	// for-each-ref는 죽은 워크트리 경로도 그대로 싣는다 — 살아 있는 워크트리 집합과 교차 확인한다.
 	test("ignores a worktree path that is no longer live", () => {
 		const { refs: out } = parseRefList(
 			refs(["refs/heads/feat", "feat", "/wt-gone", ""]),
@@ -154,8 +147,7 @@ describe("parseRefList", () => {
 		expect(out[0]?.worktreePath).toBeNull();
 	});
 
-	// git은 refname에 "|"를 허용한다 — 실제로 만들어 확인했다. 필드 구분자로
-	// NUL을 쓰는 이유다.
+	// git은 refname에 "|"를 허용한다 — 필드 구분자가 NUL인 이유다.
 	test("keeps a refname containing a pipe intact", () => {
 		const { refs: out } = parseRefList(
 			refs(["refs/heads/weird|pipe", "weird|pipe", "", ""]),
@@ -189,28 +181,21 @@ describe("parseRefList", () => {
 	});
 });
 
-// 파서 둘이 진짜 git 출력 위에서 합쳐지는지 본다. 픽스처 문자열은 형식을
-// 내가 옳게 적었다는 것만 증명하지, git이 실제로 그렇게 내보낸다는 것은
-// 증명하지 않는다.
+// 위 픽스처 문자열은 git이 실제로 그렇게 낸다는 것까지는 증명하지 않으므로 진짜
+// git 출력으로도 본다.
 describe("getRefs against a real repository", () => {
 	let root: string;
 	let repo: string;
 
 	beforeEach(async () => {
-		// macOS의 /var는 /private/var 심링크다. git은 워크트리 경로를
-		// realpath로 돌려주므로 기대값도 realpath여야 한다. (프로덕션에는
-		// 영향이 없다 — 교차 확인은 git 출력끼리 비교하므로 양쪽 다
-		// realpath다.)
+		// macOS의 /var는 /private/var 심링크이고 git은 워크트리 경로를 realpath로 준다.
 		root = realpathSync(mkdtempSync(join(tmpdir(), "dd-refs-")));
 		repo = join(root, "main-wt");
 		await $`git init -q ${repo}`;
 		await $`git -C ${repo} config user.email t@t.co`;
 		await $`git -C ${repo} config user.name test`;
 		await $`git -C ${repo} commit -q --allow-empty -m init`;
-		// 초기 브랜치 이름을 고정한다. git init은 머신의
-		// init.defaultBranch를 따르므로(로컬 main, CI 러너 master) 고정하지
-		// 않으면 이 스위트가 개발자 머신에서만 통과한다 — 실제로 CI에서
-		// "master"를 받고 깨졌다.
+		// git init은 머신의 init.defaultBranch를 따르므로(CI 러너는 master) 이름을 고정한다.
 		await $`git -C ${repo} branch -M main`;
 		await $`git -C ${repo} branch feat-a`;
 		await $`git -C ${repo} branch feat-gone`;
@@ -235,7 +220,6 @@ describe("getRefs against a real repository", () => {
 		const { refs: out } = await getRefs(repo);
 		const byName = new Map(out.map((r) => [r.name, r]));
 		expect(byName.get("feat-a")?.worktreePath).toBe(join(root, "wt-a"));
-		// git은 죽은 워크트리 경로도 그대로 실어 보낸다 — 교차 확인이 그걸 막는다.
 		expect(byName.get("feat-gone")?.worktreePath).toBeNull();
 	});
 

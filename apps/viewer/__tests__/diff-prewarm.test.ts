@@ -59,7 +59,7 @@ describe("prewarmDiff", () => {
 
 	test("an unreachable server is swallowed, not thrown", async () => {
 		const warmed = await prewarmDiff({
-			// 방금 잡았다 놓은 포트가 아닌, 예약된 미사용 포트 0 → 연결 실패 확정.
+			// 잡았다 놓은 임시 포트는 다른 프로세스가 다시 잡을 수 있어 예약된 미사용 포트 1을 쓴다.
 			port: 1,
 			repo,
 			token: "t",

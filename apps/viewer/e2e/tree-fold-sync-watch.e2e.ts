@@ -1,9 +1,5 @@
-// Fold-with-tree + --watch: 폴더를 접은 채로 watch 폴링이 그 디렉토리 아래에
-// 새 파일을 추가하면 자동으로 접히고, 기존에 접혀 있던 파일은 폴링 사이클을
-// 거쳐도 계속 접힌 채 유지되는지 검증한다. `fileTree.resetPaths()`가(이 기능과
-// 무관하게 이미) 매번 모든 디렉토리를 펼침으로 되돌리는 것을
-// captureCollapsedDirPaths/reapplyCollapsedDirs가 보정하는지에 대한 회귀
-// 가드다.
+// 갱신의 `fileTree.resetPaths()`는 모든 디렉토리를 다시 펼친다 — 직전 접힘을
+// 되살리는지 본다(viewer.md "갱신과 캐시").
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, hasCode, launchViewer, test as base } from "./fixtures/app.ts";
@@ -43,7 +39,5 @@ test("a directory collapsed via the tree stays collapsed across a watch poll, an
 		timeout: 15_000,
 	});
 	expect(await hasCode(page, "src/new-file.ts")).toBe(false);
-	// The pre-existing collapsed file is unaffected by the poll-triggered
-	// re-render (this is the resetPaths-preservation regression guard).
 	expect(await hasCode(page, "src/hello.ts")).toBe(false);
 });

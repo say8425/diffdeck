@@ -1,20 +1,7 @@
-// Fast scrolling must never paint a file inside the diff pane without its
-// sticky header.
-//
-// CodeView virtualizes the file list, and unmounting a file recycles its
-// renderer: DiffHunksRenderer.recycle() drops the shared highlighter
-// (packages/diffs/src/renderers/DiffHunksRenderer.ts:242-243) even though the
-// constructor could re-acquire it synchronously (:228-232). So on re-mount
-// renderDiff() returns null, and FileDiff.render() appends the (empty) <pre>
-// at FileDiff.ts:859 and then bails at :885 — above applyHeaderToDOM at :896.
-// (The viewer now injects a workerManager; this highlighter branch is the
-// non-worker FALLBACK path, still exercised when worker creation fails.)
-// The file is therefore mounted headerless and 0-height until an async
-// highlight lands a couple of frames later. The engine hides that gap by
-// rendering ahead of the viewport (VirtualizerConfig.overscrollSize: "extra
-// pixels rendered above and below the viewport to reduce blanking during fast
-// scrolls"), so the gap is only ever *seen* when one frame's scroll delta
-// outruns the buffer — which reads to the user as the header blinking.
+// 빠른 스크롤에서 diff 패널에 헤더 없는 파일이 그려지면 안 된다. 렌더 선행
+// 버퍼(overscrollSize)가 감추지 못할 만큼 한 프레임의 스크롤이 커야 판별된다.
+// non-worker 경로에서는 vendored 예외 1(recycle의 하이라이터 동기 재획득)이
+// 이를 막는다(vendored-packages.md).
 import type { Page } from "@playwright/test";
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
@@ -23,17 +10,15 @@ interface ScrollProbe {
 	scrolled: number;
 	filesMounted: number;
 	/**
-	 * Whether the scroller ran out of content mid-probe. Every frame after that
-	 * scrolls zero pixels and passes for free, so a probe that bottoms out
-	 * silently understates the defect — the result is only trustworthy when
-	 * this is false.
+	 * 바닥에 닿은 뒤의 프레임은 0px 스크롤이라 공짜로 통과한다 — false일 때만
+	 * 결과를 믿는다.
 	 */
 	hitBottom: boolean;
 }
 
-// Drive the scroll from inside the page (one step per animation frame, so each
-// step is exactly one composited frame's delta) and, in that same frame, check
-// every mounted container that overlaps the visible pane for its header.
+// rAF마다 한 번 스크롤해 한 단계 = 한 프레임의 델타로 만들고, 같은 프레임에서
+// 패널에 겹친 컨테이너의 헤더를 본다. 프레임 안의 scrollTop 대입은 e2e.md의
+// 멈춤 함정이 있는 패턴이다.
 const probeScroll = (
 	page: Page,
 	pxPerFrame: number,
@@ -44,9 +29,7 @@ const probeScroll = (
 			new Promise<ScrollProbe>((resolve) => {
 				const scroller = document.getElementById("diff") as HTMLElement;
 				const startTop = scroller.scrollTop;
-				// The engine pools and reuses the <diffs-container> elements
-				// themselves, so element identity says nothing about how many files
-				// were mounted. The file id each container currently carries does.
+				// 컨테이너 요소는 풀에서 재사용되므로 요소가 아니라 파일 id로 센다.
 				const fileIds = new Set<string>();
 				let defectiveFrames = 0;
 				let frame = 0;
@@ -68,10 +51,8 @@ const probeScroll = (
 							container.querySelector<HTMLElement>("[data-fold]")?.dataset.fold;
 						if (fileId != null) fileIds.add(fileId);
 						const rect = container.getBoundingClientRect();
-						// 0-height 컨테이너는 화면에 아무것도 그리지 않는다 — 풀
-						// 요소가 파일을 배정받기 전의 전환 상태로, degenerate rect
-						// (top == bottom)가 overlap 판정을 오탐시키므로 제외한다.
-						// 이 단언의 대상은 "그려진" 파일이 헤더 없이 보이는 것.
+						// 0높이 컨테이너(파일을 배정받기 전의 풀 요소)는 아무것도
+						// 그리지 않고, 퇴화한 rect가 겹침 판정을 오탐한다.
 						if (rect.height === 0) continue;
 						const overlapsPane =
 							rect.bottom > pane.top && rect.top < pane.bottom;
@@ -99,22 +80,15 @@ const probeScroll = (
 test("fast scrolling never paints a headerless file in the diff pane", async ({
 	page,
 }) => {
-	// The shared fixture renders shorter than the viewport, so it cannot scroll
-	// at all and would make this test silently vacuous. Opt into a tall diff —
-	// tall enough that the extreme-fling probe below never bottoms out.
+	// 극한 플링도 바닥에 닿지 않을 만큼 긴 diff를 쓴다.
 	const viewer = await launchViewer([], { bulkFiles: 16 });
 	try {
 		await page.goto(viewer.url);
 		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 		await expect(page.locator("diffs-container").first()).toBeVisible();
-		// Keep the pointer off the pane: :hover styling must not confound this.
+		// 포인터를 패널 밖에 둔다(:hover 간섭 배제).
 		await page.mouse.move(2, 2);
 
-		// Every probe must actually exercise the path it claims to: the scroller
-		// must never run out of content (frames past the bottom scroll zero
-		// pixels and pass for free) and virtualization must really have mounted
-		// more files than fit at once. Without this a shorter fixture — or a
-		// probe asking for more pixels than the diff has — would pass vacuously.
 		const assertMeaningful = (
 			probe: ScrollProbe,
 			requested: number,
@@ -125,27 +99,17 @@ test("fast scrolling never paints a headerless file in the diff pane", async ({
 			expect(probe.filesMounted).toBeGreaterThanOrEqual(minFiles);
 		};
 
-		// Slow scroll stays comfortably inside the render-ahead buffer: the
-		// baseline showing the probe reports clean when the gap is off-screen.
-		// Short enough that it stays within a file or two — enough to show the
-		// probe reports clean at a velocity the buffer easily absorbs.
+		// 버퍼가 넉넉히 덮는 속도에서 프로브가 깨끗하다는 기준선.
 		const slow = await probeScroll(page, 100, 40);
 		assertMeaningful(slow, 100 * 40, 2);
 		expect(slow.defectiveFrames).toBe(0);
 
-		// 400px/frame (~24k px/s): the fastest velocity the 1000px render-ahead
-		// buffer fully covers on its own.
 		const fast = await probeScroll(page, 400, 60);
 		assertMeaningful(fast, 400 * 60, 4);
 		expect(fast.defectiveFrames).toBe(0);
 
-		// 800px/frame extreme fling: beyond what any render-ahead buffer can
-		// absorb, so this only passes because DiffHunksRenderer.recycle() keeps
-		// its highlighter (re-acquired synchronously like the constructor does) —
-		// a re-mounted file must paint its header in the same frame it mounts,
-		// never waiting on an async highlight.
-		// 32,000px를 지나며 벌크 파일(개당 ~10k px)을 여럿 넘는다 — 4개 이상의
-		// 서로 다른 파일이 마운트됐다면 재활용 경로가 실제로 여러 번 돌았다.
+		// 극한 플링. 서로 다른 파일이 4개 이상 마운트돼야 재활용 경로가 여러 번
+		// 돈 것이다.
 		const extreme = await probeScroll(page, 800, 40);
 		assertMeaningful(extreme, 800 * 40, 4);
 		expect(extreme.defectiveFrames).toBe(0);
@@ -157,12 +121,9 @@ test("fast scrolling never paints a headerless file in the diff pane", async ({
 test("fallback (non-worker) path: fast scrolling never paints a headerless file", async ({
 	page,
 }) => {
-	// 워커 배선 이후 위 테스트는 워커 경로(plain 동기 렌더 — blink가 설계상
-	// 불가능)에서 돈다. Foundation 예외 1호(recycle의 하이라이터 동기 재획득)는
-	// non-worker 경로 전용 이탈이므로, 워커 스크립트 로드를 route.abort()로
-	// 차단해 앱 워치독(recoverFromWorkerLoadFailure)의 non-worker 폴백을
-	// 강제한 뒤 동일한 극한 플링 프로브를 반복한다 — 예외 1호의 회귀망은 이
-	// 테스트다.
+	// vendored 예외 1의 회귀망. 위 테스트는 워커 경로에서 돌고 예외 1은
+	// non-worker 경로에만 걸리므로, 워커 로드를 막아 워치독의 폴백 경로에서
+	// 같은 극한 플링을 돌린다.
 	await page.route("**/worker.js", (route) => route.abort());
 	const viewer = await launchViewer([], { bulkFiles: 16 });
 	try {
@@ -171,9 +132,8 @@ test("fallback (non-worker) path: fast scrolling never paints a headerless file"
 			timeout: 15_000,
 		});
 		await expect(page.locator("diffs-container").first()).toBeVisible();
-		// 워치독 복구(CodeView 재구성 → non-worker 동기 하이라이트)가 끝났음을
-		// 하이라이트된 span으로 확인한 뒤에 프로브를 시작한다 — 복구 도중의
-		// 재구성 프레임을 극한 프로브가 오탐하지 않게 한다.
+		// 워치독 복구가 끝난 뒤(하이라이트가 보인 뒤)에 잰다 — 재구성 중의
+		// 프레임을 오탐하지 않게.
 		await expect
 			.poll(
 				() =>
@@ -190,8 +150,6 @@ test("fallback (non-worker) path: fast scrolling never paints a headerless file"
 			.toBe(true);
 		await page.mouse.move(2, 2);
 
-		// 위 첫 테스트의 800px/frame 극한 프로브와 동일 강도 — non-worker
-		// 경로에서도 recycle이 헤더 없는 프레임을 만들지 않는지 확인한다.
 		const extreme = await probeScroll(page, 800, 40);
 		expect(extreme.hitBottom).toBe(false);
 		expect(extreme.scrolled).toBe(800 * 40);

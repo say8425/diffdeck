@@ -83,8 +83,7 @@ describe("buildEmptyStateModel", () => {
 	});
 
 	test("unknown base counts suppress the quiet note", () => {
-		// merge-base 실패(orphan 브랜치 등): base 이름은 있지만 측정은 실패한
-		// 모양 — 측정 못 한 것을 '아무것도 없음'이라고 주장하면 안 된다.
+		// 재지 못한 것(merge-base 실패 등)을 "아무것도 없음"이라고 주장하지 않는다.
 		const m = buildEmptyStateModel(
 			summary({ branch: "lonely", baseFiles: null, aheadCommits: null }),
 			{ mode: "working", untrackedShown: false },
@@ -93,8 +92,7 @@ describe("buildEmptyStateModel", () => {
 	});
 
 	test("hidden untracked files change the working-mode headline", () => {
-		// git 어휘상 untracked도 워킹트리 상태 — 숨겨진 untracked가 있는데
-		// "Working tree clean"이라고 말하면 자기모순이다.
+		// git 어휘에서 untracked도 워킹트리 상태라 "Working tree clean"은 자기모순이다.
 		const m = buildEmptyStateModel(summary({ untrackedFiles: 3 }), {
 			mode: "working",
 			untrackedShown: false,
@@ -128,16 +126,13 @@ describe("buildEmptyStateModel", () => {
 		expect(m.context).toBe("detached @ abc1234");
 	});
 
-	// head가 커밋된 rev면 서버가 워킹트리를 재지 않고 null을 준다. 그때
-	// "Working tree clean"이라고 말하면 보고 있지도 않은 워킹트리에 대해
-	// 단언하는 것 — null을 도입한 이유가 그것이다.
+	// head가 커밋된 rev면 서버는 워킹트리를 재지 않고 null을 준다.
 	test("unmeasured working tree makes no claim about it", () => {
 		const m = buildEmptyStateModel(
 			summary({ workingFiles: null, untrackedFiles: null }),
 			{ mode: "working", untrackedShown: false },
 		);
 		expect(m.headline).toBe("No changes");
-		// 재지 않은 개수로 "숨겨진 untracked가 있다"고 권하지도 않는다.
 		expect(m.actions.some((a) => a.kind === "show-untracked")).toBe(false);
 	});
 
@@ -210,9 +205,6 @@ describe("renderEmptyState", () => {
 });
 
 describe("shouldAutoViewBase", () => {
-	// 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어서 기본 뷰
-	// (미커밋 변경)가 구조적으로 비어 있다. 정작 볼 게 가장 많을 때 빈 화면이
-	// 뜨는 셈이라, 고른 적이 없다면 볼 것이 있는 쪽을 연다.
 	const model = (over: Partial<EmptyStateModel> = {}): EmptyStateModel => ({
 		headline: "Working tree clean",
 		context: "on feature · 3 commit(s) ahead of main",
@@ -232,7 +224,6 @@ describe("shouldAutoViewBase", () => {
 		).toBe(true);
 	});
 
-	// 명시적 선택은 절대 덮지 않는다 — URL의 base=든 저장된 프리퍼런스든.
 	test("사용자가 고른 적 있으면 전환하지 않는다", () => {
 		expect(
 			shouldAutoViewBase(model(), {
@@ -242,7 +233,7 @@ describe("shouldAutoViewBase", () => {
 		).toBe(false);
 	});
 
-	// 무한 루프 방지. 조건이 계속 참이어도 한 번만 시도한다.
+	// 무한 루프 방지.
 	test("이미 시도했으면 다시 전환하지 않는다", () => {
 		expect(
 			shouldAutoViewBase(model(), {
@@ -261,9 +252,7 @@ describe("shouldAutoViewBase", () => {
 		).toBe(false);
 	});
 
-	// **경계선**: 토글로 감춰졌을 뿐 이 뷰에도 볼 것이 있으면 데려가지 않는다.
-	// 사용자가 untracked를 보고 싶었을 수도 있고, 카드가 두 선택지를 나란히
-	// 보여주는 편이 낫다. 자동 전환은 "이 뷰에 아무것도 없을 때"로 한정한다.
+	// 이 뷰에도 볼 것(숨긴 untracked)이 있으면 카드가 두 선택지를 나란히 보여 주는 편이 낫다.
 	test("숨겨진 untracked가 있으면 전환하지 않는다", () => {
 		expect(
 			shouldAutoViewBase(

@@ -40,41 +40,22 @@ export interface DiffServerHandle {
 	stop(): void;
 }
 
-// Base resolution runs `gh pr view`, which is slow — cache it per repo.
-//
-// 반드시 모듈 스코프에 남아야 한다(diffCache와 달리 createHandler 안으로
-// 옮기지 말 것) — diff-server.test.ts의 "answers a real diffFlight timeout
-// (not baseFlight)" 테스트가 여기 의존한다: 그 테스트는 기본 타임아웃
-// 서버로 이 repo를 먼저 데운 뒤, *별도로 새로 띄운* flightTimeoutMs:1
-// 서버가 그 warm 항목을 그대로 봐야만 baseFlight가 1ms 레이스를 이기고
-// diffFlight까지 진입한다. baseCache를 createHandler 스코프로 옮기면(구조적
-// 격리를 위한 향후 정리로 그럴듯해 보일 수 있다) 두 번째 서버는 빈 캐시로
-// 시작해 baseFlight가 miss로 되돌아가고 그 테스트는 조용히 baseFlight
-// 가드만 다시 증명하게 된다 — 첫 번째 테스트와 똑같은 것을, 티 나지 않게.
 const BASE_TTL_MS = 10_000;
-// 피커 목록의 수명. 브랜치·워크트리는 diff 내용보다 훨씬 덜 움직이므로
-// 짧게 잡아도 팝오버를 열 때마다 git을 두 번 부르지 않는다.
 const REFS_TTL_MS = 5_000;
-// PR 목록의 수명. `gh`는 네트워크를 타고 PR은 브랜치보다도 덜 움직인다 —
-// 폴·focus·피커 열림마다 불려도 GitHub에는 1분에 한 번만 간다.
 const PRS_TTL_MS = 60_000;
-// 못 받았을 때의 수명. 성공만큼 오래 두면 기동 순간의 네트워크 한 번 끊김이
-// 1분 동안 PR 표시를 지우고, 아예 두지 않으면 `gh`가 없는 환경에서 2초
-// 폴마다 스폰이 실패를 되풀이한다 — 그 사이다.
+// 실패는 짧게 캐시한다: 길면 기동 순간의 끊김 한 번이 PR 표시를 오래 지우고,
+// 없으면 `gh`가 없는 환경에서 폴마다 스폰이 실패한다.
 const PRS_FAILURE_TTL_MS = 10_000;
+// base 해석(`gh pr view`)은 느려서 repo별로 캐시한다. 모듈 스코프에 둔다 —
+// diff-server.test.ts의 diffFlight 타임아웃 테스트는 다른 서버가 데운 항목을 봐야
+// diffFlight까지 간다. 옮기면 실패 없이 다른 가드만 증명한다(server.md).
 const baseCache = new Map<
 	string,
 	{ value: { base: string | null; ref: string | null }; at: number }
 >();
 
-// 플라이트가 타임아웃되면(= fn()이 settle하지 않았다는 신호, singleFlight.ts
-// 참고) 요청을 무기한 매달아 두는 대신 503을 돌려준다. 짧은 Retry-After를
-// 실어, 재시도가 "아직 매달려 있는 그 요청"이 아니라 새 요청임을 클라이언트가
-// 신뢰하고 곧바로 다시 시도하게 한다 — 타임아웃이 곧 그 키를 이미 비웠으므로
-// (createSingleFlight의 `.finally()`) 다음 호출은 새 플라이트로 시작한다.
-// 브라우저 fetch()는 Retry-After를 자동으로 지키지 않으므로 browser/main.ts의
-// fetchDiff가 직접 지연을 걸어야 한다 — 이 값(1초)과 그쪽의 재시도 지연
-// (RETRY_DELAYS_MS, 1000ms)을 의도적으로 같은 수로 맞춰 둔다.
+// fetch는 Retry-After를 저절로 지키지 않는다 — browser/main.ts의 RETRY_DELAYS_MS와
+// 같은 값으로 맞춰 둔다.
 const FLIGHT_TIMEOUT_RETRY_AFTER_SECONDS = 1;
 
 const flightTimeoutResponse = (): Response =>
@@ -84,10 +65,8 @@ const flightTimeoutResponse = (): Response =>
 	});
 
 /**
- * single-flight 호출을 감싸 타임아웃만 503 Response로 흡수하고, 그 외
- * 에러는(현재 resolveBaseRef/getDiffFiles 경로는 전부 nothrow라 미도달이지만)
- * 그대로 다시 던져 기존 동작을 보존한다. 반환 타입이 `T | Response`라
- * 호출부는 `instanceof Response`로 좁혀 즉시 return하면 된다.
+ * 타임아웃만 503으로 바꾸고 다른 에러는 다시 던진다. singleFlight의 키 해제·브라우저
+ * 재시도와 함께여야 매달린 flight에서 회복한다(server.md).
  */
 export const awaitFlight = async <T>(
 	promise: Promise<T>,
@@ -100,45 +79,24 @@ export const awaitFlight = async <T>(
 	}
 };
 
-// 실제 syscall 바인딩. cwd.ts를 순수하게 유지하려고 밖에 둔다 —
-// 단위 테스트는 isCwdAlive에 fake를 직접 주입한다.
 const REAL_CWD_DEPS = { cwd: () => process.cwd(), exists: existsSync };
 
 const createHandler = (cfg: {
 	viewerDir: string;
 	token: string;
-	// 테스트 전용 훅 — 프로덕션(startDiffServer의 공개 CLI 표면)에서는 항상
-	// undefined라 두 createSingleFlight 호출 모두 singleFlight.ts의
-	// DEFAULT_TIMEOUT_MS를 쓴다. diff-server.test.ts가 이 값을 몇 ms로 줄여
-	// 실제 git 서브프로세스 왕복보다 짧게 만들면, 손으로 만든 에러가 아니라
-	// awaitFlight까지 이어지는 진짜 타임아웃이 실제 HTTP 503으로 나오는지
-	// 검증할 수 있다.
+	// 여기부터 repairCwd 말고는 테스트 전용 훅이다(프로덕션에서는 undefined).
 	flightTimeoutMs?: number;
-	// 프로세스 cwd가 삭제된 상태로 발견되면 부를 복구 함수. cli.ts가
-	// toSafeCwd를 넘긴다. process.chdir()은 프로세스 전역 부작용이라
-	// 라이브러리인 여기서 직접 부르지 않는다 — startDiffServer를 임베드한
-	// 호스트의 cwd를 말없이 옮기게 되기 때문. 감지는 여기서, 복구 권한은
-	// 프로세스를 소유한 쪽에서.
+	// cwd가 삭제됐을 때 부를 복구(cli.ts가 toSafeCwd를 넘긴다). chdir은 프로세스
+	// 전역 부작용이라 라이브러리인 여기서 직접 하지 않는다.
 	repairCwd?: () => void;
-	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
-	// flightTimeoutMs와 같은 패턴이다.
 	cwdDeps?: CwdDeps;
-	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 핸들러가 자기 캐시를
-	// 만든다. flightTimeoutMs와 같은 패턴이다.
 	blobCache?: BlobCache;
-	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 `gh pr list`를 부른다.
-	// flightTimeoutMs와 같은 패턴이다.
 	listPrs?: (repo: string) => Promise<PrsByBranch | null>;
 }) => {
 	const viewerRoot = resolve(cfg.viewerDir);
 	const diffCache = createPayloadCache();
-	// 변경 폴의 재빌드가 바뀌지 않은 blob을 다시 `git show`하지 않게 한다.
-	// diffCache와 같이 핸들러마다 하나 — prewarm과 /api/diff가 공유한다.
 	const blobs = cfg.blobCache ?? createBlobCache();
-	// 동시 콜드 요청(프리워밍 + 첫 화면 + 폴)이 gh pr view를 중복 실행하지
-	// 않게 single-flight로 합류시킨다. diffFlight와 마찬가지로 핸들러
-	// 인스턴스마다 새로 만든다 — flightTimeoutMs를 인스턴스별로 다르게 줄
-	// 수 있어야 하기 때문(테스트에서만 쓰임, 위 주석 참고).
+	// flight는 핸들러마다 만든다 — 테스트가 서버마다 다른 flightTimeoutMs를 준다.
 	const baseFlight = createSingleFlight<{
 		base: string | null;
 		ref: string | null;
@@ -154,30 +112,19 @@ const createHandler = (cfg: {
 			baseCache.set(repo, { value, at: now });
 			return value;
 		});
-	// 같은 (repo, untracked, mode)의 지문 계산+파이프라인을 동시에 한 번만 —
-	// 콜드 상태에서 프리워밍과 첫 화면 요청이 겹쳐도 중복 실행되지 않는다.
 	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
-	// 피커 목록. baseCache와 달리 **핸들러 스코프**에 둔다 — baseCache가 모듈
-	// 스코프인 것은 flight 타임아웃 테스트 둘이 "따로 띄운 두 서버가 같은 warm
-	// 항목을 본다"에 의존하는 특수 사정 때문이고(.claude/rules/server.md), 여기엔 그런 요구가
-	// 없다. 서버 인스턴스가 자기 캐시를 갖는 쪽이 격리에 낫다.
 	const refsFlight = createSingleFlight<RefsResult>(cfg.flightTimeoutMs);
 	const refsCache = new Map<string, { value: RefsResult; at: number }>();
-	// base 해석의 단일 지점. /api/diff와 /api/blob이 서로 다른 기준을 고르면
-	// 텍스트 diff와 이미지 카드가 다른 비교를 보여주게 된다.
-	//
-	// 사용자가 고른 ref는 서버가 해석할 것이 없다. 목록 밖 값이면 조용히
-	// auto로 흘려보내지 않고 거절한다 — 고르지도 않은 기준의 diff를 보여주는
-	// 것이 에러보다 나쁘다.
+	// /api/diff·/api/blob·/api/summary가 같은 base를 보도록 여기서만 해석한다.
+	// 사용자가 고른 ref가 존재하지 않으면 auto로 흘리지 않고 400이다 — 고르지 않은
+	// 기준의 diff가 에러보다 나쁘다.
 	const resolveSelectionBase = async (
 		repo: string,
 		sel: Selection,
 	): Promise<{ base: string | null; ref: string | null } | Response> => {
 		if (sel.base.kind === "ref") {
 			const verified = await verifyBaseRef(repo, sel.base.ref);
-			// 상태 코드만으로는 "not a git repository" 400과 구분되지 않는다.
-			// 클라이언트가 저장된 기준만 골라 버리려면 그 둘을 갈라야 하므로
-			// 이 응답에만 표식을 얹는다(본문 문자열 매칭은 취약하다).
+			// 클라이언트는 이 표식이 있을 때만 저장된 base를 버린다.
 			return (
 				verified ??
 				new Response(`unknown base ref: ${sel.base.ref}`, {
@@ -190,13 +137,9 @@ const createHandler = (cfg: {
 	};
 
 	/**
-	 * 사용자가 고른 head 참조를 검증한다. base와 **같은 보안 경계**를 탄다 —
-	 * `verifyBaseRef`가 첫 글자 `-`를 먼저 끊는 이유(옵션 주입)는 어느 축이든
-	 * 똑같이 유효하고, 이제 그 값이 `git diff`의 **두 번째** 인자로도 간다.
-	 *
-	 * 표식을 base와 가르는 이유는 클라이언트의 자가복구가 다르기 때문이다:
-	 * 사라진 base는 저장된 프리퍼런스를 지우면 되지만, 사라진 head는 URL의
-	 * 축을 되돌려야 한다.
+	 * head도 base와 같은 보안 경계(`verifyBaseRef`)를 탄다 — `git diff`의 인자로 간다.
+	 * 표식을 base와 가르는 것은 복구가 달라서다: base는 저장값을 버리면 되고, head는
+	 * 링크가 고른 것이라 사용자가 되돌려야 한다.
 	 */
 	const resolveSelectionHead = async (
 		repo: string,
@@ -220,7 +163,6 @@ const createHandler = (cfg: {
 			refsCache.set(repo, { value, at: now });
 			return value;
 		});
-	// PR 목록. refs와 같은 이유로 핸들러 스코프다.
 	const prsFlight = createSingleFlight<PrsByBranch>(cfg.flightTimeoutMs);
 	const prsCache = new Map<
 		string,
@@ -233,7 +175,6 @@ const createHandler = (cfg: {
 			const hit = prsCache.get(repo);
 			if (hit && now - hit.at < hit.ttl) return hit.value;
 			const got = await listPrs(repo);
-			// 실패는 화면에서 "PR 없음"과 같게 보이지만 캐시 수명은 짧다.
 			const value = got ?? {};
 			const ttl = got === null ? PRS_FAILURE_TTL_MS : PRS_TTL_MS;
 			prsCache.set(repo, { value, at: now, ttl });
@@ -242,20 +183,9 @@ const createHandler = (cfg: {
 	return async (req: Request): Promise<Response> => {
 		const url = new URL(req.url);
 
-		// 예방(cli.ts의 toSafeCwd)이 어떤 이유로든 적용되지 않은 프로세스를
-		// 위한 자가회복. cwd가 삭제되면 git 호출이 repo와 무관하게 전부
-		// 죽으므로(자식 프로세스 생성 자체가 불가) 요청을 처리하기 전에
-		// 되살린다. 라우트마다 흩지 않고 진입부에 두는 이유는 git을 쓰는
-		// 라우트가 앞으로 늘어도 자동으로 덮이기 때문이고, repairCwd가 주입된
-		// 경우 비용이 요청당 ~1µs(실측)라 그래도 되기 때문이다.
-		//
-		// `cfg.repairCwd &&`를 먼저 보는 게 계약이다 — repairCwd가 없으면
-		// isCwdAlive 호출 자체를 건너뛴다. startDiffServer를 임베드했지만
-		// repairCwd를 안 넘긴 호스트에게는 그 감지조차 원하지 않는 순수
-		// 비용(위 ~1µs가 아니라 0이어야 하는 비용)이기 때문이다. 순서를
-		// `if (!isCwdAlive(...)) cfg.repairCwd?.();`로 "정리"하면 매 요청 감지가
-		// 다시 켜져 diff-server.test.ts의 "repairCwd를 안 넘기면 cwd 탐지
-		// 자체를 건너뛴다" 테스트가 빨간불이 된다.
+		// cli.ts의 예방(toSafeCwd)이 빠진 프로세스를 위한 자가회복: cwd가 삭제되면 git
+		// 호출이 repo와 무관하게 전부 죽는다. `cfg.repairCwd &&`를 먼저 보는 것이
+		// 계약이다 — 주입하지 않은 임베드 호스트에는 감지 비용도 없어야 한다.
 		if (cfg.repairCwd && !isCwdAlive(cfg.cwdDeps ?? REAL_CWD_DEPS)) {
 			cfg.repairCwd();
 		}
@@ -264,22 +194,13 @@ const createHandler = (cfg: {
 			return new Response(null, {
 				status: 204,
 				headers: {
-					// The bare marker stays a constant: clients built before
-					// versions were reported here match on it exactly.
+					// Stays a constant: older clients match on it exactly.
 					"x-diffdeck": "1",
-					// A daemon is detached and outlives the install that spawned
-					// it, so upgrading the package on disk does not upgrade what
-					// answers this port. Report who we actually are so a client
-					// can replace a stale daemon instead of reading any answer
-					// as "up to date".
-					//
-					// This route is unauthenticated and any local process can
-					// bind this port, so neither field is trustworthy on its own
-					// — a client that signals a pid read from here would let a
-					// squatter pick the victim. A client MUST first confirm the
-					// responder holds the token it read from disk (a request
-					// that would 403 otherwise); only a real daemon can pass
-					// that, and only then is the pid its own.
+					// A detached daemon outlives the install that spawned it, so report
+					// who answers and let a client replace a stale one. This route is
+					// unauthenticated and any process can bind the port: a client must
+					// confirm the responder holds the token (a request that would
+					// otherwise 403) before trusting or signaling the pid.
 					"x-diffdeck-version": packageJson.version,
 					"x-diffdeck-pid": String(process.pid),
 				},
@@ -302,10 +223,8 @@ const createHandler = (cfg: {
 			const headResult = await resolveSelectionHead(repo, sel);
 			if (headResult instanceof Response) return headResult;
 			const { head } = headResult;
-			// 파이프라인(파일당 git 서브프로세스) 전에 싼 지문으로 변경 여부를
-			// 판정한다. 지문은 파이프라인 "이전"에 뜨므로, 그 사이에 리포가
-			// 바뀌면 저장된 지문이 이미 낡은 값이 되어 다음 요청이 무조건
-			// 재계산한다 — 낡은 payload가 눌러앉는 방향의 레이스는 없다.
+			// 지문은 빌드 전에 뜬다 — 그 사이 리포가 바뀌면 저장된 지문이 이미 낡아 다음
+			// 요청이 다시 빌드한다(낡은 payload가 눌러앉지 않는다).
 			const cacheKey = selectionCacheKey(sel, ref);
 			const entryResult = await awaitFlight(
 				diffFlight(cacheKey, async () => {
@@ -337,7 +256,7 @@ const createHandler = (cfg: {
 			if (entryResult instanceof Response) return entryResult;
 			const entry = entryResult;
 			const etag = `"${entry.etag}"`;
-			// 304에도 x-diff-base를 실어 클라이언트가 드롭다운 라벨을 유지한다.
+			// 304에도 싣는다 — 클라이언트는 응답마다 이 값으로 base 이름을 갈아 끼운다.
 			if (req.headers.get("if-none-match") === etag) {
 				return new Response(null, {
 					status: 304,
@@ -362,14 +281,10 @@ const createHandler = (cfg: {
 			const repo = sel.repo;
 			const problem = await classifyRepo(repo);
 			if (problem) return repoProblemResponse(problem);
-			// 빈 상태 카드가 diff와 **다른 비교**를 설명하면 안 된다. 여기서
-			// resolveBaseCached를 그냥 부르면 사용자가 develop을 골라 놓고도
-			// 카드는 "No changes vs main"이라고 말한다.
+			// 카드가 diff와 다른 비교를 설명하지 않도록 diff와 같은 base·head 해석을 탄다.
 			const baseResult = await resolveSelectionBase(repo, sel);
 			if (baseResult instanceof Response) return baseResult;
 			const { base, ref } = baseResult;
-			// 카드가 diff와 **다른 축**을 설명하면 안 된다 — head를 빼면
-			// 브랜치를 보고 있는데 카드는 워크트리를 설명한다.
 			const headResult = await resolveSelectionHead(repo, sel);
 			if (headResult instanceof Response) return headResult;
 			const summary = await getRepoSummary(repo, {
@@ -377,14 +292,11 @@ const createHandler = (cfg: {
 				ref,
 				head: headResult.head,
 			});
-			// NOTE: /api/diff와 동일하게 CORS 헤더 없음 — cross-origin 페이지가 읽을 수 없다.
 			return new Response(JSON.stringify(summary), {
 				headers: { "content-type": "application/json; charset=utf-8" },
 			});
 		}
 
-		// 피커가 고를 수 있는 것들. /api/diff의 순차 flight 사슬에 끼우지 않고
-		// 자기 라우트에서 자기 예산으로 돈다.
 		if (url.pathname === "/api/refs") {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
@@ -400,9 +312,8 @@ const createHandler = (cfg: {
 			});
 		}
 
-		// 브랜치별 PR. /api/refs에 싣지 않는 이유: refs는 5초 TTL로 폴마다
-		// 도는데 이쪽은 네트워크를 타서 수백 ms~수 초가 걸린다 — 한 응답에 묶으면
-		// 목록과 라벨이 `gh`의 속도로 떨어진다. 따로 받아 도착하는 대로 얹는다.
+		// /api/refs에 합치지 않는다 — refs는 폴마다 돌고 `gh`는 네트워크를 타서, 묶으면
+		// 목록과 라벨이 `gh`의 속도로 떨어진다.
 		if (url.pathname === "/api/prs") {
 			if (url.searchParams.get("token") !== cfg.token) {
 				return new Response("forbidden", { status: 403 });
@@ -445,8 +356,7 @@ const createHandler = (cfg: {
 				...(headResult.head ? { head: headResult.head } : {}),
 			});
 			if (!bytes) return new Response("not found", { status: 404 });
-			// no-store: 워킹트리 이미지는 저장할 때마다 바뀌므로 항상 새로 읽는다
-			// (변경 감지는 blobVersion 캐시버스터가 담당).
+			// no-store: 워킹트리 이미지는 저장마다 바뀐다(변경 감지는 blobVersion 캐시버스터의 몫).
 			return new Response(bytes, {
 				headers: {
 					"content-type": imageContentType(path),
@@ -461,8 +371,7 @@ const createHandler = (cfg: {
 			return new Response("forbidden", { status: 403 });
 		}
 		const file = Bun.file(filePath);
-		// no-store: the viewer bundle is served from disk and changes on rebuild/
-		// package update; never let the browser run a stale cached copy.
+		// no-store: the bundle changes on rebuild/upgrade; never run a stale cached copy.
 		if (await file.exists()) {
 			return new Response(file, { headers: { "cache-control": "no-store" } });
 		}
@@ -474,25 +383,17 @@ export const startDiffServer = (opts: {
 	port: number;
 	viewerDir: string;
 	env?: Env;
-	// 테스트 전용 — CLI(cli.ts/args.ts)에는 배선돼 있지 않다. createHandler의
-	// 같은 이름 필드로 그대로 흘러간다.
+	// 여기부터 repairCwd 말고는 테스트 전용 훅이다(createHandler로 그대로 간다).
 	flightTimeoutMs?: number;
-	// 셋 중 유일하게 프로덕션에서 실제로 배선되는 필드 — cli.ts가 toSafeCwd를
-	// 넘긴다. 위아래가 테스트 전용 훅이라고 이 필드까지 그렇게 읽지 말 것.
+	// 프로덕션에서 배선되는 유일한 훅 — cli.ts가 toSafeCwd를 넘긴다.
 	repairCwd?: () => void;
-	// 테스트 전용 훅 — 프로덕션에서는 항상 undefined라 REAL_CWD_DEPS를 쓴다.
-	// flightTimeoutMs와 같은 패턴이다.
 	cwdDeps?: CwdDeps;
-	// 테스트 전용 훅 — createHandler의 같은 이름 필드로 그대로 흘러간다.
 	blobCache?: BlobCache;
-	// 테스트 전용 훅 — createHandler의 같은 이름 필드로 그대로 흘러간다.
 	listPrs?: (repo: string) => Promise<PrsByBranch | null>;
 }): DiffServerHandle => {
 	const env = opts.env ?? process.env;
-	// Mint the token but don't write it yet — Bun.serve throws if the port is
-	// taken, and a token on disk is what tells a client a daemon is usable
-	// here. Writing first would leave one pointing at whoever owns the port
-	// (which rejects it), so bind first and only then publish.
+	// Persist the token only after binding: a token on disk tells clients a daemon is
+	// usable here, and Bun.serve throws if the port is taken.
 	const existing = readTokenSync(env);
 	const token = existing ?? generateToken();
 	const handler = createHandler({
@@ -507,18 +408,8 @@ export const startDiffServer = (opts: {
 	const server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: opts.port,
-		// Bun.serve 기본 idleTimeout(10초)은 콜드스타트 자원 경합(브라우저 기동
-		// + prewarm git 서브프로세스 버스트)으로 첫 diff 응답이 10초를 넘는 순간
-		// 커넥션을 강제 종료한다("request timed out after 10 seconds"). 120초는
-		// /api/diff가 순차로 기다리는 두 플라이트(baseFlight → diffFlight)의
-		// 합(singleFlight.ts의 기본 타임아웃 45초 × 2 = 90초)이 실제로 응답을
-		// (정상이든 503이든) 만들어 낼 시간을 확보하고서도 classifyRepo·응답 전송에
-		// ~30초 여유를 남기도록 고른 값이다 — 개별 플라이트가 아니라 "그 요청이
-		// 기다리는 플라이트의 합 < idleTimeout"이 진짜 불변식이다. 예전엔 fn()이
-		// settle하지 않을 때 이 값에 걸려도 클라이언트가 재시도하지 않아 뷰어가
-		// "Loading…"에 영구 고착됐다 — 지금은 singleFlight 타임아웃이 503으로
-		// 응답을 만들고, browser/main.ts의 fetchDiff가 그 503과 네트워크 실패를
-		// 재시도해 자가 치유한다.
+		// 기본값(10초)은 콜드스타트의 첫 diff를 끊는다. /api/diff가 순서대로 기다리는 두
+		// flight 타임아웃의 합(singleFlight.ts)보다 커야 한다 — 작으면 503보다 소켓이 먼저 끊긴다.
 		idleTimeout: 120,
 		fetch: handler,
 	});

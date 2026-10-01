@@ -12,7 +12,6 @@ import {
 } from "../browser/grab/highlight.ts";
 import { extractSnippet } from "../browser/grab/snippet.ts";
 
-// GrabRow 팩토리. el은 신원 비교용이라 빈 div면 충분하다.
 const row = (
 	side: "old" | "new",
 	line: number,
@@ -24,8 +23,6 @@ const row = (
 	altLine,
 });
 
-// createGrabHighlighter 테스트용 fake registry/range. 캡처하는 외부 변수가
-// 없어(unicorn/consistent-function-scoping) describe 밖 모듈 스코프에 둔다.
 const fakeRegistry = () => {
 	const store = new Map<string, unknown>();
 	return {
@@ -77,8 +74,6 @@ describe("lineFor", () => {
 	});
 
 	test("split context 행은 자기 컬럼 side만 대표한다 — 반대 side는 null", () => {
-		// split additions 컬럼의 context 행: 반대편 번호가 alt에 있어도
-		// old 범위가 이 컬럼을 물들이면 안 된다.
 		const ctx = row("new", 2, 3);
 		expect(lineFor(ctx, "new", "split")).toBe(2);
 		expect(lineFor(ctx, "old", "split")).toBeNull();
@@ -127,19 +122,18 @@ describe("rowsInRange — side kind", () => {
 		// old: keep-a(1) drop-1(2) keep-b(3) keep-c(4) drop-2(5) keep-d(6)
 		// new: keep-a(1)           keep-b(2) keep-c(3)           keep-d(4)
 		const rows = [
-			row("new", 1, 1), // keep-a  (old 1)
-			row("old", 2), // -drop-1
-			row("new", 2, 3), // keep-b  (old 3)
-			row("new", 3, 4), // keep-c  (old 4)
-			row("old", 5), // -drop-2
-			row("new", 4, 6), // keep-d  (old 6)
+			row("new", 1, 1),
+			row("old", 2),
+			row("new", 2, 3),
+			row("new", 3, 4),
+			row("old", 5),
+			row("new", 4, 6),
 		];
 		const got = rowsInRange(
 			rows,
 			{ kind: "side", side: "old", startLine: 2, endLine: 5 },
 			"unified",
 		);
-		// drop-1, keep-b, keep-c, drop-2 — 클립보드에 들어가는 4줄과 같다.
 		expect(got).toEqual([
 			{ el: rows[1].el },
 			{ el: rows[2].el },
@@ -149,8 +143,8 @@ describe("rowsInRange — side kind", () => {
 	});
 
 	test("split old-side 범위는 additions 컬럼 context 행을 칠하지 않는다", () => {
-		const delCtx = row("old", 3, 2); // deletions 컬럼 context
-		const addCtx = row("new", 2, 3); // additions 컬럼 context (같은 줄)
+		const delCtx = row("old", 3, 2);
+		const addCtx = row("new", 2, 3);
 		const got = rowsInRange(
 			[delCtx, addCtx],
 			{ kind: "side", side: "old", startLine: 1, endLine: 9 },
@@ -242,11 +236,8 @@ describe("rowsInRange — mixed kind", () => {
 		).toEqual([]);
 	});
 
-	// split의 행 목록은 컬럼별로 묶여 있어(deletions 컬럼 전부 → additions 컬럼
-	// 전부) mixed(크로스사이드)의 문서순 슬라이스가 컬럼 경계를 넘으면 반대
-	// 컬럼의 무관한 구간까지 그럴듯하게 칠한다 — 같은 rows·같은 끝점으로 위
-	// "양끝을 찾으면…" 테스트는 3행을 돌려주는데, diffStyle만 split으로 바꾸면
-	// 무조건 빈 배열이어야 한다.
+	// split의 행 목록은 컬럼별로 묶여 있어 문서순 슬라이스가 컬럼 경계를 넘으면
+	// 반대 컬럼의 무관한 구간까지 칠한다.
 	test("split이면 mixed 조합은 무조건 빈 배열이다", () => {
 		const got = rowsInRange(
 			rows,
@@ -261,11 +252,9 @@ describe("rowsInRange — mixed kind", () => {
 	});
 });
 
-// 교차 검증: rowsInRange 단독 테스트는 기대값을 구현과 같은 오해로 적게
-// 되므로 이 불일치를 원리적으로 못 잡는다. extractSnippet에 같은 range를
-// 먹여 "복사되는 라인 수 == 하이라이트되는 행 수"를 대조한다.
-// 전제: ① 범위가 파일 길이 안(extractSnippet은 arr.length로 클램프하지만
-// 행 목록엔 클램프 개념이 없다), ② 모든 대상 행이 렌더된 상태(가상화 잘림 없음).
+// rowsInRange 단독 테스트는 기대값을 구현과 같은 오해로 적기 쉬워
+// extractSnippet과 행 수를 대조한다. 전제: 범위가 파일 길이 안이고(행 목록엔
+// 클램프가 없다) 모든 대상 행이 렌더돼 있다.
 describe("extractSnippet과의 교차 검증", () => {
 	const OLD = ["keep-a", "drop-1", "keep-b", "keep-c", "drop-2", "keep-d"].join(
 		"\n",
@@ -287,7 +276,6 @@ describe("extractSnippet과의 교차 검증", () => {
 		expect(snippet?.kind).toBe("side");
 		if (snippet?.kind !== "side") throw new Error("expected side snippet");
 
-		// unified 렌더 마크업의 행 모델 (data-line = 자기 side, data-alt-line = 반대편)
 		const rows = [
 			row("new", 1, 1),
 			row("old", 2),
@@ -365,7 +353,6 @@ describe("createGrabHighlighter", () => {
 			hl.paint([{ el: document.createElement("div") }]);
 			hl.clear();
 		}).not.toThrow();
-		// Range조차 만들지 않는다 — 미지원 브라우저에서 낭비 없음.
 		expect(created).toBe(0);
 	});
 });
@@ -417,10 +404,8 @@ describe("rowsInRange — chars", () => {
 		expect(got).toEqual([{ el: rows[0].el }, { el: rows[1].el }]);
 	});
 
-	// 가상화 가드: 렌더 윈도우가 좁아져 선택 경계 행이 안 보이면, 보이는 첫/끝
-	// 행은 선택의 중간일 뿐이다 — chars를 그 행에 붙이면 엉뚱한 지점이
-	// 잘린다(이 작업의 출발점이 된 "선택 안 한 게 선택된 것처럼 보인다" 버그가
-	// 형태만 바꿔 재현). 논리적 범위 10~17 중 15~17만 렌더된 상황을 흉내낸다.
+	// 가상화: 선택 경계 행이 렌더 밖이면 보이는 첫/끝 행은 선택의 중간이라,
+	// 오프셋을 붙이면 엉뚱한 곳이 잘린다.
 	test("side: 시작 경계 행이 안 보이면 보이는 첫 행엔 시작 오프셋을 안 붙인다", () => {
 		const rows = [row("new", 15), row("new", 16), row("new", 17)];
 		const got = rowsInRange(
@@ -477,9 +462,7 @@ describe("rowsInRange — chars", () => {
 		expect(got).toEqual([{ el: rows[0].el }]);
 	});
 
-	// 단일 행이 곧 시작이자 끝인 경우 — 두 플래그를 각각 판정하는지 본다.
-	// 다중 행 케이스만으로는 이 분기(withChars의 els.length === 1)에서
-	// 두 불리언을 뒤바꾼 구현을 잡지 못한다.
+	// 다중 행 케이스만으로는 단일 행 분기에서 시작·끝 플래그를 뒤바꾼 구현을 잡지 못한다.
 	test("side: 보이는 행이 하나뿐이고 그 행이 시작 경계일 때만 시작 오프셋이 붙는다", () => {
 		const only = row("new", 15);
 		const got = rowsInRange(
@@ -552,7 +535,6 @@ describe("rowsInRange — chars", () => {
 });
 
 describe("paint — 부분 범위", () => {
-	// 실제 텍스트를 가진 행이 필요하다 — 오프셋을 노드 좌표로 변환하기 때문
 	const textRow = (text: string): Element => {
 		const div = document.createElement("div");
 		div.setAttribute("data-line", "1");
@@ -634,8 +616,6 @@ describe("paint — 부분 범위", () => {
 		expect(made[0].selected).toBe(empty);
 	});
 
-	// 실제 행은 토큰별 <span>으로 쪼개져 텍스트 노드가 여러 개다 — locateOffset이
-	// 첫 노드를 건너뛰고 두 번째 노드에서 오프셋을 찾는 경로를 덮는다.
 	test("여러 텍스트 노드에 걸친 오프셋은 두 번째 노드에서 찾는다", () => {
 		const { registry } = fakeRegistry();
 		const made: ReturnType<typeof fakeRange>[] = [];

@@ -7,8 +7,8 @@ export type BlobUrlFor = (
 	version?: string,
 ) => string;
 
-// 이미지 카드는 Pierre <diffs-container>의 shadow DOM 안(헤더 뒤)에 주입되므로
-// 페이지 CSS가 닿지 않는다 — CodeView의 unsafeCSS 옵션으로 함께 주입한다.
+// 카드는 shadow DOM 안에 들어가 페이지 CSS가 닿지 않으므로 CodeView의
+// unsafeCSS로 넣는다.
 export const IMAGE_CARD_CSS =
 	"[data-image-card]{display:flex;gap:1px;background:#1f1f21;border-top:1px solid #1f1f21}" +
 	".img-pane{flex:1;margin:0;background:#141415;min-width:0}" +
@@ -35,8 +35,6 @@ const buildPane = (
 	img.src = src;
 	img.alt = alt;
 	img.loading = "lazy";
-	// /api/blob이 실패하면(404·400·서버 종료) 브라우저의 깨진 이미지 아이콘만
-	// 남아 무엇이 잘못됐는지 말하지 않는다. 같은 자리를 문장으로 바꾼다.
 	img.addEventListener(
 		"error",
 		() => {
@@ -76,8 +74,8 @@ const buildCard = (entry: ImageEntry, urlFor: BlobUrlFor): HTMLElement => {
 	return card;
 };
 
-// 빈 diff의 헤더 아이콘은 항상 "modified"로 파싱되므로, 스프라이트에 해당
-// 심볼이 있을 때만 실제 상태(A/D)의 아이콘으로 바꿔준다.
+// 이미지의 빈 diff는 헤더 아이콘이 늘 "modified"로 파싱되므로 실제 상태의
+// 아이콘으로 바꾼다(스프라이트에 그 심볼이 있을 때만).
 const ICON_SYMBOL: Partial<Record<ImageEntry["status"], string>> = {
 	added: "added",
 	untracked: "added",
@@ -98,11 +96,8 @@ const swapStatusIcon = (
 	use?.setAttribute("href", `#diffs-icon-symbol-${symbol}`);
 };
 
-/**
- * onPostRender에서 호출. 컨테이너가 이미지 아이템이면 헤더 바로 뒤에
- * Old/New 카드를 주입한다. 멱등: 같은 version이면 no-op, version이 바뀌면
- * 교체(watch 갱신), 접힌 상태면 제거.
- */
+// onPostRender마다 불리므로 멱등이다: 같은 version이면 그대로, 바뀌면 교체,
+// 접혔으면 제거한다.
 export const ensureImageCard = (
 	container: HTMLElement,
 	entry: ImageEntry | undefined,

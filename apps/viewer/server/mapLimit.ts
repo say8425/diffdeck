@@ -1,9 +1,4 @@
-/**
- * Promise.all의 무제한 팬아웃 대신 동시 실행 수를 제한하는 map.
- * getDiffFiles가 파일 수만큼 git 서브프로세스를 한꺼번에 띄우지 않도록
- * 사용한다 (수백 파일 diff + watch 폴링에서 EMFILE/CPU 스파이크 방지).
- * 결과 순서는 입력 순서를 유지하고, 하나라도 실패하면 전체가 reject된다.
- */
+/** 동시 실행 수를 묶은 map. 결과는 입력 순서이고, 하나라도 실패하면 reject한다. */
 export const mapWithLimit = async <T, R>(
 	items: readonly T[],
 	limit: number,
@@ -15,7 +10,7 @@ export const mapWithLimit = async <T, R>(
 		while (next < items.length) {
 			const index = next;
 			next += 1;
-			// 워커별 순차 실행이 동시성 제한의 핵심 — 의도된 await-in-loop.
+			// 워커별 순차 실행이 동시성 제한이다.
 			// oxlint-disable-next-line no-await-in-loop
 			results[index] = await fn(items[index], index);
 		}

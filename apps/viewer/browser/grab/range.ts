@@ -1,6 +1,3 @@
-// SelectedLineRange(엔진 거터 선택의 원시 형태)를 grab 파이프라인의 정규형으로.
-// 같은 side면 min/max로 정렬(역방향 드래그 흡수), side가 다르면 mixed로 보존
-// (시각 순서 결정은 snippet.ts의 행 워크가 담당).
 import type { SelectedLineRange } from "@diffdeck/diffs";
 
 export type GrabSide = "old" | "new";
@@ -11,9 +8,8 @@ export interface GrabPoint {
 }
 
 /**
- * 텍스트 드래그의 문자 범위. `start`는 범위 첫 행 텍스트 내 시작 오프셋,
- * `end`는 마지막 행 텍스트 내 끝 오프셋(exclusive)이다. 한 행이면 같은 행에서
- * start..end다. **없으면 줄 전체** — 거터 "+" 경로와 클램프된 선택이 그렇다.
+ * `start`는 첫 행 안의 시작 오프셋, `end`는 마지막 행 안의 끝 오프셋
+ * (exclusive). 없으면 줄 전체다.
  */
 export interface CharSpan {
 	start: number;
@@ -33,6 +29,8 @@ export type NormalizedRange =
 const toGrabSide = (side: "deletions" | "additions" | undefined): GrabSide =>
 	side === "deletions" ? "old" : "new";
 
+// side가 다르면 순서를 정하지 않고 mixed로 둔다 — 시각 순서는 snippet.ts가
+// 행을 걸으며 정한다.
 export const normalizeRange = (range: SelectedLineRange): NormalizedRange => {
 	const startSide = toGrabSide(range.side);
 	const endSide = toGrabSide(range.endSide ?? range.side);

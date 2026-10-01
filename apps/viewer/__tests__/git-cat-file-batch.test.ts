@@ -10,23 +10,6 @@ import {
 	parseCatFileSizes,
 } from "../server/gitOutput.ts";
 
-/**
- * `git cat-file --batch`로 blob 여럿을 한 프로세스에서 읽는다. 잡는 깨짐:
- * 헤더를 줄 단위로 잘라 내용 속 개행·NUL·헤더처럼 생긴 줄에서 어긋나는 파서,
- * 빈 blob이나 `missing` 레코드에서 한 칸 밀리는 파서, 없는 객체를 빈 바이트로
- * 돌려주는 구현(빈 결과를 성공으로 저장하게 만든다).
- *
- * 설치 없이 돌도록 픽스처는 `Bun.spawnSync`로 만든다 — CI의 `test-bun13` 잡이 이
- * 파일을 Bun 1.3.14로, `bun install` 없이 돌린다.
- *
- * 마지막 테스트는 Bun 1.3.x `$` never-settle의 회귀망이다. 배치가 파일별 버스트를
- * 한 번의 호출로 바꿨으므로 예전 회귀망(`diff-large-blob.test.ts`)은 이 호출이 `$`로
- * 돌아가도 잡지 못한다(1.3.12, 3/3 통과 — 실측). 그러나 배치 호출끼리는 실제로
- * 겹친다(선택이 다른 `/api/diff` 요청·prewarm·watch 폴이 각자 빌드한다). 그래서
- * 16개를 동시에 부른다 — `$`로 되돌리면 8-way×8라운드로는 8번 중 6번만 멈췄고,
- * 16-way×5라운드로는 8번 중 8번 멈췄다(대부분 첫 라운드, 1.3.12 실측).
- */
-
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const concat = (...parts: Uint8Array[]): Uint8Array => {
 	const out = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
@@ -46,7 +29,7 @@ const C = "c".repeat(40);
 const M = "d".repeat(40);
 
 test("splits records by the declared size, not by lines", () => {
-	// 내용에 개행, NUL, 그리고 다음 레코드 헤더처럼 생긴 줄이 들어 있다.
+	// 내용에 개행, NUL, 다음 레코드 헤더처럼 생긴 줄을 넣어 줄 단위 파서를 가른다.
 	const tricky = `line1\n\0${B} blob 3\nfake\n`;
 	const out = concat(
 		enc(`${A} blob ${enc(tricky).byteLength}\n`),
@@ -72,7 +55,7 @@ test("skips objects that are not blobs", () => {
 let repo: string;
 const BIG = 12;
 const bigContent = (i: number): string =>
-	`big${i}\n${`${"y".repeat(99)}\n`.repeat(2000)}`; // 200KB — 64KB 파이프 버퍼의 세 배
+	`big${i}\n${`${"y".repeat(99)}\n`.repeat(2000)}`; // 64KB 파이프 버퍼를 넘어야 한다
 const git = (args: string[]): string => {
 	const r = Bun.spawnSync(["git", "-C", repo, ...args], { stderr: "pipe" });
 	if (r.exitCode !== 0)
@@ -136,6 +119,9 @@ const settleWithin = async <T>(work: Promise<T>, ms: number): Promise<T> => {
 	}
 };
 
+// Bun 1.3.x `$` never-settle의 회귀망이다(testing.md). 배치 호출은 실제로
+// 겹치므로(다른 선택의 요청·prewarm·watch 폴) 동시에 부르고, WAYS를 줄이면
+// 판별력이 떨어진다.
 const ROUNDS = 5;
 const WAYS = 16;
 const SETTLE_MS = 10_000;

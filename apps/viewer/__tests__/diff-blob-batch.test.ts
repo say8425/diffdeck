@@ -10,24 +10,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/**
- * 첫 빌드가 blob을 파일마다 `git show`로 읽지 않고 `cat-file --batch` **한 번**으로
- * 읽는가 — 프로세스 생성이 첫 로드를 지배했기 때문이다(raycast-extensions
- * 150파일: 387ms → 37ms, 실측). 잡는 깨짐: 선읽기를 빼먹어 다시 파일별로 읽는
- * 구현, 캐시가 이미 가진 blob까지 다시 배치로 읽는 구현, head 모드의 new 쪽을
- * 선읽기에서 빠뜨린 구현(워킹트리 모드만 보면 원리적으로 안 보인다 — 뮤테이션으로 확인).
- *
- * 결과만으로는 두 방식이 구별되지 않으므로(바이트가 같다) 실제로 뜬 git
- * 프로세스를 센다: 호출을 기록하는 git 심을 PATH 앞에 둔 **자식 bun**에서
- * `getDiffFiles`를 부른다. Bun.spawn은 실행 중에 바꾼 `process.env.PATH`를
- * 따르지 않아(실측) 같은 프로세스 안에서는 심이 안 걸린다.
- */
+// 결과 바이트로는 배치와 파일별 읽기가 갈리지 않아 실제로 뜬 git 프로세스를
+// 센다. Bun.spawn은 실행 중에 바꾼 PATH를 따르지 않으므로 git 심을 PATH 앞에 둔
+// 자식 bun에서 부른다(testing.md).
 
 const FILES = 12;
-// 배치 상한(blob 하나 1MB)을 넘는 파일 하나 — 이것만 파일별 `git show`로 떨어져야 한다.
+// 배치 상한(PREFETCH_LIMITS)을 넘는 파일 하나 — 이것만 파일별 `git show`로 떨어져야 한다.
 const BIG = "big.txt";
 const bigBody = (tag: string): string =>
-	`${tag}\n${`${"q".repeat(99)}\n`.repeat(12_000)}`; // ~1.2MB
+	`${tag}\n${`${"q".repeat(99)}\n`.repeat(12_000)}`;
 const here = import.meta.dir;
 let dir: string;
 let repo: string;
@@ -50,7 +41,6 @@ beforeAll(() => {
 	writeFileSync(join(repo, BIG), bigBody("v1"));
 	git(["add", "-A"]);
 	git(["commit", "-qm", "init"]);
-	// head 모드용: 파일을 모두 고친 커밋을 가진 브랜치. main은 움직이지 않는다.
 	git(["checkout", "-qb", "feat"]);
 	for (let i = 0; i < FILES; i++)
 		writeFileSync(join(repo, `f${i}.txt`), `feat ${i}\n`);

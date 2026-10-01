@@ -13,6 +13,7 @@ paths:
   - "apps/viewer/e2e/toolbar-*.e2e.ts"
   - "apps/viewer/e2e/ref-picker.e2e.ts"
   - "apps/viewer/e2e/pr-badge.e2e.ts"
+  - "apps/viewer/e2e/picker-scroll.e2e.ts"
 ---
 
 # 툴바와 피커
@@ -34,6 +35,7 @@ paths:
 - 구역 제목·구분선·빈 문구는 `role="presentation"`이다(listbox의 자식은 option/group뿐이다).
 - 행에 파일 개수를 달지 않는다.
 - 피커는 툴바에 앵커한 절대 위치 패널이고 자기 dismiss(바깥 mousedown, Escape + IME 가드)를 가진다. 오버플로 메뉴의 리스너에 얹지 않는다.
+- 목록(`#ref-picker-list`)은 세로 flex라 자식(행·구분선)에 `flex-shrink: 0`을 둔다. 빠지면 목록이 넘칠 때 행이 최소 높이로 눌려 PR 줄이 다음 행을 덮고 구분선이 사라진다. 회귀망 `picker-scroll.e2e.ts`.
 
 ## 트리거 라벨 (`#ref-picker-label`)
 
@@ -43,6 +45,7 @@ paths:
 - detached는 `detached @ <7자>`. bare 리포의 루트 이름은 관례적 `.git` 접미를 벗긴다(`repoLabel.ts`).
 - 지금 어느 워크트리인지는 `findWorktree`(`repoLabel.ts`) 하나로 판정한다 — 세그먼트 경계 최장 접두 일치(하위 디렉토리에서 기동, 중첩 워크트리). 라벨과 피커(정렬·체크)가 같은 함수를 쓴다.
 - 갱신 시점은 `load()`, 피커 열림, watch의 `poll()` 셋이다. `poll()`을 빼면 watch 중 브랜치를 갈아탈 때 툴바가 옛 브랜치에 굳는다. 워킹트리가 깨끗하면 지문이 같아 304로 흐르므로 "내용이 바뀐 폴에서만" 갱신하는 조건도 쓸 수 없다.
+- 라벨도 피커와 같은 `/api/refs` TTL 캐시를 탄다. 라벨만 캐시를 우회하면 같은 데이터를 보는 두 UI가 다른 브랜치를 말한다 — 브랜치를 갈아탄 직후 TTL만큼 늦게 따라오는 것은 의도다.
 
 ## 트리거 폭 (flex shrink 사슬)
 

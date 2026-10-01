@@ -8,9 +8,8 @@ const fd = (oldText: string, newText: string) =>
 		{ name: "a.ts", contents: newText },
 	);
 
-// 두 군데 떨어진 편집 → hunk 2개 + 사이 gap (per-gap 델타 검증용).
-// 사이 unchanged 12줄(l3~l14)이 있어야 diff lib 기본 context(4줄) 병합 임계(2*4=8)를
-// 넘어서 hunk가 분리된다 — 실측: fd(OLD, NEW).hunks.length === 2 확인됨.
+// 두 편집 사이의 unchanged 줄(l3~l14)이 context 병합 임계(4줄×2)보다 길어야
+// hunk가 둘로 갈려 gap 델타를 검증한다.
 const OLD = [
 	"l1",
 	"l2-old",
@@ -67,7 +66,7 @@ describe("buildGrabRows", () => {
 	});
 	test("전체 행 수 = old 삭제행 + 전체 new 행", () => {
 		const rows = buildGrabRows(fd(OLD, NEW));
-		expect(rows.length).toBe(2 /*deletions*/ + 17 /*new file lines*/);
+		expect(rows.length).toBe(2 + 17);
 	});
 	test("범위 밖 인덱스의 malformed hunk 행은 건너뛴다", () => {
 		const meta = fd(OLD, NEW);
@@ -236,11 +235,7 @@ describe("extractSnippet — chars (문자 단위)", () => {
 		});
 		if (s?.kind !== "mixed") throw new Error("expected mixed");
 		expect(s.rows[0].text).toBe("ravo");
-		// "bravo-x".slice(0, 4) === "brav" — 이 값은 픽스처의 어느 행 전체 텍스트와도
-		// 같지 않다(첫 행 "bravo"도, 끝 행 "bravo-x"도 아니다). 그래서 이 단언은
-		// "끝 행(addition)이 잘렸다"만이 아니라 "끝 행이 맞게 골라졌다"까지 함께
-		// 검증한다 — end를 5로 두면 "bravo"가 나오는데, 이는 첫 행 텍스트와 같아서
-		// mixed 분기가 실수로 끝 대신 첫 행을 반환해도 단언이 통과해버린다.
+		// end가 4라야 "brav"가 어느 행 전체와도 달라, 끝 대신 첫 행("bravo")을 돌려주는 버그를 가른다.
 		expect(s.rows[s.rows.length - 1].text).toBe("brav");
 	});
 });

@@ -167,8 +167,6 @@ describe("run — normal startup", () => {
 			}
 			return undefined;
 		})();
-		// Normal startup does not exit synchronously — it registers signal
-		// handlers and returns.
 		expect(signal).toBeUndefined();
 
 		expect(deps.startServer).toHaveBeenCalledWith({
@@ -197,7 +195,6 @@ describe("run — normal startup", () => {
 		expect(deps.onSignal).toHaveBeenCalledWith("SIGINT", expect.any(Function));
 		expect(deps.onSignal).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
 
-		// The registered shutdown handler stops the server and exits 0.
 		const onSignalMock = deps.onSignal as unknown as ReturnType<typeof mock>;
 		const [, sigintHandler] = onSignalMock.mock.calls[0] as [
 			string,
@@ -248,9 +245,8 @@ describe("run — normal startup", () => {
 		});
 	});
 
-	// 순서가 곧 계약이다. toSafeCwd가 cwd()보다 먼저면 repo가 "/"가 되어
-	// 엉뚱한 리포를 서빙하고, startServer보다 나중이면 그 사이에 기동
-	// 디렉토리가 지워지는 창이 남는다.
+	// 순서가 계약이다: cwd()보다 먼저 이탈하면 repo가 "/"가 되고, startServer보다
+	// 늦으면 기동 디렉토리가 지워질 틈이 남는다.
 	test("repo를 읽은 뒤, 서버를 띄우기 전에 안전 cwd로 이탈한다", () => {
 		const calls: string[] = [];
 		const deps = makeDeps({
@@ -335,12 +331,6 @@ describe("run — server start failure", () => {
 	});
 });
 
-// realDeps wires each CliDeps collaborator to a real side-effecting API
-// (Bun.spawn, console, process.exit/on/cwd, the fs-backed skill installer).
-// run() itself is fully exercised above via fake deps; these tests instead
-// exercise realDeps' own bodies directly, spying on the underlying globals so
-// nothing here actually opens a browser, exits the test process, or touches
-// the real $HOME.
 describe("realDeps", () => {
 	test("spawnOpener spawns via Bun.spawn and swallows spawn failures", () => {
 		const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
@@ -391,10 +381,8 @@ describe("realDeps", () => {
 		expect(realDeps.cwd()).toBe(process.cwd());
 	});
 
-	// realDeps.toSafeCwd는 커버리지 게이트(함수 100%) 대상이라 실제로 한 번
-	// 불려야 한다. bun test는 파일들을 한 프로세스에서 순차 실행하므로
-	// chdir이 새어나가면 뒤따르는 테스트 파일이 전부 오염된다 — finally로
-	// 반드시 되돌린다.
+	// bun test는 모든 파일을 한 프로세스에서 돌려 chdir이 뒤 테스트 파일로 샌다 —
+	// finally에서 반드시 되돌린다.
 	test("realDeps.toSafeCwd가 프로세스를 안전 경로로 옮긴다", () => {
 		const before = process.cwd();
 		try {
@@ -422,6 +410,8 @@ describe("realDeps", () => {
 
 	test("installSkill parses argv, resolves --project targets under cwd, and writes SKILL.md", () => {
 		const tmp = mkdtempSync(join(tmpdir(), "dd-realdeps-cwd-"));
+		// 소스 트리에서 돌면 installSkill이 apps/viewer/skills/를 읽는데, 그 경로는
+		// 빌드 산출물에만 있어 직접 만든다.
 		const skillSourceDir = join(import.meta.dir, "..", "skills", "diffdeck");
 		mkdirSync(skillSourceDir, { recursive: true });
 		writeFileSync(
@@ -441,18 +431,12 @@ describe("realDeps", () => {
 		} finally {
 			cwdSpy.mockRestore();
 			rmSync(tmp, { recursive: true, force: true });
-			// realDeps.installSkill의 소스 경로(cli.ts: `${import.meta.dir}/skills/...`)는
-			// 소스 트리에서 실행될 때 apps/viewer/skills/를 가리킨다 — 빌드 산출물
-			// (dist/skills/, build.ts가 채움)과 달리 이 경로는 트리에 원래 없어서
-			// 이 테스트가 직접 만들어야 한다. 정확히 이 테스트가 만든 파일/빈
-			// 디렉토리만 지운다 — apps/viewer/skills/가 다른 이유로 이미 있었거나
-			// 비어 있지 않다면 건드리지 않는다(rmdirSync는 비어있지 않으면 throw).
 			rmSync(join(skillSourceDir, "SKILL.md"), { force: true });
 			try {
 				rmdirSync(skillSourceDir);
 				rmdirSync(join(import.meta.dir, "..", "skills"));
 			} catch {
-				// 비어있지 않음 — 이 테스트가 만든 게 아니니 그대로 둔다.
+				// 비어 있지 않으면 이 테스트가 만든 디렉토리가 아니므로 그대로 둔다.
 			}
 		}
 	});

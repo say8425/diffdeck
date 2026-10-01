@@ -11,8 +11,6 @@ const makeLine = (n: number, text: string, type = "addition"): HTMLElement => {
 	return el;
 };
 
-// 실제 렌더 줄처럼 텍스트가 여러 span(신택스 토큰·intraline word-diff)으로
-// 쪼개진 줄: 각 segment가 별도 텍스트 노드가 된다.
 const makeTokenizedLine = (
 	n: number,
 	segments: readonly string[],
@@ -40,7 +38,6 @@ describe("highlightDom", () => {
 	test("empty query unwraps any existing marks and restores the text", () => {
 		const line = makeLine(1, "foo bar foo", "addition");
 		root.appendChild(line);
-		// Pre-existing marks, as if a previous non-empty query had run.
 		highlightDom(root, "foo", null, "f1");
 		expect(root.querySelectorAll("mark.cc-find-hit").length).toBe(2);
 
@@ -134,15 +131,10 @@ describe("highlightDom", () => {
 		expect(badLine.textContent).toBe("foo bar foo");
 	});
 
-	// 실환경 회귀: 렌더된 diff 줄은 intraline word-diff span과 (하이라이트
-	// 완료 후) 신택스 토큰 span으로 텍스트 노드가 쪼개진다. 검색 인덱스는
-	// 전체 줄 텍스트로 매치를 세므로, 노드 경계를 가로지르는 매치도 DOM에서
-	// 동일하게 마킹되어야 한다 — 안 그러면 카운트는 "1/1"인데 화면 하이라이트가
-	// 0개가 된다 (2026-07-28 재현: "export const answer = 43;"에서 "= 43").
+	// 렌더된 줄은 토큰·intraline diff span으로 텍스트 노드가 쪼개지는데, 검색 인덱스는 줄 전체로
+	// 매치를 센다 — 경계를 넘는 매치도 마킹해야 개수와 화면 하이라이트가 맞는다.
 	describe("matches spanning multiple text nodes", () => {
 		test("a match crossing a token boundary is marked across both nodes", () => {
-			// `export const answer = ` | `43` | `;` — intraline diff가 "43"만
-			// 감싼 실측 형태. "= 43"은 1번째/2번째 노드에 걸친다.
 			const line = makeTokenizedLine(6, ["export const answer = ", "43", ";"]);
 			root.appendChild(line);
 
@@ -155,8 +147,6 @@ describe("highlightDom", () => {
 		});
 
 		test("a match spanning three nodes marks every covered segment", () => {
-			// 신택스 토큰 렌더 형태: `const` `_` `greeting` … — "const greeting"이
-			// 키워드·공백·식별자 세 노드에 걸친다.
 			const line = makeTokenizedLine(1, [
 				"const",
 				" ",
@@ -195,7 +185,6 @@ describe("highlightDom", () => {
 		});
 
 		test("only the active occurrence is --active when the same query also matches within a single node", () => {
-			// 1행: "foo" 단일 노드 매치, 2행: "fo"+"o" 노드 경계 매치(활성).
 			const single = makeTokenizedLine(1, ["foo bar"]);
 			const crossing = makeTokenizedLine(2, ["fo", "o baz"]);
 			root.appendChild(single);
@@ -223,7 +212,6 @@ describe("highlightDom", () => {
 		});
 
 		test("adjacent same-line occurrences across node boundaries each get their own contiguous marks", () => {
-			// "ab" 가 노드 경계에 걸쳐 두 번: "a"+"ba"+"b" → [0,2) 와 [2,4).
 			const line = makeTokenizedLine(1, ["a", "ba", "b"]);
 			root.appendChild(line);
 
@@ -235,9 +223,6 @@ describe("highlightDom", () => {
 		});
 
 		test("a case-insensitive query crossing nodes marks the original-case text", () => {
-			// findRanges는 소문자화한 전체 줄에서 인덱스를 계산하고, mark는 원문
-			// 텍스트를 그대로 감싼다 — 교차-노드 경로에서도 정렬이 어긋나면 안
-			// 된다.
 			const line = makeTokenizedLine(1, ["const", " ", "greeting"]);
 			root.appendChild(line);
 
@@ -257,7 +242,6 @@ describe("highlightDom", () => {
 
 			expect(root.querySelectorAll("mark.cc-find-hit").length).toBe(0);
 			expect(line.textContent).toBe("const greeting");
-			// span 구조 자체는 보존된다 (토큰 색상 span이 깨지면 안 된다).
 			expect(line.querySelectorAll("span").length).toBe(3);
 		});
 	});

@@ -10,7 +10,7 @@ paths:
 
 # Grab — diff 선택 → 프롬프트 → 클립보드
 
-순수 로직은 `browser/grab/*`(커버리지 게이트 안), 배선은 `main.ts`다. 배선의 회귀망은 `grab.e2e.ts`·`grab-highlight.e2e.ts`이고, 합성 드래그의 튜닝값(sleep, 오프셋)은 `e2e/fixtures/drag.ts` 한 곳에 둔다.
+순수 로직은 `browser/grab/*`(커버리지 게이트 안), 배선은 `main.ts`다. 배선의 회귀망은 `grab.e2e.ts`·`grab-highlight.e2e.ts`이고, 합성 드래그의 sleep과 텍스트 드래그 좌표의 이유는 `e2e/fixtures/drag.ts`에 둔다(좌표 값은 호출부에 있다).
 
 ## 진입 경로
 

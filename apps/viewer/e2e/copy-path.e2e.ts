@@ -1,8 +1,3 @@
-// Hovering a file header reveals a "copy file path" button
-// (`[data-copy-name]`, opacity-toggled on `[data-diffs-header]:hover` via
-// unsafeCSS in main.ts); clicking it writes the file's exact path to the
-// clipboard (copyButton.ts's `createCopyButton`), with `stopPropagation` so
-// it never also triggers the header's fold toggle.
 import { expect, test } from "./fixtures/app.ts";
 
 test("copy button on header hover copies the file path", async ({

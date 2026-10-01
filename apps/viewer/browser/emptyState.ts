@@ -1,10 +1,5 @@
 import type { RepoSummary } from "../server/summary.ts";
 
-/**
- * 빈 diff 화면의 정보형 빈 상태. buildEmptyStateModel이 요약 + 현재 뷰 상태를
- * 표시 모델로 접고(순수 — 유닛 테스트 대상), renderEmptyState가 그것을 DOM으로
- * 편다. main.ts는 배선만 담당한다 (prefs.ts와 같은 분리 패턴).
- */
 export interface EmptyStateAction {
 	kind: "switch-mode" | "show-untracked";
 	label: string;
@@ -27,14 +22,8 @@ export const buildEmptyStateModel = (
 	opts: { mode: "working" | "base"; untrackedShown: boolean },
 ): EmptyStateModel => {
 	const { base } = summary;
-	// working 모드 헤드라인: 숨겨진 untracked가 있으면 "Working tree clean"은
-	// git 어휘상 거짓(untracked도 워킹트리 상태)이므로 측정한 것만 주장한다.
-	//
-	// **`null`을 `0`으로 접으면 안 된다.** head가 커밋된 rev면 서버가
-	// untracked를 재지 않고 `null`을 주는데(재지 않은 것을 0으로 적으면 그게
-	// 곧 주장이 된다 — summary.ts의 계약), `?? 0`으로 접으면 워킹트리를 보고
-	// 있지도 않은 화면이 "Working tree clean"이라고 그 워킹트리에 대해
-	// 단언한다. 모르면 아무 말도 안 하는 쪽(`No changes`)으로 간다.
+	// `null`(head가 커밋된 rev라 재지 않았다)을 `?? 0`으로 접지 않는다 — 보지도
+	// 않은 워킹트리를 "Working tree clean"이라고 단언하게 된다.
 	const untracked = summary.untrackedFiles;
 	const headline =
 		opts.mode === "working"
@@ -71,10 +60,7 @@ export const buildEmptyStateModel = (
 		});
 	}
 
-	// quiet note는 측정한 사실만 주장한다: 네 카운터가 전부 "측정된 0"일 때만.
-	// base 이름이 있는데 카운트가 null(merge-base 실패 등)이면 base 모드 내용을
-	// 알 수 없으므로 아무 주장도 하지 않는다. base 자체가 없으면(드롭다운의
-	// base 옵션이 비활성) working/untracked 0만으로 "어느 모드에도 없음"이 성립.
+	// 카운터가 전부 측정된 0일 때만 주장한다(`=== 0` — null은 재지 못한 값이다).
 	const localQuiet = summary.workingFiles === 0 && summary.untrackedFiles === 0;
 	const baseQuiet = base
 		? summary.baseFiles === 0 && summary.aheadCommits === 0
@@ -128,23 +114,9 @@ export const renderEmptyState = (
 	return root;
 };
 
-/**
- * 이 빈 화면을 사용자에게 보여주는 대신 base 뷰로 바로 데려갈 것인가.
- *
- * 워크트리 워크플로에서는 작업이 브랜치에 **커밋**돼 있어서 기본 뷰(미커밋
- * 변경)가 구조적으로 비어 있다. 워크트리를 팔 때마다 "볼 게 가장 많은 순간에
- * 빈 화면"을 만나고, 그때마다 카드의 버튼을 한 번씩 눌러 줘야 했다.
- *
- * 판정을 새로 세우지 않고 **카드 자신의 액션을 읽는다** — 카드가 전환을
- * 권할 상황이 곧 전환할 가치가 있는 상황이라, 조건이 두 곳으로 갈라지지
- * 않는다.
- *
- * 두 가지는 반드시 지킨다:
- * ① 사용자가 고른 적 있으면(URL `base=` 또는 저장된 프리퍼런스) 덮지 않는다.
- * ② 토글로 감춰졌을 뿐 **이 뷰에도** 볼 것이 있으면(untracked) 데려가지
- *    않는다 — 카드가 두 선택지를 나란히 보여주는 편이 낫다. 자동 전환은
- *    "이 뷰에 정말 아무것도 없을 때"로 한정한다.
- */
+// 판정을 따로 세우지 않고 카드의 액션을 읽는다. 사용자가 base를 고른 적
+// 있거나 이 뷰에도 볼 것(untracked)이 있으면 옮기지 않는다
+// (viewer.md).
 export const shouldAutoViewBase = (
 	model: EmptyStateModel,
 	opts: { hasExplicitBase: boolean; alreadyTried: boolean },

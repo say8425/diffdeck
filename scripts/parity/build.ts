@@ -1,12 +1,5 @@
-// Builds the render-parity harness bundle with the reusable css-inline bundler
-// plugin (scripts/css-inline-plugin.ts) so the forked packages'
-// `../style.css?inline` imports are inlined as real stylesheet text, while any
-// plain `.css` import stays a native asset.
-//
-// A dedicated Bun.build() script (rather than the `bun build` CLI) because the
-// CLI has no flag to attach a bundler plugin — `--preload` bundles the plugin
-// file itself for the browser target and fails on its `bun` builtin import.
-// Run: `bun run scripts/parity/build.ts`.
+// A Bun.build() script rather than the `bun build` CLI: the CLI cannot attach a bundler
+// plugin (`--preload` bundles the plugin file for the browser and fails on its `bun` import).
 import { cssInlineBundlerPlugin } from "../css-inline-plugin.ts";
 
 const result = await Bun.build({

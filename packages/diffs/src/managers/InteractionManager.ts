@@ -163,10 +163,7 @@ interface SessionSelecting {
   pointerId: number;
 }
 
-// [diffdeck] Deviation from upstream @pierre/diffs: drag-less line selection
-// (enableLineSelectionDrag: false). The press selects nothing until release;
-// a move into another row cancels the session — that gesture is a drag, and
-// drags must not select. Upstream has no equivalent session.
+// [diffdeck] see enableLineSelectionDrag below.
 interface SessionPendingLineSelect {
   mode: 'pendingLineSelect';
   pointerId: number;
@@ -212,13 +209,11 @@ export interface InteractionManagerBaseOptions<
   onTokenLeave?(props: OnTokenEventProps<TMode>, event: PointerEvent): unknown;
   __debugPointerEvents?: LogTypes;
   enableLineSelection?: boolean;
-  // [diffdeck] Deviation from upstream @pierre/diffs: new option.
-  // When false, a press on a line number no longer selects on pointerdown
-  // and dragging never extends the selection: the session stays pending and
-  // commits only when the pointer is released on the same row (plain click,
-  // shift-click extension, re-click-to-unselect all keep working). The
-  // gutter utility drag (pressing "+") is unaffected. Defaults to true
-  // (GitHub-style drag selection).
+  // [diffdeck] New option (exception 5, vendored-packages.md). When false, a
+  // press on a line number selects on release instead of pointerdown, and a
+  // move into another row cancels it — a drag selects nothing. Click,
+  // shift-click extension and re-click to unselect still work; the gutter "+"
+  // drag is unaffected. Defaults to true (upstream behavior).
   enableLineSelectionDrag?: boolean;
   controlledSelection?: boolean;
   onLineSelected?: (range: SelectedLineRange | null) => void;
@@ -791,12 +786,9 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     // focus (and the keyboard events it needs) when a line number is clicked.
     const { lineNumber, eventSide } = pointerInfo;
 
-    // [diffdeck] see enableLineSelectionDrag above.
-    // Drag-less mode parks the whole decision on release: selecting here
-    // would make any drag off the row select its first row. Jitter inside
-    // the anchor row is tolerated by the move handler, and release on the
-    // same row commits through commitPendingLineSelect with the same
-    // click / shift-click / unselect branches as below.
+    // [diffdeck] see enableLineSelectionDrag above. Drag-less mode decides on
+    // release: selecting here would make a drag off the row select its first
+    // row.
     if (!enableLineSelectionDrag) {
       this.pointerSession = {
         mode: 'pendingLineSelect',
@@ -837,13 +829,10 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     this.attachDocumentPointerListeners();
   }
 
-  // [diffdeck] Extracted from the pointerdown path (upstream inlines this
-  // body) so the drag-less commit can reuse it verbatim.
-  // Shift+click extension of an existing selection. Shared by the
-  // drag-enabled pointerdown path and the drag-less pendingLineSelect
-  // commit so both produce the same selection for the same press. Returns
-  // false when the existing selection's rows cannot be resolved, in which
-  // case selection state is left untouched.
+  // [diffdeck] Extracted from the pointerdown path (upstream inlines it) so
+  // the drag-less commit produces the same selection for the same press.
+  // Returns false, leaving state untouched, when the existing selection's
+  // rows can't be resolved.
   private extendSelectionFromShiftClick(
     pointerInfo: SelectionInfo
   ): boolean {
@@ -876,10 +865,7 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     return true;
   }
 
-  // [diffdeck] Extracted alongside extendSelectionFromShiftClick — same reason.
-  // Plain click-select of one row. Shared by the drag-enabled pointerdown
-  // path and the drag-less pendingLineSelect commit (same reasoning as
-  // extendSelectionFromShiftClick).
+  // [diffdeck] Extracted alongside extendSelectionFromShiftClick, same reason.
   private selectSingleLineFromPoint(pointerInfo: SelectionInfo): void {
     const { lineNumber, eventSide } = pointerInfo;
     if (this.options.controlledSelection === true) {
@@ -893,20 +879,12 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
     this.notifySelectionStart(this.getCurrentSelectionRange());
   }
 
-  // [diffdeck] see enableLineSelectionDrag above.
-  // Drag-less line selection commits on release. Mirrors the pointerdown
-  // branches of the drag-enabled mode — plain click, shift-click extension
-  // and re-click-to-unselect — then runs the same commit sequence as the
-  // 'selecting' pointerup.
-  //
-  // One deliberate divergence: when extendSelectionFromShiftClick returns
-  // false (the pre is gone, or the existing selection's rows fall outside
-  // the render window) the drag-enabled pointerdown path bails out entirely
-  // — no session, no notifications. Here the shared tail still runs, so
-  // notifySelectionEnd/Committed fire for a selection that did not change.
-  // Harmless for this repo's viewer (it wires none of the selection
-  // callbacks) and it keeps the commit tail single-exit; a library consumer
-  // that listens to those callbacks would see one extra no-op pair.
+  // [diffdeck] see enableLineSelectionDrag above. Commits on release with the
+  // pointerdown branches (click, shift-click extension, re-click to unselect)
+  // and the 'selecting' pointerup's commit sequence. Unlike pointerdown, a
+  // false extendSelectionFromShiftClick still runs that tail, so the
+  // selection callbacks fire once for an unchanged selection (the viewer
+  // wires none of them).
   private commitPendingLineSelect(): void {
     const session = this.pointerSession;
     if (session.mode !== 'pendingLineSelect') {
@@ -1001,12 +979,9 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
           source: 'coordinates-first',
           requireNumberColumn: false,
         });
-        // [diffdeck] see enableLineSelectionDrag above.
-        // An unresolvable pointer (off the diff, an unrendered row, or a
-        // sideways drag right out of the diff) keeps the session pending, so
-        // a release back on the anchor row still commits — and a release
-        // anywhere else commits the anchor row too, exactly as the
-        // drag-enabled path would.
+        // [diffdeck] see enableLineSelectionDrag above. An unresolvable pointer
+        // (off the diff or an unrendered row) keeps the session pending, so
+        // the release commits the anchor row as the drag-enabled path would.
         if (pointerInfo == null) {
           return;
         }
@@ -1021,14 +996,10 @@ export class InteractionManager<TMode extends InteractionManagerMode> {
         ) {
           return;
         }
-        // The gesture left the pressed line number, so it is a drag — and a
-        // drag selects nothing in this mode. Note the key is (lineNumber,
-        // side), not the row index: in unified a row can expose an old and a
-        // new number cell, so a horizontal jitter across that boundary also
-        // cancels. Recoverable (the user clicks again) and it keeps the
-        // comparison identical to the one the drag-enabled path anchors on.
-        // No preventDefault: the interaction is opted out entirely, so
-        // native behavior may proceed.
+        // Leaving the pressed line number is a drag, which selects nothing.
+        // The key is (lineNumber, side), as in the drag-enabled path, so in
+        // unified a jitter across the old/new number cells also cancels
+        // (recoverable). No preventDefault — native behavior may proceed.
         this.clearPointerSession();
         this.detachDocumentPointerListeners();
         return;

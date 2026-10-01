@@ -2,9 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { FileDiffMetadata } from "@diffdeck/diffs";
 import { buildRows, findMatches } from "../browser/search/searchIndex.ts";
 
-// 최소 fixture: buildRows가 읽는 필드만 채운다 (라이브러리 런타임 미사용).
-// 새 파일 5줄, 옛 파일 5줄. 3번째 줄이 REMOVED→ADDED로 교체.
-// 1번째 줄은 hunk 앞 collapsed context, 5번째 줄은 trailing context.
+// buildRows가 읽는 필드만 채운다. 1번째 줄(hunk 앞 collapsed)과 5번째 줄(trailing)이
+// hunk 밖에 있어야 그 두 경로를 탄다.
 const fixture = (): FileDiffMetadata => {
 	const additionLines = [
 		"import a",
@@ -22,7 +21,7 @@ const fixture = (): FileDiffMetadata => {
 	];
 	const hunks = [
 		{
-			additionStart: 2, // 새 파일 2번째 줄(=index1)부터 hunk 표시
+			additionStart: 2, // 1부터 센 줄 번호(= additionLineIndex 1)
 			hunkContent: [
 				{
 					type: "context",

@@ -15,9 +15,6 @@ describe("decodeHeaderValue", () => {
 	});
 
 	// 커버리지 게이트는 branch를 세지 않으므로 이 갈래를 일부러 찌른다.
-	// 인코딩하지 않는 옛 서버가 "%"를 품은 브랜치명을 그대로 보내면
-	// decodeURIComponent가 URIError를 던진다 — 라벨 하나 때문에 diff 전체를
-	// 잃지 않도록 원문으로 되돌린다.
 	test("falls back to the raw value when the encoding is malformed", () => {
 		expect(decodeHeaderValue("release-50%-done")).toBe("release-50%-done");
 	});

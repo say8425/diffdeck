@@ -15,8 +15,7 @@ let copied = 0;
 let closed = 0;
 let popover: GrabPopover;
 
-// 라벨은 조각 배열이다(파일명/라인범위/구분자/side) — encode.ts의
-// grabLabelParts가 만드는 것과 같은 모양.
+// encode.ts의 grabLabelParts가 만드는 것과 같은 모양이다.
 const labelParts = (name = "a.ts", range = ":1-2"): GrabLabelPart[] => [
 	{ text: name, kind: "file" },
 	{ text: range, kind: "range" },
@@ -38,20 +37,14 @@ const pressEnter = (init: KeyboardEventInit = {}) =>
 	input().dispatchEvent(
 		new KeyboardEvent("keydown", { key: "Enter", cancelable: true, ...init }),
 	);
-// jest.useFakeTimers() 아래에서는 setTimeout 기반 flush가 영원히 resolve되지
-// 않는다(bun의 자체 per-test 타임아웃도 같은 타이머를 타서 런 전체가
-// 데드락) — copy-button.test.ts의 tick()과 동일하게 마이크로태스크 2틱으로
-// flush한다(writeText 프라미스 settle 1틱 + .then 콜백 1틱).
+// fake timers 중 setTimeout flush는 끝나지 않아 런 전체가 멈춘다 —
+// 마이크로태스크 2틱으로 흘린다(copy-button.test.ts의 tick).
 const flush = async (): Promise<void> => {
 	await Promise.resolve();
 	await Promise.resolve();
 };
 
-// 새 팝오버 인스턴스가 필요한 테스트 전용 헬퍼(재오픈 계약·다중 인스턴스 id
-// 비교 등은 module-level 공유 popover로는 표현 못 한다) — 기존
-// beforeEach/writeImpl 관례(:102 부근 reject로 실패 만들기)를 그대로 재사용해
-// fresh 인스턴스+독립 writes를 돌려준다. createdPopovers에 쌓아 afterEach에서
-// 함께 destroy한다(doc 리스너 누적 방지, happy-dom 전역 오염 회피).
+// 만든 인스턴스는 afterEach에서 destroy한다 — 안 그러면 doc 리스너가 happy-dom 전역에 쌓인다.
 const createdPopovers: GrabPopover[] = [];
 const makePopover = (
 	options: { fail?: boolean } = {},
@@ -106,9 +99,6 @@ describe("createGrabPopover", () => {
 		expect(popover.element.getAttribute("role")).toBe("dialog");
 		expect(input().getAttribute("aria-label")).toBe("Grab prompt");
 	});
-	// 여러 줄 프롬프트: Shift+Enter는 개행이라 제출되면 안 된다. preventDefault를
-	// 부르지 않고 빠져나가 textarea 기본 동작에 맡기므로, 여기선 "제출이 일어나지
-	// 않았다"와 "이벤트를 취소하지 않았다"를 함께 본다(취소하면 개행이 죽는다).
 	test("Shift+Enter는 제출하지 않고 기본 개행을 막지도 않는다", async () => {
 		openDefault();
 		input().value = "첫 줄";
@@ -128,9 +118,7 @@ describe("createGrabPopover", () => {
 		expect(writes).toEqual(["OUT[제출]"]);
 	});
 
-	// textarea에서 Enter의 기본 동작은 개행이다 — 제출 경로는 그것을 막아야
-	// 한다. 안 막으면 제출과 동시에 빈 줄이 남는다(실사용에서 보고된 버그).
-	// happy-dom은 기본 동작을 수행하지 않으므로 "취소했는가"로 단언한다.
+	// happy-dom은 기본 동작(개행)을 수행하지 않으므로 "취소했는가"로 단언한다.
 	test("Shift 없는 Enter는 기본 개행을 막는다", () => {
 		openDefault();
 		input().value = "제출";
@@ -138,8 +126,7 @@ describe("createGrabPopover", () => {
 		expect(notCancelled).toBe(false);
 	});
 
-	// IME 조합 가드가 Shift 여부보다 먼저다 — 한국어 조합 확정 Enter가
-	// Shift와 함께 눌려도 제출도 개행 처리도 우리 코드가 관여하지 않는다.
+	// IME 가드가 Shift 분기보다 먼저다(grab.md의 keydown 분기 순서).
 	test("IME 조합 중에는 Shift+Enter도 제출하지 않는다", async () => {
 		openDefault();
 		input().value = "조합중";
@@ -162,8 +149,6 @@ describe("createGrabPopover", () => {
 		expect(popover.isOpen()).toBe(false);
 		jest.useRealTimers();
 	});
-	// ⌥⏎ 단순 복사 — 프롬프트가 차 있어도 무시하고 잡은 코드 텍스트만 나간다.
-	// Enter 계열은 개행 기본 동작이 있으므로 취소도 확인한다(Shift+Enter만 예외).
 	test("Alt+Enter는 buildPlainOutput을 복사하고 기본 개행을 막는다", async () => {
 		openDefault();
 		input().value = "무시될 프롬프트";
@@ -282,7 +267,6 @@ describe("createGrabPopover", () => {
 		openDefault();
 		pressEnter();
 		await flush();
-		// 복사 성공 직후엔 아직 열려 있다 — onCopied만 발화하고 onClosed는 아직.
 		expect(copied).toBe(1);
 		expect(closed).toBe(0);
 		jest.advanceTimersByTime(400);
@@ -313,8 +297,7 @@ describe("createGrabPopover", () => {
 });
 
 describe("상태 전용 슬롯 + 접근성", () => {
-	// 라이브 리전은 이제 sr-only라 항상 DOM에 붙어 있다(hidden 요소는 스크린리더에
-	// 알려지지 않는다). "상태 없음"은 hidden이 아니라 **빈 텍스트**로 표현된다.
+	// hidden 요소는 라이브 리전으로 읽히지 않으므로 "상태 없음"은 빈 텍스트다.
 	test("평상시엔 라이브 리전이 비어 있고 버튼은 idle이다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
@@ -330,9 +313,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(send.dataset.state).toBe("idle");
 	});
 
-	// 단축키 고지는 세 채널이 맡는다: 하단 .grab-keys 각주(⌥⏎만), 버튼
-	// hover(title), aria-keyshortcuts. placeholder는 한 마디만 해야 한다 —
-	// 여기에 안내를 실으면 입력창을 꽉 채워 창에서 가장 눈에 띄는 요소가 된다.
+	// placeholder에 안내를 실으면 창에서 가장 눈에 띄는 요소가 된다.
 	test("placeholder는 한 마디만 하고, 단축키는 각주·title·aria가 고지한다", () => {
 		const { popover: pop } = makePopover();
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
@@ -340,15 +321,13 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(box.getAttribute("aria-keyshortcuts")).toBe(
 			"Enter Shift+Enter Alt+Enter Escape",
 		);
-		// 표기(글자/글리프)가 아니라 **동작이 다 고지되는가**를 본다 —
-		// 문구를 다듬어도 안내가 통째로 빠지는 회귀만 잡히면 된다.
+		// 문구가 아니라 세 동작이 다 고지되는지만 본다.
 		const send = pop.element.querySelector(".grab-send") as HTMLElement;
 		expect(send.title).toContain("⏎");
 		expect(send.title).toContain("new line");
 		expect(send.title).toContain("plain code");
 	});
 
-	// 하단 각주는 ⌥⏎의 발견 가능성 채널 — 상태 라이브 리전과 달리 항상 보인다.
 	test("하단에 ⌥⏎ 단축키 각주가 렌더된다", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
@@ -360,7 +339,6 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		});
 		const keys = pop.element.querySelector(".grab-keys") as HTMLElement;
 		expect(keys.textContent).toBe("⌥⏎ Copy code only");
-		// 키 글리프와 설명이 갈라져 있다 — 키 쪽만 밝은 톤으로 칠한다.
 		const key = keys.querySelector(".grab-keys-k") as HTMLElement;
 		expect(key.textContent).toBe("⌥⏎");
 	});
@@ -384,7 +362,7 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(pop.isOpen()).toBe(true);
 	});
 
-	// close()를 거치지 않는 재오픈 경로 — 이전 상태가 남으면 실사용에서만 드러난다
+	// close()를 거치지 않는 재오픈 경로다.
 	test("재오픈이 힌트를 초기화한다", async () => {
 		const { popover: pop } = makePopover();
 		const opts = {
@@ -410,7 +388,6 @@ describe("상태 전용 슬롯 + 접근성", () => {
 		expect(send.dataset.state).toBe("idle");
 	});
 
-	// 라벨이 한 덩어리 텍스트로 렌더되면 색을 못 준다 — 조각마다 span이어야 한다.
 	test("라벨이 조각별 span으로 렌더된다 — 색을 줄 수 있는 유일한 형태", () => {
 		const { popover: pop } = makePopover();
 		pop.open({
@@ -432,12 +409,10 @@ describe("상태 전용 슬롯 + 접근성", () => {
 			"grab-l-sep",
 			"grab-l-side-old",
 		]);
-		// 이어 붙이면 grabLabel()의 문자열과 같아야 한다 — 색과 텍스트가
-		// 갈라지지 않는다는 계약.
+		// 이어 붙이면 grabLabel()의 문자열과 같아야 한다(색과 텍스트가 갈라지지 않는다).
 		expect(label.textContent).toBe("a.ts:1-2 · old side");
 	});
 
-	// 재오픈이 이전 조각을 남기면 라벨이 두 번 쌓인다(replaceChildren 계약).
 	test("재오픈이 이전 라벨 조각을 지운다", () => {
 		const { popover: pop } = makePopover();
 		const base = {
@@ -499,13 +474,11 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 		const field = pop.element.querySelector(".grab-field");
 		const send = pop.element.querySelector(".grab-send");
 		expect(field).toBeTruthy();
-		// textarea와 버튼이 같은 상자를 공유하는 게 이 디자인의 전부다.
 		expect(send?.parentElement).toBe(field);
 		expect(field?.querySelector("textarea")).toBeTruthy();
 	});
 
 	test("클릭이 Enter와 같은 출력을 복사한다", async () => {
-		// 모듈 레벨 writes를 가리지 않게 이름을 달리한다(oxlint no-shadow).
 		const { popover: pop, writes: local } = makePopover();
 		pop.open(opts);
 		const box = pop.element.querySelector("textarea") as HTMLTextAreaElement;
@@ -557,8 +530,7 @@ describe("보내기 버튼 — 입력 영역 안, 배경 없음", () => {
 	test("아이콘 셋이 전부 DOM에 있고 이름은 상태와 무관하게 고정이다", () => {
 		const { popover: pop } = makePopover();
 		const send = pop.element.querySelector(".grab-send") as HTMLButtonElement;
-		// 셋을 다 두고 CSS가 하나만 보여준다 — 상태마다 innerHTML을 갈면
-		// 매번 파서를 태우고 재측정을 유발한다.
+		// 상태마다 innerHTML을 갈면 매번 파서를 태운다 — 셋을 두고 CSS가 하나만 보인다.
 		expect(send.querySelector(".i-send")).toBeTruthy();
 		expect(send.querySelector(".i-ok")).toBeTruthy();
 		expect(send.querySelector(".i-fail")).toBeTruthy();
@@ -576,7 +548,6 @@ describe("닫기 버튼 — 라벨 줄 오른쪽 끝", () => {
 		const { popover: pop } = makePopover();
 		const head = pop.element.querySelector(".grab-head");
 		expect(head?.parentElement).toBe(pop.element);
-		// 라벨 다음, 맨 끝 — 오른쪽 상단.
 		expect([...(head?.children ?? [])].map((c) => c.className)).toEqual([
 			"grab-label",
 			"grab-close",
@@ -587,7 +558,7 @@ describe("닫기 버튼 — 라벨 줄 오른쪽 끝", () => {
 		const { popover: pop } = makePopover();
 		const btn = closeBtn(pop);
 		expect(btn.type).toBe("button");
-		// #find-close와 같은 어휘.
+		// 툴팁은 #find-close와 같지만 이름은 대상을 말하지 않는 "Close"다(그쪽은 "Close search").
 		expect(btn.getAttribute("aria-label")).toBe("Close");
 		expect(btn.title).toBe("Close (Esc)");
 		// 텍스트가 없어야 다이얼로그·라벨의 textContent에 섞이지 않는다.

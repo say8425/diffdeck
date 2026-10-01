@@ -22,9 +22,8 @@ afterEach(() => {
 });
 
 describe("repoFingerprint", () => {
-	// head가 브랜치면 그 브랜치가 움직였을 때 캐시가 깨져야 한다 — 이 필드가
-	// 막으려는 유일한 실패다. 다른 head 테스트들이 지나가며 라인 커버리지로는
-	// 초록이지만(게이트는 branch를 안 센다) 이 시나리오를 찌르는 것은 없었다.
+	// 다른 head 테스트만으로도 라인 커버리지는 초록이라(게이트는 branch를 안
+	// 센다) 이 시나리오는 따로 찌른다.
 	test("a moving head branch changes the fingerprint", async () => {
 		await $`git -C ${repo} checkout -qb feat`;
 		writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
@@ -70,8 +69,6 @@ describe("repoFingerprint", () => {
 		writeFileSync(join(repo, "a.txt"), "two\n");
 		await $`git -C ${repo} add a.txt`;
 		await $`git -C ${repo} commit -qm second`;
-		// 커밋 후 워킹트리는 clean — status만으로는 구분 불가, HEAD가 지문에
-		// 포함되어야 base 모드 diff(커밋된 변경 포함)의 변화가 감지된다.
 		const fp2 = await repoFingerprint(repo);
 		expect(fp2).not.toBe(fp1);
 	});
@@ -89,8 +86,7 @@ describe("repoFingerprint", () => {
 	test("detects edits to an already-listed untracked file", async () => {
 		writeFileSync(join(repo, "new.txt"), "fresh\n");
 		const fp1 = await repoFingerprint(repo, { untracked: true });
-		// status 라인은 그대로("?? new.txt")여도 내용이 바뀌면 지문이 바뀌어야
-		// 한다 — stat(mtime,size)이 이를 담당한다.
+		// status 줄("?? new.txt")은 그대로라 stat(mtime·size)만이 이 변화를 잡는다.
 		writeFileSync(join(repo, "new.txt"), "fresh but different\n");
 		const fp2 = await repoFingerprint(repo, { untracked: true });
 		expect(fp2).not.toBe(fp1);
@@ -101,14 +97,11 @@ describe("repoFingerprint", () => {
 		await $`git -C ${repo} mv a.txt b.txt`;
 		const fp2 = await repoFingerprint(repo);
 		expect(fp2).not.toBe(fp1);
-		// 첫 편집은 status 자체가 R → RM으로 변해 지문이 당연히 바뀐다.
 		writeFileSync(join(repo, "b.txt"), "renamed edit one\n");
 		const fp3 = await repoFingerprint(repo);
 		expect(fp3).not.toBe(fp2);
-		// 두 번째 편집부터는 status 출력("RM b.txt\0a.txt")이 그대로다 — 이제는
-		// porcelain -z rename 토큰 스킵이 "새 경로"를 stat 대상으로 잡아야만
-		// 감지된다. 스킵 로직이 무너지면 여기서 잡힌다 (라인 커버리지만으로는
-		// 이 분기의 회귀를 못 잡는다).
+		// 두 번째 편집부터는 status 출력(RM)이 그대로라, -z rename 토큰 스킵이 새
+		// 경로를 stat해야만 잡힌다.
 		writeFileSync(join(repo, "b.txt"), "renamed edit two, longer\n");
 		const fp4 = await repoFingerprint(repo);
 		expect(fp4).not.toBe(fp3);
@@ -121,7 +114,6 @@ describe("repoFingerprint", () => {
 		await $`git -C ${repo} add a.txt`;
 		await $`git -C ${repo} commit -qm feat`;
 		const fp1 = await repoFingerprint(repo, { mode: "base", ref: "main" });
-		// main이 이동하면 merge-base가 달라질 수 있으므로 지문도 달라져야 한다.
 		const head = (await $`git -C ${repo} rev-parse HEAD`.text()).trim();
 		await $`git -C ${repo} update-ref refs/heads/main ${head}`;
 		const fp2 = await repoFingerprint(repo, { mode: "base", ref: "main" });

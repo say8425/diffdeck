@@ -20,8 +20,7 @@ describe("parseSelection", () => {
 		});
 	});
 
-	// 오늘의 삼항(=== "base" ? ... : "working")과 같은 관용: 알 수 없는 값은
-	// 400이 아니라 조용히 working으로 떨어진다. 링크가 깨지지 않는 쪽이다.
+	// 알 수 없는 mode는 400이 아니라 working으로 떨어진다 — 링크가 깨지지 않는 쪽이다.
 	test("an unknown mode falls back to the head base", () => {
 		expect(parseSelection(params("repo=/r&mode=nonsense")).base).toEqual({
 			kind: "head",
@@ -42,10 +41,8 @@ describe("parseSelection", () => {
 });
 
 describe("selectionCacheKey", () => {
-	// 이 스위트가 지키는 진짜 계약: 키는 flight 클로저가 읽는 모든 입력의
-	// 전함수여야 한다. 오늘 diffFlight의 클로저는 repo·untracked·mode·ref를
-	// 읽는데 키에는 ref가 없어서, 해석된 base가 바뀐 두 요청이 같은 키로
-	// 합류하면 한쪽이 남의 ref로 만든 diff를 받는다.
+	// 키에는 flight 클로저가 읽는 입력이 빠짐없이 들어가야 한다 — 빠지면 다른
+	// 선택이 같은 슬롯에 합류해 남의 diff를 받는다.
 	test("distinguishes two auto selections whose base resolved differently", () => {
 		const sel = parseSelection(params("repo=/r&mode=base"));
 		expect(selectionCacheKey(sel, "origin/main")).not.toBe(
@@ -73,8 +70,6 @@ describe("selectionCacheKey", () => {
 		expect(keys.size).toBe(4);
 	});
 
-	// 경로·refname에 구분자가 섞여도 서로 다른 선택이 같은 키로 뭉개지지
-	// 않아야 한다 (NUL은 두 값 어디에도 들어갈 수 없다).
 	test("does not collide when a repo path contains the separator's neighbours", () => {
 		expect(
 			selectionCacheKey(parseSelection(params("repo=/a%00false")), null),
@@ -96,9 +91,6 @@ describe("parseSelection with an explicit base", () => {
 		});
 	});
 
-	// base가 있으면 mode는 무시된다 — 한 축을 두 파라미터가 인코딩하면
-	// 서로 모순되는 상태가 생기므로, 새 파라미터가 이긴다는 규칙 하나로
-	// 그 상태를 없앤다.
 	test("an explicit base wins over the legacy mode", () => {
 		expect(
 			parseSelection(params("repo=/r&mode=working&base=develop")).base,
@@ -111,8 +103,8 @@ describe("parseSelection with an explicit base", () => {
 		});
 	});
 
-	// 참조로 두지 않고 정규화한다: unborn HEAD 리포에서 참조 검증이 실패해
-	// 첫 화면이 400이 되는 것을 막고, prewarm 슬롯과 캐시 키를 일치시킨다.
+	// 중복처럼 보여도 지우지 않는다: 커밋 없는 리포에서 참조 검증이 실패하고,
+	// prewarm이 데운 슬롯과 키가 갈린다(server.md).
 	test("base=HEAD normalizes to the head selector, not a ref named HEAD", () => {
 		expect(parseSelection(params("repo=/r&base=HEAD")).base).toEqual({
 			kind: "head",
@@ -129,7 +121,6 @@ describe("selectionCacheKey with an explicit base", () => {
 		);
 	});
 
-	// 사용자가 고른 ref는 서버가 해석할 필요가 없으므로 해석값과 무관해야 한다.
 	test("a chosen ref ignores the server-resolved base", () => {
 		const sel = parseSelection(params("repo=/r&base=develop"));
 		expect(selectionCacheKey(sel, "origin/main")).toBe(
@@ -137,7 +128,6 @@ describe("selectionCacheKey with an explicit base", () => {
 		);
 	});
 
-	// 고른 ref "auto"와 자동 해석은 서로 다른 질문이다.
 	test("a ref literally named auto is not the auto selector", () => {
 		expect(
 			selectionCacheKey(parseSelection(params("repo=/r&base=auto")), null),
@@ -160,16 +150,13 @@ describe("parseSelection with an explicit head", () => {
 		});
 	});
 
-	// 브랜치를 head로 보면 워킹트리를 거치지 않으므로 커밋된 것만 보인다.
 	test("head names a ref to view instead of the working tree", () => {
 		expect(
 			parseSelection(new URLSearchParams("repo=/r&head=feature/x")).head,
 		).toEqual({ kind: "ref", ref: "feature/x" });
 	});
 
-	// base와 달리 HEAD를 정규화하지 않는다. base=HEAD는 "커밋 안 한 것만"이라
-	// 워킹트리 뷰와 같지만, head=HEAD는 **커밋된 HEAD**를 보는 것이라 워킹트리
-	// 뷰와 다르다(미커밋 변경이 빠진다). 둘을 합치면 그 구분이 사라진다.
+	// base=HEAD와 달리 정규화하지 않는다 — head=HEAD는 커밋된 HEAD라 미커밋 변경이 빠진다.
 	test("head=HEAD stays a ref — it is not the working tree", () => {
 		expect(
 			parseSelection(new URLSearchParams("repo=/r&head=HEAD")).head,
@@ -188,9 +175,6 @@ describe("parseSelection with an explicit head", () => {
 describe("selectionCacheKey with an explicit head", () => {
 	const sel = (query: string) => parseSelection(new URLSearchParams(query));
 
-	// 계약: 키는 flight 클로저가 읽는 모든 입력의 전함수여야 한다. head가
-	// 빠지면 워킹트리 뷰와 브랜치 뷰가 같은 슬롯에 합류해 한쪽이 남의 diff를
-	// 받는다 — 예전에 해석된 base ref가 빠져 있어 실제로 겪은 그 버그다.
 	test("separates a worktree head from a ref head", () => {
 		expect(selectionCacheKey(sel("repo=/r"), null)).not.toBe(
 			selectionCacheKey(sel("repo=/r&head=dev"), null),
@@ -209,9 +193,7 @@ describe("selectionCacheKey with an explicit head", () => {
 		);
 	});
 
-	// 커밋된 rev에는 "아직 커밋 안 한 것"이 없다. 곧이곧대로 답하면
-	// `git diff <rev> <rev>`가 되어 에러 없이 빈 화면이 되므로, 의미 없는
-	// 조합을 유일하게 말이 되는 해석으로 푼다.
+	// 곧이곧대로 답하면 `git diff <rev> <rev>`가 되어 에러 없이 빈 화면이 된다.
 	test("a rev head with a working-tree base resolves to auto", () => {
 		for (const q of [
 			"head=feat",
@@ -224,14 +206,11 @@ describe("selectionCacheKey with an explicit head", () => {
 		}
 	});
 
-	// 사용자가 고른 진짜 base는 그대로 둔다 — 정규화는 "빈 화면 조합" 하나만
-	// 건드린다.
 	test("an explicit base ref survives alongside a head", () => {
 		const sel = parseSelection(new URLSearchParams("head=feat&base=develop"));
 		expect(sel.base).toEqual({ kind: "ref", ref: "develop" });
 	});
 
-	// 워킹트리를 보는 기본 뷰는 정규화 대상이 아니다.
 	test("a worktree head keeps the working-tree base", () => {
 		expect(parseSelection(new URLSearchParams("")).base).toEqual({
 			kind: "head",

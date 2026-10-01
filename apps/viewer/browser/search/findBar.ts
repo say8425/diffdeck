@@ -16,9 +16,9 @@ export interface FindBarDeps {
 	revealMatch(match: SearchMatch): void; // scroll + select
 	selectMatch(match: SearchMatch): void; // select only (no scroll)
 	clearSelection(): void;
-	ensureVisible(match: SearchMatch): void; // Task 5 (Task 3: no-op)
-	setExpandAll(on: boolean): void; // Task 5 (Task 3: no-op)
-	reapplyHighlights(): void; // Task 4 (Task 3: codeView.render())
+	ensureVisible(match: SearchMatch): void;
+	setExpandAll(on: boolean): void;
+	reapplyHighlights(): void;
 }
 
 export interface FindBar {
@@ -28,10 +28,8 @@ export interface FindBar {
 	setData(): void;
 	getQuery(): string;
 	getActiveMatch(): SearchMatch | null;
-	/** window의 Cmd/Ctrl+F 리스너를 해제한다. 뷰어는 SPA라 실사용에서 호출되지
-	 * 않지만(단일 인스턴스가 페이지 수명 내내 삶), 이 리스너 없이는 매 테스트가
-	 * 새 인스턴스를 만들 때마다 happy-dom의 프로세스 전역 window에 리스너가
-	 * 누적된다. */
+	// 테스트용 — happy-dom의 전역 window에 Cmd/Ctrl+F 리스너가 쌓이지 않게
+	// 떼어 낸다.
 	destroy(): void;
 }
 

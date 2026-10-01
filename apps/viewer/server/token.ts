@@ -19,12 +19,7 @@ export const readTokenSync = (env: Env = process.env): string | null => {
 	}
 };
 
-/**
- * Write the token out. Kept separate from minting it so the server can bind
- * its port first: the token file is what a client takes as "a daemon is
- * usable here", so persisting one for a server that then fails to start
- * points that client at whoever really owns the port.
- */
+/** Separate from minting so the server can bind its port first (see startDiffServer). */
 export const persistToken = (token: string, env: Env = process.env): void => {
 	mkdirSync(getCacheDir(env), { recursive: true, mode: 0o700 });
 	writeFileSync(getTokenPath(env), token, { mode: 0o600 });

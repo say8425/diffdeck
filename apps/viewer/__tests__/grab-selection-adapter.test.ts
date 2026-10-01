@@ -18,14 +18,13 @@ describe("resolveSelectionRange", () => {
 		expect(resolveSelectionRange(null, [])).toBeNull();
 	});
 	test("outer isCollapsed=true지만 getComposedRanges 없음 + fallback 전멸 → null", () => {
-		// Chrome의 shadow rescope: outer isCollapsed는 신뢰 불가
 		const sel: SelectionLike = { isCollapsed: true };
 		expect(resolveSelectionRange(sel, [])).toBeNull();
 		expect(resolveSelectionRange(sel, [{}])).toBeNull();
 	});
 	test("Chrome 실측: outer isCollapsed=true지만 getComposedRanges는 유효한 range → resolve", () => {
-		// Chrome이 shadow root를 rescope했을 때, outer isCollapsed=true지만
-		// getComposedRanges({shadowRoots})는 실제 드래그 선택을 반환한다
+		// Chrome은 shadow root 안의 선택을 바깥 Selection에서 collapsed로 보이므로
+		// isCollapsed를 믿지 않는다.
 		const sel: SelectionLike = {
 			isCollapsed: true,
 			direction: "forward",
@@ -73,7 +72,7 @@ describe("resolveSelectionRange", () => {
 		).toBeNull();
 	});
 	test("fallback: root.getSelection()의 첫 non-collapsed range, backward=false", () => {
-		const sel: SelectionLike = { isCollapsed: false }; // getComposedRanges 없음
+		const sel: SelectionLike = { isCollapsed: false };
 		const roots = [
 			{ getSelection: () => ({ isCollapsed: true }) as SelectionLike },
 			{

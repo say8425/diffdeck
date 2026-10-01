@@ -1,37 +1,20 @@
-// 파일이 가상화 윈도우에 "처음" 들어올 때 마운트 프레임이 얼면 안 된다.
+// 파일이 가상화 윈도우에 처음 들어올 때 마운트 프레임이 얼면 안 된다. 워커
+// 경로는 plain을 동기로 그리고 색은 나중에 입힌다. 워커가 없으면 첫 진입이
+// 파일 전체를 동기 토크나이즈한다(재진입 캐시로는 못 막는다 —
+// retokenize-cache.e2e.ts).
 //
-// non-worker 경로에서는 마운트 프레임 안에서 파일 전체(양쪽)가 동기
-// 토크나이즈된다(renderDiffWithHighlighter — 범위 무시, 문법 정합성 정책).
-// 4천 줄 파일이면 수백 ms 프리징 — retokenize-cache.e2e.ts가 고친 "재진입"과
-// 달리 이것은 "최초 진입" 비용이라 캐시 보존으로는 해결되지 않는다.
-// 수정: 뷰어가 workerManager를 주입해 워커 경로를 켠다 — plain AST가 동기로
-// 즉시 그려지고(토크나이즈 0) 색은 워커 완료 시 재렌더로 입혀진다.
-//
-// [설계 이탈 — team-lead 승인] 브리프 원안(전체 문서 스크롤 한 루프만으로
-// 측정)은 RED가 나오지 않는다. 이유 둘:
-// ① big.ts(4,000줄 × 전량 재작성 = 8,000줄 변경)는 largeFile.ts의
-//    LARGE_FILE_LINE_THRESHOLD(1,500) 초과라 첫 등장부터 항상 collapsed로
-//    마운트되고(Foundation 예외 2호 emptyWindow = zero-tokenize), 알파벳
-//    정렬상 bulk-*.ts보다 앞이라(big < bulk) 스크롤을 시작하기도 전에 이미
-//    오버스캔 안에 들어와 있다 — "비싼 첫 진입"이 스크롤 경로에 전혀 없다.
-//    나머지 bulk-*.ts(200줄)는 bulk-0 진입 때 이미 문법이 warm돼서 개별 첫
-//    진입이 150ms를 못 넘는다. 자매 태스크(perf/preserve-render-cache의
-//    retokenize-cache.e2e.ts)가 겪은 것과 동일한 big.ts auto-collapse
-//    이슈라, 같은 패턴으로 "헤더 클릭으로 펼치는 스텝"을 추가해 비싼
-//    non-collapsed 첫 렌더를 측정 윈도우 안에 강제로 포함시킨다.
-// ② 클릭과 스크롤을 같은 루프에 합치면, 클릭 직후에도 계속 진행되는
-//    스크롤이 (collapsed 상태의 작은 높이 때문에) big.ts를 오버스캔 밖으로
-//    밀어내 펼침 렌더가 완료되기 전에 recycle(언마운트)해버린다 — 진단으로
-//    확인(클릭 다음 프레임부터 컨테이너를 못 찾음). 그래서 펼침 갭 측정은
-//    스크롤 없이 별도 루프로 분리하고, 전체 문서 스크롤은 그 뒤 별도 루프로
-//    다른 파일들의 첫 진입을 훑는다.
+// 측정이 두 단계인 이유:
+// ① 스크롤만으로는 회귀가 갈리지 않는다. big.ts는 대형 파일이라 접힌 채
+//    (토크나이즈 없이) 마운트되고, bulk 파일은 문법이 이미 데워져 있다 — 그래서
+//    big.ts를 헤더로 펼쳐 잰다.
+// ② 펼침과 스크롤을 한 루프에 섞지 않는다. 스크롤이 펼침 렌더가 끝나기 전에
+//    big.ts를 오버스캔 밖으로 밀어 recycle한다.
 import { expect, launchViewer, test } from "./fixtures/app.ts";
 
 test("first entry into the overscan window must not freeze the frame", async ({
 	page,
 }) => {
-	// bigFileLines 4000 = 양쪽 8,000줄. bulk 12개는 문서를 충분히 길게 만들어
-	// 스크롤 스윕이 나머지 파일들의 첫 진입도 훑게 한다.
+	// bulk 12개는 2단계 스윕이 다른 파일들의 첫 진입을 훑을 길이를 만든다.
 	const viewer = await launchViewer([], { bulkFiles: 12, bigFileLines: 4000 });
 	try {
 		await page.goto(viewer.url);
@@ -40,16 +23,11 @@ test("first entry into the overscan window must not freeze the frame", async ({
 		});
 		await expect(page.locator("diffs-container").first()).toBeVisible();
 		await page.mouse.move(2, 2);
-		// 초기 렌더·하이라이트가 가라앉을 때까지 대기 — 측정 대상은 이후에
-		// 트리거하는 이벤트들뿐이어야 한다.
+		// 초기 렌더·하이라이트가 가라앉은 뒤에 잰다.
 		await page.waitForTimeout(2000);
 
-		// Phase 1: big.ts 펼침 갭 측정. big.ts는 LARGE_FILE_LINE_THRESHOLD
-		// 초과라 이 시점에 이미 collapsed로 마운트돼 있다(비싼 렌더 없음 —
-		// 헤더만). rAF 갭 루프 안에서 헤더를 클릭해 펼쳐 "비싼 non-collapsed
-		// 첫 렌더"를 강제로 측정 윈도우에 넣는다. 스크롤은 하지 않는다 — 위
-		// Global Constraints 주석 ②대로, 스크롤이 겹치면 collapsed의 작은
-		// 높이 때문에 펼침 렌더가 끝나기 전에 recycle될 수 있다.
+		// 1단계: 접힌 big.ts를 rAF 루프 안에서 펼쳐 첫 렌더 프레임을 잰다(스크롤
+		// 없이 — 머리 주석 ②).
 		const { expandGapMs, sawExpandedBig } = await page.evaluate(() => {
 			const findBig = (): Element | undefined =>
 				[...document.querySelectorAll("diffs-container")].find(
@@ -69,13 +47,9 @@ test("first entry into the overscan window must not freeze the frame", async ({
 						maxGap = Math.max(maxGap, now - last);
 						last = now;
 						frames++;
-						// CodeView.updateItem()은 render(immediate=false)를 통해 실제
-						// 동기 렌더를 queueRender로 "다음 rAF"에 미룬다(engine의
-						// UniversalRenderingManager) — 그래서 비싼 토크나이즈는 클릭
-						// 자체가 아니라 클릭 다음 프레임에서 터진다. 이 루프가 클릭
-						// *전부터* 이미 돌고 있어야 그 프레임의 갭을 잡을 수 있다 —
-						// 순서를 바꿔 클릭 후에 루프를 시작하면 이 가드는 조용히
-						// 무력화된다.
+						// 렌더는 클릭 다음 rAF에서 돈다(queueRender). 루프가 클릭 전부터
+						// 돌아야 그 프레임을 잡는다 — 클릭 뒤에 루프를 시작하면 조용히
+						// 빈 통과가 된다.
 						if (frames === 2 && !clicked) {
 							clicked = true;
 							const header = findBig()?.shadowRoot?.querySelector(
@@ -102,46 +76,24 @@ test("first entry into the overscan window must not freeze the frame", async ({
 			);
 		});
 
-		// 가짜 통과 방지: big.ts가 실제로 펼쳐져 코드 행이 렌더된 적이 있는지 —
-		// 클릭이 씹혀 collapsed로 남으면 갭이 0이라 그냥 "통과"해버리는 경로를
-		// 막는다(lockfile-freeze.e2e.ts의 textLen 하한 선례와 동일 패턴).
+		// 빈 통과 방지: 클릭이 씹혀 접힌 채로 남으면 갭이 작아 그냥 통과한다.
 		expect(sawExpandedBig).toBe(true);
 
-		// 워커 경로의 plain 렌더는 CI 여유를 크게 잡아도 수십 ms. 동기
-		// 토크나이즈(수백 ms~수 초, 프로토타입 실측 non-worker 4,886.5ms)와
-		// 차원이 다른 150ms 상한.
+		// 워커 경로의 plain 렌더는 수십 ms, 동기 토크나이즈는 수백 ms 이상이다 —
+		// 그 사이의 상한.
 		expect(expandGapMs).toBeLessThan(150);
 
-		// Phase 2: 문서를 216k px 훑는다 — big.ts를 지나 bulk-0..7이 처음 진입한다
-		// (big.ts가 약 159k까지 차지하고 bulk-7은 약 215k에서 마운트된다 — 실측. 문서
-		// 끝(약 256k)의 bulk-8..11은 닿지 않는다).
+		// 2단계: 휠로 문서를 훑어 bulk 파일들의 첫 진입을 잰다. 스윕(STEPS ×
+		// STEP_PX)은 문서 끝에 닿지 않아야 한다 — 아래 정확한 scrollTop 단언의
+		// 전제다.
 		//
-		// **스크롤은 휠 입력으로 한다 — JS의 `scrollTop` 대입으로 하지 말 것.** 한때
-		// rAF 콜백 안에서 `scrollTop += 900`을 했는데, CI(Linux 헤드리스 Chrome)에서
-		// 가끔 메인 스레드가 수십~수백 초 멈췄다(단독 반복 120회 중 스크롤이 끝내 안
-		// 끝난 것 8회 ≈ 7%, 스크롤 뒤 잠깐 무응답 4회). Chrome 트레이스로 잡은 멈춘
-		// 스택은 `FireAnimationFrame > ScrollableArea::SetScrollOffset > ScrollLayer >
-		// LayerTreeHost::WaitForCommitCompletion` — 메인 스레드의 스크롤 대입이 컴포지터
-		// 커밋 완료를 **동기로** 기다리는데 커밋이 끝나지 않았다(GPU 메인 스레드는
-		// 27초째 유휴). 네이티브에서 막혀 V8 프로파일러도 못 끼어들었고, 로컬(macOS)에선
-		// CPU 12배 스로틀로도 재현되지 않았다. Linux 헤드리스 Chrome의 문제이고, 그걸
-		// 건드리는 건 **프레임 안에서의 메인 스레드 스크롤 대입**이다 — 옛 스펙은 한
-		// 번에 240번 했다. 앱도 원리적으로 면역은 아니다(엔진이 스크롤 앵커를 보정할
-		// 때 렌더 경로에서 `scrollTo`를 부른다 — `CodeView.ts`), 다만 드물게 탈 뿐이다.
-		// 휠 입력은 컴포지터가 처리해 그 동기 대기를 거치지 않는다. 같은 시각 A/B(각
-		// 40회)에서 휠은 0회, `scrollTop`은 끝내 멈춤 3회(+짧은 무응답 1회) — 이 수치만으로는
-		// 통계적으로 갈리지 않는다(p≈0.12). 이 선택의 근거는 수치보다 **기제**다: 멈춘
-		// 스택이 스크롤 대입 안에 있었고 휠은 그 경로를 안 탄다. 두 번째 실패 모양(아래
-		// 색 폴이 끝내 false)도 같은 멈춤이다 — 프레임이 안 오면 엔진이 rAF에서 하는
-		// 렌더도 안 돌아 워커 결과가 DOM에 반영되지 않는다.
+		// 스크롤은 휠로 한다. 프레임 안에서 scrollTop을 대입하면 CI의 Linux
+		// 헤드리스 Chrome이 컴포지터 커밋 대기에서 멈출 수 있다(e2e.md). 그 멈춤은
+		// 아래 색 폴이 끝내 false인 모양으로도 나온다.
 		//
-		// 상한이 1단계(150ms)보다 느슨한 이유: 휠 스윕에서 회차별 **최악** 프레임 간격이
-		// 더 크다(CI 40회: 중앙값 120, 90% 145, 최대 165ms — 보통 프레임은 여전히 약
-		// 17ms다. 스윕이 두 배 길어져 워커 결과 도착과 겹치는 탓으로 보이나 확정하지
-		// 않았다). 이 단계는 원래 회귀를 가려내지 못한다(위 머리 주석 ① — bulk 파일은
-		// 문법이 이미 데워져 동기 경로로도 150ms를 못 넘는다). 회귀를 잡는 것은 1단계이고
-		// (워커 경로를 끄면 1단계가 4,652ms로 죽는다 — 뮤테이션 확인), 여기는 "첫 진입이
-		// 프레임을 수백 ms 얼리지 않는다"는 넓은 가드다 — 그래서 CI 최댓값의 약 두 배를 둔다.
+		// 상한이 1단계보다 느슨한 이유: 휠 스윕은 최악 프레임 간격이 더 크다.
+		// 회귀를 가르는 건 1단계이고(머리 주석 ①), 여기는 첫 진입이 프레임을
+		// 수백 ms 얼리지 않는다는 넓은 가드다.
 		await page.evaluate(() => {
 			const w = window as unknown as {
 				__gaps: { max: number; frames: number; stop: boolean };
@@ -176,21 +128,18 @@ test("first entry into the overscan window must not freeze the frame", async ({
 				scrolledTo: (document.getElementById("diff") as HTMLElement).scrollTop,
 			};
 		});
-		// 가짜 통과 방지: 휠 입력이 **하나도 빠짐없이** 스크롤로 이어졌는지. 휠이 씹히면
-		// 파일이 새로 진입하지 않아 갭이 작게 나온다 — 150k 같은 느슨한 하한은 big.ts만
-		// 지나도(bulk 진입 0개) 참이 된다. CI 40회·로컬 모두 정확히 216,000에 닿았다.
+		// 빈 통과 방지: 휠이 씹히면 파일이 새로 진입하지 않아 갭이 작게 나온다 —
+		// 느슨한 하한이 아니라 정확한 값을 단언한다.
 		expect(scrolledTo).toBe(STEPS * STEP_PX);
 
-		// 가짜 통과 방지: 파일들이 실제로 마운트됐는지.
 		const mounted = await page.evaluate(
 			() => document.querySelectorAll("diffs-container").length,
 		);
 		expect(mounted).toBeGreaterThan(0);
 		expect(scrollGapMs).toBeLessThan(300);
 
-		// plain → 색 전이: 컨테이너들에 하이라이트가 "결국" 적용된다 (워커
-		// 옵션 정합이 깨지면 여기서 영영 실패한다 — Global Constraints의
-		// 옵션 정합 함정 참조).
+		// plain → 색 전이가 결국 일어나는지 보는 liveness 폴이다(예산 단언은 위의
+		// 두 상한).
 		await expect
 			.poll(
 				() =>
@@ -202,23 +151,9 @@ test("first entry into the overscan window must not freeze the frame", async ({
 									?.querySelector("span[style]") != null,
 						),
 					),
-				// liveness 폴이다 — "색이 결국 입혀지는가"만 본다. 이 테스트의
-				// 하드 예산 단언은 위의 expandGapMs(150ms)와 scrollGapMs(300ms)다.
-				//
-				// 값이 25초인 건 예산 계산의 결과다. 휠 스윕으로 바꾼 뒤 이 폴 앞
-				// 구간이 길어졌다(CI 전체 스위트에서 스펙 총 23.9초, 단독 A/B
-				// 중앙값 17.8초 — 예전 `scrollTop` 방식은 9.6~17.6초). 테스트
-				// 타임아웃은 60초이므로 24 + 25 = 49 < 60으로 여유가 11초 남는다
-				// (30초로 두면 54라 여유가 6초뿐이다). 테스트 타임아웃이 먼저 터지면
-				// 세 가지를 잃는다: 상한이 무의미해지고, 폴 전용 실패 메시지가
-				// 일반 타임아웃으로 퇴화하며, Playwright가 테스트를 잘라 finally의
-				// viewer.stop()이 stderr를 못 찍는다. **이 두 숫자는 서로를 알고
-				// 있어야 한다** — 한쪽을 바꾸면 다른 쪽을 다시 계산할 것.
-				//
-				// 올린 이유: run 30752383588에서 이 폴이 정확히 20초를 소진하고
-				// 초과했다(테스트 총 37.6초, pre-poll 17.6초). 그 실행은 요청 7건이
-				// 전부 200이라 서버 결함은 아니었다 — 다만 원인이 단순 감속인지
-				// 하이라이트 경로의 stall인지는 확정하지 못했다.
+				// 테스트 타임아웃(playwright.config.ts)과 짝인 값이다 — 앞 구간과 이
+				// 폴이 그 안에 들어야 폴의 실패 메시지와 finally의 viewer.stop()
+				// stderr가 남는다. 한쪽을 바꾸면 다른 쪽도 다시 계산한다.
 				{ timeout: 25_000 },
 			)
 			.toBe(true);
@@ -230,10 +165,8 @@ test("first entry into the overscan window must not freeze the frame", async ({
 test("viewer renders highlighted output even when the worker script fails to load", async ({
 	page,
 }) => {
-	// 폴백: 워커 스크립트 로드가 실패하면(404/차단) 엔진은 이를 감지하지 못해
-	// diff가 영구 공백이 된다 — main.ts의 앱 레벨 워치독(recoverFromWorkerLoadFailure)이
-	// error 이벤트에서 풀을 종료하고 CodeView를 workerManager 없이 재구성해
-	// non-worker 동기 경로로 복구한다. 워커 요청을 route로 차단해 그 복구를 검증한다.
+	// 워커 로드를 막아 워치독(recoverFromWorkerLoadFailure)이 워커 없이
+	// 복구하는지 본다(viewer.md).
 	await page.route("**/worker.js", (route) => route.abort());
 	const viewer = await launchViewer([]);
 	try {
@@ -241,7 +174,6 @@ test("viewer renders highlighted output even when the worker script fails to loa
 		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/, {
 			timeout: 15_000,
 		});
-		// 기본 픽스처의 hello.ts가 하이라이트되어 렌더된다 (span[style] 존재).
 		await expect
 			.poll(
 				() =>

@@ -19,8 +19,7 @@ describe("repoDisplayName", () => {
 		expect(repoDisplayName("/Users/p/dev/diffdeck")).toBe("diffdeck");
 	});
 
-	// 후행 슬래시는 별개의 폴백 분기다. 커버리지 게이트가 branch를 세지
-	// 않으므로(CLAUDE.md) 분기마다 일부러 찔러 둔다.
+	// 커버리지 게이트는 branch를 세지 않아 후행 슬래시 폴백 분기를 일부러 찌른다.
 	test("후행 슬래시를 벗긴다", () => {
 		expect(repoDisplayName("/Users/p/dev/diffdeck/")).toBe("diffdeck");
 		expect(repoDisplayName("/Users/p/dev/diffdeck///")).toBe("diffdeck");
@@ -35,7 +34,6 @@ describe("repoDisplayName", () => {
 		expect(repoDisplayName("diffdeck")).toBe("diffdeck");
 	});
 
-	// 한글 경로가 뭉개지면 라벨이 자기 워크트리를 잘못 말한다.
 	test("비-ASCII 이름을 보존한다", () => {
 		expect(repoDisplayName("/Users/p/dev/무신사-프론트")).toBe("무신사-프론트");
 	});
@@ -48,15 +46,12 @@ describe("findWorktree", () => {
 		expect(findWorktree([a, b], "/w/b")).toBe(b);
 	});
 
-	// repo는 CLI 기동 시점의 process.cwd()라 리포 루트라는 보장이 없다.
-	// 정확 일치만 보면 하위 디렉토리에서 켰을 때 브랜치가 조용히 사라진다.
+	// repo는 CLI 기동 시점의 cwd라 리포 루트가 아닐 수 있다.
 	test("하위 디렉토리에서 기동해도 그 워크트리를 찾는다", () => {
 		const a = wt({ path: "/w/a" });
 		expect(findWorktree([a], "/w/a/apps/viewer")).toBe(a);
 	});
 
-	// 중첩 워크트리(.claude/worktrees/* 관례)에서 바깥 것이 이기면
-	// 라벨이 엉뚱한 워크트리를 말한다 — 사용자가 겪은 바로 그 혼동이다.
 	test("중첩 워크트리에서는 가장 안쪽이 이긴다", () => {
 		const outer = wt({ path: "/w/a", branch: "main" });
 		const inner = wt({ path: "/w/a/.claude/worktrees/feat", branch: "feat" });
@@ -100,8 +95,6 @@ describe("repoLabelView", () => {
 		expect(v.documentTitle).toBe("diffdeck · main — diffdeck");
 	});
 
-	// 사용자가 겪은 형태. 워크트리 이름만 보이면 어느 리포인지 알 수 없고,
-	// 리포 이름만 보이면 어느 워크트리인지 알 수 없다 — 둘 다 말한다.
 	test("링크된 워크트리에서는 리포를 앞에 덧붙인다", () => {
 		const inner = "/Users/p/dev/diffdeck/.claude/worktrees/feat+ABC-1";
 		const v = repoLabelView(
@@ -113,8 +106,7 @@ describe("repoLabelView", () => {
 		expect(v.name).toBe("feat+ABC-1");
 		expect(v.branch).toBe(" · feat/ABC-1");
 		expect(v.title).toBe(`${inner} · feat/ABC-1`);
-		// 탭은 좁고 오른쪽부터 잘리므로 **구별되는 쪽**이 앞에 와야 한다.
-		// 리포 이름은 워크트리마다 같아서 탭을 가르지 못한다.
+		// 탭은 오른쪽부터 잘리므로 구별되는 워크트리 이름을 앞에 두고 리포 접두는 넣지 않는다.
 		expect(v.documentTitle).toBe("feat+ABC-1 · feat/ABC-1 — diffdeck");
 	});
 
@@ -129,8 +121,7 @@ describe("repoLabelView", () => {
 		expect(v.name).toBe("diffdeck-feat");
 	});
 
-	// bare 리포는 메인 항목이 bare라 worktrees[]에서 빠진다. 그래서 서버가
-	// 필터 전 원본에서 읽어 보내고, 관례상 `.git` 접미는 벗겨서 보여준다.
+	// bare 리포의 메인 항목은 worktrees[]에서 빠지므로 리포 루트는 따로 온다.
 	test("bare 리포 루트의 .git 접미를 벗긴다", () => {
 		const v = repoLabelView(
 			"/srv/wt-feat",
@@ -198,8 +189,7 @@ describe("repoLabelView", () => {
 		expect(v.documentTitle).toBe("a — diffdeck");
 	});
 
-	// /api/refs가 아직 안 왔거나 실패한 첫 프레임. 이름은 repo 경로에서
-	// 즉시 알 수 있으므로 브랜치와 리포 접두만 비운다.
+	// /api/refs가 오기 전(또는 실패한) 첫 프레임이다.
 	test("워크트리 목록이 비어도 이름은 말한다", () => {
 		const v = repoLabelView(MAIN, [], null);
 		expect(v.scope).toBe("");
@@ -208,8 +198,6 @@ describe("repoLabelView", () => {
 		expect(v.title).toBe("/Users/p/dev/diffdeck");
 	});
 
-	// 리포 루트를 모르면 접두를 지어내지 않는다 — 틀린 리포 이름을 말하느니
-	// 아무 말도 안 하는 편이 낫다.
 	test("repoRoot가 null이면 접두를 붙이지 않는다", () => {
 		const inner = "/w/repo/.claude/worktrees/feat";
 		const v = repoLabelView(inner, [wt({ path: inner, branch: "feat" })], null);
@@ -217,8 +205,7 @@ describe("repoLabelView", () => {
 		expect(v.name).toBe("feat");
 	});
 
-	// 루트에 얹힌 리포는 이름이 없다 — 접두 자리에 빈 이름을 넣으면
-	// 라벨이 " / feat"처럼 시작한다.
+	// 루트("/")의 리포는 이름이 없다 — 빈 이름을 접두로 쓰면 라벨이 " / feat"로 시작한다.
 	test("리포 루트가 이름을 못 내면 접두를 생략한다", () => {
 		const v = repoLabelView("/w", [wt({ path: "/w", branch: "feat" })], "/");
 		expect(v.scope).toBe("");
@@ -253,7 +240,7 @@ describe("repoLabelView — 무엇을 보고 있는지", () => {
 	const INNER = "/Users/p/dev/diffdeck/.claude/worktrees/feat+ABC-1";
 	const trees = [wt(), wt({ path: INNER, branch: "feat/ABC-1" })];
 
-	// 견줄 기준은 말하지 않는다 — 화면에서 고를 수 없어 정보가 되지 못했다.
+	// 견줄 기준은 말하지 않는다 — 화면에서 고를 수 없는 값이다(viewer-toolbar.md).
 	test("워크트리 뷰의 title은 경로와 브랜치만 말한다", () => {
 		const v = repoLabelView(MAIN, [wt()], MAIN, { head: null });
 		expect(v.branch).toBe(" · main");
@@ -266,9 +253,7 @@ describe("repoLabelView — 무엇을 보고 있는지", () => {
 		expect(v.title).toBe("/Users/p/dev/diffdeck · feature/other");
 	});
 
-	// **브랜치를 head로 보면 워크트리는 결과에 영향을 주지 않는다** — 어느
-	// 워크트리에서 보든 같은 diff다(실측). 이름을 그대로 두면 "이 워크트리의
-	// 무언가를 보고 있다"는 잘못된 인상을 준다.
+	// 브랜치를 head로 보면 어느 워크트리에서 보든 같은 diff라, 워크트리 이름은 잘못된 인상을 준다.
 	test("브랜치 뷰에서는 워크트리 이름을 빼고 그 브랜치를 주인공으로 세운다", () => {
 		const v = repoLabelView(INNER, trees, MAIN, {
 			head: "feature/other",
@@ -278,7 +263,6 @@ describe("repoLabelView — 무엇을 보고 있는지", () => {
 		expect(v.branch).toBe("");
 	});
 
-	// 예전에는 라벨이 워크트리의 브랜치를 말해 보고 있지도 않은 곳을 가리켰다.
 	test("브랜치 뷰의 라벨은 워크트리의 브랜치를 말하지 않는다", () => {
 		const v = repoLabelView(INNER, trees, MAIN, {
 			head: "feature/other",

@@ -4,10 +4,7 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>diffdeck</title>
-		<!-- 늘 쓰는 두 폰트는 CSS를 파싱하기 전에 받기 시작한다 — swap으로 시스템
-		     폰트가 먼저 그려졌다 바뀌는 깜박임을 줄인다. D2Coding은 한글이 있을
-		     때만 필요하므로 미리 받지 않는다(unicode-range 계약). crossorigin은
-		     폰트 preload가 캐시 항목을 @font-face 요청과 맞추는 데 필요하다. -->
+		<!-- crossorigin이 없으면 preload와 @font-face 요청의 캐시 항목이 갈린다. -->
 		<link
 			rel="preload"
 			href="fonts/PretendardVariable.woff2"
@@ -23,14 +20,8 @@
 			crossorigin
 		/>
 		<style>
-			/* 폰트 — UI는 Pretendard, 코드는 JetBrains Mono(한글은 D2Coding).
-			   파일은 전부 이 뷰어가 직접 싣는다(fonts/README.md). 시스템 폰트에
-			   맡기면 OS마다 화면이 달라지고, 실제로 같은 레이아웃 e2e가 macOS와
-			   Linux CI에서 서로 다른 폭을 쟀다.
-
-			   `font-display: swap` — 로컬 서버라 수십 ms면 도착하지만, 그 사이
-			   글자를 숨기지는 않는다. 바뀐 글꼴로 폭이 달라지는 곳(PR 칩의 바닥
-			   폭)은 main.ts가 `document.fonts`의 loadingdone에서 다시 잰다. */
+			/* 폰트는 fonts.md. swap이라 폭을 재서 고정하는 곳(PR 칩)은
+			   main.ts가 loadingdone에서 다시 잰다. */
 			@font-face {
 				font-family: "Pretendard Variable";
 				font-style: normal;
@@ -38,11 +29,7 @@
 				font-display: swap;
 				src: url("fonts/PretendardVariable.woff2") format("woff2-variations");
 			}
-			/* JetBrains Mono는 공식 가변 폰트 전체다(서브셋이 아니다 — 화살표·수학
-			   기호·박스 문자까지 있어야 코드가 전부 이 폰트로 그려진다. Fontsource
-			   서브셋은 그 글자들이 빠져 OS 폰트로 떨어졌다). 이탤릭도 둔다 —
-			   pierre-dark는 Markdown 이탤릭 등에 italic을 쓰고, 없으면 합성
-			   기울임이 된다. */
+			/* 이탤릭도 싣는다 — 테마가 italic을 쓰고, 없으면 합성 기울임이 된다. */
 			@font-face {
 				font-family: "JetBrains Mono Variable";
 				font-style: normal;
@@ -58,14 +45,8 @@
 				src: url("fonts/JetBrainsMono-Italic-wght.woff2")
 					format("woff2-variations");
 			}
-			/* JetBrains Mono엔 한글이 없어 코드의 한글은 여기로 떨어진다.
-			   **unicode-range를 한글로 좁힌 것이 계약이다** — D2Coding은 한자·
-			   가나 등도 갖고 있어서, 범위가 없으면 JetBrains Mono에 없는 그런 글자
-			   하나를 그리려고 한글이 없는 diff에서도 1.5MB를 받고 그 글자만
-			   D2Coding의 모양이 된다. 좁혀 두면 그런 글자는 시스템 폰트로 떨어진다.
-			   범위: 한글 자모·호환 자모·확장 A/B·음절·반각 호환 자모와 원화 기호
-			   (₩ U+20A9, 전각 ￦ U+FFE6 — JetBrains Mono에 없다). 볼드는 싣지
-			   않았다(합성 볼드 — fonts/README.md). */
+			/* unicode-range를 한글과 원화 기호로 좁힌 것이 계약이다 — 넓히면 한자·가나
+			   한 글자 때문에 한글이 없는 diff에서도 D2Coding 전체를 받는다. */
 			@font-face {
 				font-family: "D2Coding";
 				font-style: normal;
@@ -77,28 +58,18 @@
 					U+D7B0-D7FF, U+FFA0-FFDC, U+FFE6;
 			}
 			:root {
-				/* 뷰어는 다크 전용이다. 페이지가 선언해야 스크롤바·캐럿·placeholder·
-				   포커스 링 같은 UA 기본값도 OS 설정과 무관하게 다크로 그려진다(파일
-				   트리는 아래 `file-tree-container` 규칙이 따로 맡는다). */
+				/* 다크 전용이라 UA 기본값(스크롤바·캐럿 등)도 다크로 그린다(viewer.md). */
 				color-scheme: dark;
-				/* 끝의 시스템 폰트들은 폰트 파일을 못 받았을 때(서빙 실패)의 폴백이다. */
 				--vd-font-ui:
 					"Pretendard Variable", system-ui, -apple-system, "Segoe UI",
 					sans-serif;
 				--vd-font-code:
 					"JetBrains Mono Variable", "D2Coding", ui-monospace, "SF Mono", Menlo,
 					Consolas, monospace;
-				/* 두 vendored 엔진에 폰트를 넘기는 통로. 둘 다 shadow DOM이라 페이지
-				   CSS는 닿지 않지만 커스텀 프로퍼티는 상속으로 넘어간다 — 엔진이
-				   `var(--diffs-font-family, 기본값)`·`--trees-font-family-override`로
-				   읽도록 이미 열어 둔 자리다(엔진 코드는 손대지 않는다). */
+				/* shadow DOM 엔진에는 상속되는 커스텀 프로퍼티로만 폰트를 넘긴다. */
 				--diffs-font-family: var(--vd-font-code);
-				/* 리거처를 끈다. JetBrains Mono는 `calt`로 `=>`·`!==`·`->`를 한
-				   모양으로 잇는데, diff 뷰어는 문자 단위로 칠하는 곳이 셋이다(줄 안
-				   변경 강조·찾기 하이라이트·grab 문자 범위) — 그 경계가 리거처 한가운데
-				   떨어지면 반쪽만 칠해지고, 무엇보다 diff는 실제 글자를 보여줘야 한다.
-				   엔진이 `font-feature-settings: var(--diffs-font-features)`로 읽는
-				   자리라 엔진 코드는 손대지 않는다. */
+				/* 리거처를 끈다 — 줄 안 변경 강조·찾기·grab이 글자 단위로 칠해서
+				   리거처 한가운데에 경계가 떨어지면 반쪽만 칠해진다. */
 				--diffs-font-features: "calt" 0, "liga" 0;
 				--diffs-header-font-family: var(--vd-font-ui);
 				--trees-font-family-override: var(--vd-font-ui);
@@ -141,68 +112,28 @@
 				align-items: center;
 				gap: 8px;
 			}
-			/* 오른쪽은 **조작만** 산다. 툴바가 두 축으로 갈리기 때문이다: 왼쪽은
-			   "지금 무엇을 보고 있는가"를 한 문장으로 말하고(트리거 · PR ·
-			   개수 · 변경량), 오른쪽은 화면을 다룬다. 예전엔 뷰 모드와
-			   새로고침이 왼쪽 한복판에 앉아 그 문장을 두 동강 냈다.
-
-			   **순서 자체가 계약이다** — `찾기 · 새로고침 │ Unified/Split · 트리 │ ⋯`:
-			   ① **찾기가 맨 앞이어야 한다(실측).** find 바는 돋보기 자리에서
-			      340px로 펼쳐지는데, 이 그룹은 오른쪽 끝에 고정돼 있어 바가
-			      자라면 **그 왼쪽 이웃만** 밀린다. 찾기가 첫 자리면 밀릴 이웃이
-			      없다 — 실측: 찾기 우선이면 바를 열어도 모든 컨트롤 이동량 0px,
-			      세그먼트를 앞에 두면 −285px 점프.
-			   ② 가운데 셋은 **순간 동작 / 상태 토글**로 갈랐다. 찾기·새로고침은
-			      눌러도 흔적이 없고, Unified/Split·트리 토글은 지금 어떤지를
-			      상시로 말한다. 118px 세그먼트가 두 무리 사이에 놓여 축의 경계와
-			      시각적 경계가 겹친다.
-			   ③ 트리 토글이 ⋯ 바로 옆인 것은 메뉴의 `Hide file tree`가 **같은
-			      토글**이기 때문이고, 레이아웃 짝이 ⋯ 에 붙는 것은 메뉴 여섯 중
-			      넷이 레이아웃이기 때문이다(Flatten · Tree on right ·
-			      Hide file tree · Fold with tree). ⋯ 가 마지막인 건 관례다 —
-			      메뉴는 툴바 아래로 떨어져 이웃을 가리지 않으므로 기계적 제약은
-			      아니지만, "자리를 못 얻은 나머지 전부"는 줄을 닫는 쪽이 맞다. */
+			/* 오른쪽은 조작만 담고 순서가 계약이다(viewer-toolbar.md).
+			   그룹이 오른쪽 끝에 붙어 있어 find 바가 펼쳐지면 그 왼쪽 이웃만
+			   밀리므로 찾기가 맨 앞이어야 한다. */
 			.tb-right {
 				margin-left: auto;
 			}
-			/* 좁은 창에서 왼쪽 그룹이 오그라들 수 있어야 한다. flex item의 기본
-			   min-width:auto가 min-content 아래로 줄어드는 것을 막는데, 라벨이
-			   붙으면 그 min-content가 최대 260px 늘어 .tb-right(찾기·트리토글·⋯)를
-			   화면 밖으로 밀어낸다 — 실측: 라벨 없이는 460px에서도 멀쩡하던 툴바가
-			   560px에서 이탈했다. */
+			/* 트리거 폭 사슬의 첫 마디(viewer-toolbar.md) — 기본
+			   min-width:auto면 라벨 폭만큼 툴바의 최소 폭이 늘어 좁은 창에서
+			   .tb-right가 화면 밖으로 밀린다. */
 			.tb-left {
 				min-width: 0;
 			}
-			/* 줄어드는 몫은 트리거(와 PR 칩)가 진다. 뒤따르는 마디(개수 ·
-			   변경량)는 짧고 고정폭에 가까운데 트리거만 브랜치명만큼 길어지기
-			   때문이고, 이 규칙이 없으면 #status가 두 줄로 접혀 툴바 높이가
-			   43 → 49px로 뛴다(실측).
-
-			   예외는 아래 `#toolbar .tb-picker`가 되돌려 받는다. **특이도로**
-			   이긴다(0,1,1 대 0,1,0) — 예전엔 `.tb-picker`라 둘 다 (0,1,0)이고
-			   소스 순서로만 이겼는데, 그러면 피커 규칙을 한곳으로 모으는
-			   평범한 정리가 트리거를 조용히 `flex: none`으로 되돌린다. */
+			/* 줄어드는 몫은 트리거와 PR 칩만 진다 — 없으면 #status가 두 줄로
+			   접힌다. 둘은 `#toolbar`로 스코프한 규칙이 특이도로 되돌려 받는다
+			   (소스 순서에 기대지 않는다). */
 			.tb-left > * {
 				flex: none;
 			}
-			/* 지금 보는 브랜치의 PR — 아이콘·번호·제목을 담은 버튼형 칩이고
-			   누르면 GitHub의 그 PR이 새 탭으로 열린다. `#toolbar`로 스코프한
-			   것은 `.tb-left > * { flex: none }`을 특이도로 이기기 위해서다 —
-			   트리거 규칙과 같은 이유(아래 `.tb-picker` 주석).
-
-			   **줄어드는 순서가 계약이다: 칩의 제목 → 트리거.** flex shrink는
-			   basis로 가중되므로 둘 다 `1`이면 흔한 60~80자 PR 제목(트리거보다
-			   길다)이 몫을 나눠 가져, 공간이 남는데도 트리거가 잘린다 — 트리거의
-			   `max-width`를 걷어낸 이유(아래 `.tb-picker` 주석)를 칩이 되살리는
-			   셈이다. 그래서 가중치를 아주 크게 줘 칩이 먼저 양보한다. **1000으로는
-			   모자랐다(실측)**: 트리거가 여전히 1px 안팎의 몫을 받아 라벨이
-			   187 → 186px이 되고, 1px이라도 넘치면 `text-overflow`가 말줄임표를
-			   그린다. 100000이면 그 몫이 1px의 수백분의 1이다. 바닥
-			   (`min-width`)은 main.ts가 아이콘+번호 폭으로 잰다(`chipMinWidth` —
-			   번호 길이가 PR마다 달라 CSS 상수로는 못 적는다). 제목은 hover
-			   툴팁에서 전부 읽히지만 트리거는 대신 말해 줄 곳이 없다.
-			   `overflow: hidden`은 바닥보다 더 눌린 극단에서 아이콘·번호가 상자
-			   밖으로 새어 #status에 겹치지 않게 한다. */
+			/* 줄어드는 순서가 계약이다: 칩 제목이 먼저, 트리거가 나중. 100000은
+			   트리거가 1px도 내주지 않을 만큼 큰 값이다(viewer-toolbar.md).
+			   바닥 폭은 main.ts가 재서 인라인 min-width로 건다. overflow: hidden은
+			   그보다 더 눌렸을 때 내용이 #status 위로 새지 않게 한다. */
 			#toolbar #pr-chip {
 				box-sizing: border-box;
 				height: 26px;
@@ -219,8 +150,8 @@
 				border-radius: var(--vd-radius);
 				text-decoration: none;
 			}
-			/* author display를 선언했으므로 [hidden] 짝이 필수다(.claude/rules/viewer.md). PR이
-			   없는 브랜치에서 칩이 빈 상자로 남는다. */
+			/* author display의 [hidden] 짝(viewer.md) — 빠지면 PR 없는
+			   브랜치에서 빈 칩이 남는다. */
 			#toolbar #pr-chip[hidden] {
 				display: none;
 			}
@@ -239,9 +170,7 @@
 				white-space: nowrap;
 				color: var(--vd-fg-muted);
 			}
-			/* PR 상태 색. 모양도 상태마다 달라(prBadge.ts) 색만으로 가르지 않는다.
-			   초록·빨강은 앱에 이미 있는 add·del 값이고, 보라만 새로 들였다
-			   (GitHub의 merged 색 — 이 어휘는 사용자가 GitHub에서 이미 익혔다). */
+			/* merged 보라만 앱에 새로 들인 색이다(GitHub의 merged 색). */
 			.pr-icon[data-state="open"] {
 				color: var(--vd-success);
 			}
@@ -254,20 +183,16 @@
 			.pr-icon[data-state="closed"] {
 				color: #f85149;
 			}
-			/* 전체 변경량 — 파일 헤더 배지와 같은 add·del 어휘를 쓴다. 앱에 이미
-			   있는 두 색이라 새 값을 만들지 않는다: --vd-success는 grab 보내기의
-			   ok 상태가, #f85149는 fail 상태가 쓰는 바로 그 값이고, 둘이 diff의
-			   add·del 쌍이라는 것은 .grab-l-side 주석이 이미 적고 있다. 엔진의
-			   --diffs-addition-base를 쓸 수는 없다 — 그 토큰은 shadow root
-			   안에만 살아서 툴바에서는 해석되지 않는다. */
+			/* 엔진의 --diffs-addition-base 등은 shadow root 안에서만 해석돼 같은
+			   add·del 색을 여기 따로 적는다. */
 			#change-add {
 				color: var(--vd-success);
 			}
 			#change-del {
 				color: #f85149;
 			}
-			/* One control height for every toolbar widget — without it, line-height:
-     normal + differing paddings yield 25/26/26.5/27px mismatches. */
+			/* One control height for every toolbar widget (line-height and paddings
+			   otherwise disagree by a pixel or so). */
 			#toolbar button {
 				box-sizing: border-box;
 				height: 26px;
@@ -286,8 +211,7 @@
 			#toolbar button:hover {
 				background: var(--vd-hover);
 			}
-			/* Segmented control (Pierre-style): inset pill, active segment raised.
-     fieldset 기본 스타일(margin/min-inline-size)을 리셋해 div 시절과 동일하게 유지. */
+			/* margin·min-inline-size는 fieldset의 UA 기본값을 리셋한다. */
 			#toolbar .tb-seg {
 				box-sizing: border-box;
 				height: 26px;
@@ -329,11 +253,9 @@
 			#toolbar #tree-toggle-btn {
 				padding: 0 7px;
 			}
-			/* Hide the toolbar search button while the find bar is already open
-			   (redundant affordance). 닫힘 안무: 바가 아이콘 자리로 접힌 "뒤에"
-			   돋보기가 나타나야 자연스러우므로, 보이는 상태(기본 규칙)의 전이에
-			   0.12s 지연을 둔다 — CSS 전이는 목적지 상태의 transition을 쓰므로
-			   이 지연은 닫힘(나타남)에만 적용된다. */
+			/* 돋보기는 find 바가 열려 있는 동안 숨는다. 0.12s 지연은 바가 접힌 뒤에
+			   나타나게 하려는 것이고, 전이는 목적지 상태의 것을 쓰므로 닫힐 때만
+			   걸린다. */
 			#toolbar #find-open {
 				transition:
 					opacity 0.16s ease 0.12s,
@@ -342,7 +264,6 @@
 			#toolbar:has(#find-bar:not([hidden])) #find-open {
 				display: none;
 				opacity: 0;
-				/* 열림: 바가 즉시 자리를 차지하므로 지연 없이 빠르게 사라진다. */
 				transition:
 					opacity 0.1s ease,
 					display 0.1s allow-discrete;
@@ -352,10 +273,7 @@
 					opacity: 0;
 				}
 			}
-			/* In-app find bar (opens on Cmd/Ctrl+F). Sits in the toolbar; hidden by
-			   default. 열릴 때 돋보기 자리에서 가로로 펼쳐지고(max-width 0→340px),
-			   닫힐 때 같은 모션으로 접힌다 — @starting-style + allow-discrete로
-			   display:none 양방향 트랜지션. */
+			/* @starting-style + allow-discrete로 display:none까지 양방향 전이한다. */
 			#toolbar .tb-find {
 				box-sizing: border-box;
 				height: 26px;
@@ -399,10 +317,9 @@
 			}
 			@media (prefers-reduced-motion: reduce) {
 				#toolbar #find-open,
-				/* :has() 변형도 명시해야 열림 방향(더 높은 특이도 규칙의 전이)까지 덮는다 */
+				/* :has() 변형도 적어야 특이도가 더 높은 열림 쪽 전이까지 덮는다 */
 				#toolbar:has(#find-bar:not([hidden])) #find-open,
 				#toolbar .tb-find {
-					/* 전이 제거 → display가 즉시 전환되어 기존 즉시 표시/숨김으로 강등 */
 					transition: none;
 				}
 			}
@@ -447,8 +364,6 @@
 				gap: 6px;
 				color: var(--vd-fg);
 			}
-			/* 토글 스위치: 세그먼트 컨트롤과 같은 인셋 트랙(#2a2a2c 오프 상태)과
-			   accent 온 상태, 동일한 .15s 트랜지션으로 Pierre 팔레트에 맞춘다. */
 			#toolbar input[type="checkbox"] {
 				appearance: none;
 				-webkit-appearance: none;
@@ -518,8 +433,8 @@
 			#overflow-menu[hidden] {
 				display: none;
 			}
-			/* 메뉴 항목: 라벨 왼쪽·스위치 오른쪽 (설정 리스트 관례). input이 DOM
-			   앞에 있지만 order로 시각 순서만 뒤로 보낸다(텍스트는 익명 아이템 order 0). */
+			/* input은 DOM에서 앞에 있지만 order로 스위치를 오른쪽에 보낸다(텍스트는
+			   익명 아이템이라 order 0). */
 			#overflow-menu label {
 				display: flex;
 				align-items: center;
@@ -531,14 +446,10 @@
 			#overflow-menu input[type="checkbox"] {
 				order: 1;
 			}
-			/* 설정 항목과 부가 정보를 가른다. 메뉴의 flex gap(10px)이 위아래
-			   여백을 주므로 margin은 두지 않는다. */
 			#overflow-menu .menu-divider {
 				height: 1px;
 				background: var(--vd-border);
 			}
-			/* 토글 행과 같은 배치(이름 왼쪽·값 오른쪽)를 따르되, 조작이 아니라
-			   정보이므로 muted로 눕는다. */
 			#overflow-menu #version-link {
 				display: flex;
 				align-items: center;
@@ -554,33 +465,21 @@
 			#overflow-menu #version-value {
 				font-variant-numeric: tabular-nums;
 			}
-			/* 견줄 기준 피커. 오버플로 메뉴와 같은 종(種)이다 — 툴바 컨트롤에
-			   앵커된 절대 위치 패널이라 grab 팝오버의 좌표 계산이 필요 없다. */
+			/* 피커는 오버플로 메뉴처럼 툴바에 앵커한 절대 위치 패널이다(grab의
+			   computePlacement를 쓰지 않는다). */
 			.tb-picker {
 				position: relative;
 			}
-			/* 트리거는 조작이자 **정보 표출**이다 — 지금 보고 있는 리포·워크트리·
-			   브랜치를 통째로 말하므로 상한을 두지 않는다. 폭을 붙드는 기제는
-			   flex shrink 하나뿐이고, 그건 옛 라벨에서 이미 실측으로 확인했다
-			   (161자 브랜치에서도 툴바가 넘치지 않았다).
-
-			   **display:flex가 여기서 계약이다.** 블록이면 안쪽 inline-flex
-			   버튼이 flex item이 아니라서 줄어드는 몫을 물려받지 못하고 제
-			   자연폭 그대로 상자를 넘쳐, 트리거가 아무리 좁아져도 라벨은
-			   한 번도 잘리지 않는다(실측: scrollWidth == clientWidth). */
+			/* display: flex가 계약이다 — 블록이면 안쪽 버튼이 flex item이 아니어서
+			   줄어든 몫을 받지 못하고 라벨이 잘리지 않는다. max-width는 두지
+			   않는다(viewer-toolbar.md). */
 			#toolbar .tb-picker {
 				display: flex;
 				flex: 0 1 auto;
 				min-width: 0;
 			}
-			/* **`min-width: 0`은 위 `display: flex`와 한 짝이다.** `.tb-picker`가
-			   flex 컨테이너가 된 순간 이 버튼은 flex item이고, 기본
-			   `min-width: auto`가 콘텐츠 기반 최소 크기 — 즉 `nowrap` 라벨의
-			   텍스트 전체 폭 — 으로 풀린다. 라벨 자신의 `overflow: hidden`은
-			   라벨의 자동 최소값만 0으로 만들 뿐 버튼의 min-content 기여를
-			   줄이지 못하므로, 이 줄이 빠지면 `display: flex`를 지웠을 때와
-			   **똑같이** 라벨이 한 번도 안 잘린다. 이 줄은 옛 `max-width: 260px`을
-			   대체하며 들어왔으니 "상한을 없앴으니 잉여"로 읽고 지우지 말 것. */
+			/* min-width: 0은 위 display: flex와 한 짝이다 — 없으면 버튼의 최소 폭이
+			   nowrap 라벨의 전체 폭이 되어 라벨이 잘리지 않는다. */
 			#toolbar #ref-picker-btn {
 				gap: 8px;
 				min-width: 0;
@@ -615,10 +514,8 @@
 				border-radius: var(--vd-radius);
 				box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 			}
-			/* author가 display를 선언했으면 [hidden] 짝을 반드시 함께 둔다 —
-			   없으면 author origin이 UA 규칙을 이겨 패널이 영구히 열린 채 남는다.
-			   happy-dom은 textContent만 보므로 유닛이 못 잡고 실브라우저에서만
-			   드러난다(#grab-popover에서 이미 한 번, .grab-hint에서 두 번 밟았다). */
+			/* author display의 [hidden] 짝(viewer.md) — 빠지면 패널이
+			   영구히 열린 채 남는다. */
 			#ref-picker[hidden] {
 				display: none;
 			}
@@ -639,12 +536,10 @@
 				max-height: 260px;
 				overflow-y: auto;
 			}
-			/* 목록이 max-height를 넘으면 자식(행·구분선)이 눌리지 않고 목록이 스크롤돼야 한다. */
+			/* 넘치면 자식이 눌리지 않고 목록이 스크롤돼야 한다(viewer-toolbar.md). */
 			#ref-picker-list > * {
 				flex-shrink: 0;
 			}
-			/* 행은 세로 쌓기다: 첫 줄(이름 + 메모)과, PR이 있으면 그 아래 둘째 줄.
-			   PR 없는 행은 한 줄이라 26px 그대로다. */
 			#ref-picker .ref-row {
 				box-sizing: border-box;
 				position: relative;
@@ -663,9 +558,8 @@
 			#ref-picker .ref-row[data-active="true"] {
 				background: var(--vd-hover);
 			}
-			/* 선택 체크. `>`가 계약이다 — 둘째 줄의 PR 아이콘까지 잡으면 그것도
-			   절대 위치로 날아가 액센트색이 된다. top은 첫 줄 가운데에 맞춘다
-			   (18px 줄의 중심 = 26px 행의 중심 = 13px). */
+			/* 선택 체크. `>`가 계약이다 — 빠지면 둘째 줄의 PR 아이콘까지 체크
+			   자리로 날아간다. top은 첫 줄(18px)의 가운데에 맞춘 값이다. */
 			#ref-picker .ref-row > svg {
 				position: absolute;
 				top: 7px;
@@ -706,9 +600,6 @@
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
-			/* 구역 이름이 "무엇과 견주는가"를 말한다 — Working tree(미커밋)와
-			   브랜치(갈라진 뒤 전부)는 종류가 다른데 예전엔 같은 줄에 같은
-			   모양으로 있어 구분이 안 됐다. */
 			#ref-picker .ref-section {
 				padding: 6px 8px 3px;
 				font-size: 11px;
@@ -736,14 +627,8 @@
 				overflow: auto;
 				padding-top: 8px;
 			}
-			/* 파일 트리 엔진은 `:host { color-scheme: light dark }`를 선언하고 색을
-			   light-dark()로 고른다. diff 엔진의 `themeType` 같은 전용 옵션이 없어서,
-			   OS가 라이트 모드면 사이드바만 하얗게(#f8f8f8) 그려졌다. :root의
-			   color-scheme은 상속될 뿐이라 host에 직접 걸린 :host 선언을 이기지
-			   못한다 — host에 바로 건다(`!important`가 아닌 한 바깥 문서의 규칙이
-			   :host 규칙을 이긴다). 트리의 `unsafeCSS` 옵션으로도 덮을 수 있지만, 다크
-			   전용이라는 정책은 페이지 CSS 한곳에 둔다. 엔진 코드는 손대지 않는다.
-			   회귀망: color-scheme.e2e.ts. */
+			/* 트리의 :host가 OS 색 구성표를 따른다. :root 값은 상속될 뿐이라 host에
+			   직접 건다(viewer.md). */
 			file-tree-container {
 				color-scheme: dark;
 			}
@@ -790,13 +675,10 @@
 			#app[data-tree-side="right"] #diff {
 				grid-column: 1;
 			}
-			/* Wins over the data-tree-side rule above regardless of cascade order
-			   concerns because it's declared later: the diff panel always takes
-			   the full width when the tree is hidden, on either side. #diff must
-			   be pinned back to the (now sole) column 1 explicitly -- otherwise
-			   the left-side-tree base rule's grid-column: 2 still applies, and a
-			   single-track grid has no column 2, so #diff collapses into an
-			   implicit auto-sized column instead of filling the row. */
+			/* Must stay after the data-tree-side rules: same specificity, so source
+			   order decides. #diff is pinned to column 1 explicitly — otherwise its
+			   base grid-column: 3 lands in an implicit auto-sized column of the
+			   single-track grid. */
 			#app[data-tree-hidden="true"] {
 				grid-template-columns: 1fr;
 			}
@@ -816,16 +698,12 @@
 			#empty {
 				padding: 24px;
 			}
-			/* 첫 로드(콜드) 로딩 표시 — 이후 갱신은 기존 내용을 유지한 채
-			   백그라운드로 이뤄지므로 이 상태는 최초 응답 전에만 나타난다. */
 			#empty[data-loading] {
 				display: flex;
 				align-items: center;
 				gap: 10px;
 			}
-			/* 정보형 빈 상태 카드 — diff가 0건일 때 /api/summary의 실개수로
-			   "변경이 실제로 어디 있는지"를 안내한다 (browser/emptyState.ts). */
-			/* id 셀렉터(#empty { padding: 24px })보다 이겨야 하므로 id로 스코프. */
+			/* #empty { padding }을 이겨야 해서 id로 스코프한다. */
 			#empty.empty-card {
 				display: flex;
 				flex-direction: column;
@@ -889,9 +767,8 @@
 			#grab-popover[hidden] {
 				display: none;
 			}
-			/* 라벨 + 닫기 버튼 한 줄. 높이를 라벨의 정수 행고(15px)로 못박는다 —
-			   버튼(18px)이 줄을 키우면 팝오버 높이가 POPOVER_SIZE와 어긋난다.
-			   버튼은 아래 음수 마진으로 줄 안에 눕는다. */
+			/* 줄 높이를 라벨 행고(15px)로 못박는다 — 닫기 버튼(18px)이 줄을 키우면
+			   팝오버 높이가 main.ts의 POPOVER_SIZE와 어긋난다. */
 			#grab-popover .grab-head {
 				display: flex;
 				align-items: center;
@@ -902,17 +779,14 @@
 				flex: 1 1 auto;
 				min-width: 0;
 				font-size: 11px;
-				/* 라인박스를 정수로 못박는다 — 아래 textarea와 함께, 팝오버
-				   높이가 소수가 되지 않게 하는 두 축 중 하나. */
+				/* 정수 행고 — 팝오버 높이가 소수가 되지 않게 한다. */
 				line-height: 15px;
 				color: var(--vd-fg-muted);
 				white-space: nowrap;
 				overflow: hidden;
 				text-overflow: ellipsis;
 			}
-			/* 라벨은 세 종류의 정보를 담는다 — 파일명 / 잡은 줄 범위 / 어느 side.
-			   색으로 그 구분을 말한다. side 색은 diff의 add·del(#3fb950·#f85149)을
-			   글자용으로 낮춘 톤이라 같은 어휘로 읽힌다. */
+			/* side 색은 diff의 add·del(#3fb950·#f85149)을 글자용으로 낮춘 톤이다. */
 			#grab-popover .grab-l-file {
 				color: #c2c2ca;
 			}
@@ -928,9 +802,8 @@
 			#grab-popover .grab-l-side-old {
 				color: #c07f7b;
 			}
-			/* 입력 영역 — 테두리·배경·radius를 textarea에서 이 래퍼로 올렸다.
-			   보내기 버튼이 같은 상자를 공유해야 하기 때문이다. radius는
-			   --vd-radius(6px) — select·세그컨트롤·find바와 같은 표준 컨트롤 값. */
+			/* 테두리·배경은 textarea가 아니라 이 래퍼가 갖는다 — 보내기 버튼이 같은
+			   상자를 공유한다. */
 			#grab-popover .grab-field {
 				display: flex;
 				align-items: flex-end;
@@ -952,26 +825,18 @@
 				padding: 2px 0;
 				font: inherit;
 				font-size: 12px;
-				/* 1.4 × 12px = 16.8 — 소수 라인박스라 팝오버 전체 높이가
-				   67.7969px가 되고, 그러면 같은 높이라도 뜨는 y 오프셋에 따라
-				   device 픽셀 135행/136행을 오간다(레티나에서 1px 흔들림으로
-				   보인다). 18px로 못박으면 팝오버가 항상 정수 높이(69px)다. */
+				/* 정수 행고 — 소수면 팝오버 높이가 소수가 되어 레티나에서 1px
+				   흔들린다. */
 				line-height: 18px;
 				outline: none;
-				/* 내용에 맞춰 자라고 5줄쯤에서 멈춘 뒤 스크롤한다. JS 측정 대신
-				   CSS에 맡겨 커버리지 게이트 안 모듈에 분기를 만들지 않는다.
-				   미지원 브라우저에선 rows=1 고정 + 스크롤로 강등된다(여러 줄
-				   입력 자체는 그대로 된다). */
+				/* 미지원 브라우저에서는 rows=1 + 스크롤로 강등된다. */
 				field-sizing: content;
-				/* 정확히 5줄(18 × 5) — 예전 96px은 16.8로 나누면 5.71줄이라
-				   여섯 번째 줄이 반쯤 걸쳐 보였다. */
+				/* 정확히 5줄(18 × 5). */
 				max-height: 90px;
 				resize: none;
 				overflow-y: auto;
 			}
-			/* 배경색 없음이 계약이다 — 상태는 색으로만 말한다. 그래서 어느
-			   상태에서도 버튼 크기가, 따라서 창 크기가 변하지 않는다.
-			   radius 4px는 툴바 세그먼트 버튼과 같은 "컨테이너 안쪽 버튼" 값. */
+			/* 배경 없이 색으로만 상태를 말한다(grab.md). */
 			#grab-popover .grab-send {
 				flex: none;
 				display: inline-flex;
@@ -1003,13 +868,8 @@
 			#grab-popover .grab-send[data-state="fail"] {
 				color: #f85149;
 			}
-			/* 닫기 — .grab-send와 같은 어휘(배경 없음, idle #6f6f7a, 4px radius,
-			   액센트 포커스 링). hover에만 옅은 배경을 깔아 누를 수 있는 자리를
-			   보인다: 보내기 버튼과 달리 상태색이 없어 색 변화만으로는 약하다.
-			   그 배경이 --vd-hover가 아닌 이유: 그 토큰은 페이지 배경(#141415)
-			   기반이라 팝오버 배경(#232329) 위에선 오히려 어둡게 가라앉는다.
-			   음수 마진 −2px(세로)이 18px 상자를 15px 줄 안에 눕히고, 오른쪽
-			   −3px은 아이콘 획을 패딩 안쪽 가장자리에 맞춘다. */
+			/* 음수 마진: 세로 −2px은 18px 상자를 15px 줄 안에 눕히고, 오른쪽 −3px은
+			   아이콘 획을 패딩 가장자리에 맞춘다. */
 			#grab-popover .grab-close {
 				flex: none;
 				display: inline-flex;
@@ -1028,6 +888,7 @@
 					color 0.12s,
 					background-color 0.12s;
 			}
+			/* --vd-hover는 페이지 배경 기반이라 팝오버 위에서는 가라앉는다. */
 			#grab-popover .grab-close:hover {
 				color: var(--vd-fg);
 				background: #2c2c33;
@@ -1045,13 +906,9 @@
 			#grab-popover .grab-send[data-state="fail"] .i-fail {
 				display: block;
 			}
-			/* 하단 단축키 각주 — .grab-label과 같은 어휘(11px, 정수 행고,
-			   --vd-fg-muted)로 입력창보다 한 단계 낮게 말한다. 키 글리프만
-			   라벨의 파일명 톤(#c2c2ca)으로 밝혀 단축키와 설명을 가른다. */
 			#grab-popover .grab-keys {
 				font-size: 11px;
-				/* 정수 행고 — 팝오버 전체 높이가 소수가 되지 않게 하는 축.
-				   .grab-label과 같은 이유다. */
+				/* 정수 행고(.grab-label과 같은 이유). */
 				line-height: 15px;
 				color: var(--vd-fg-muted);
 				white-space: nowrap;
@@ -1059,10 +916,8 @@
 			#grab-popover .grab-keys-k {
 				color: #c2c2ca;
 			}
-			/* 상태는 버튼이 눈으로 말하므로 이 노드는 스크린리더 전용이다.
-			   예전처럼 보이는 줄로 두면 복사할 때마다 창이 18px 자라(실측: 66 → 84)
-			   커서 아래 코드가 밀렸다. hidden을 토글하지 않는 이유이기도 하다 —
-			   hidden 요소는 라이브 리전으로 알려지지 않는다. */
+			/* 스크린리더 전용 — 보이는 줄로 두면 복사할 때마다 창이 자란다.
+			   hidden으로 숨기지 않는다(라이브 리전이 읽히지 않는다). */
 			#grab-popover .grab-hint {
 				position: absolute;
 				width: 1px;
@@ -1126,17 +981,13 @@
 							></div>
 						</div>
 					</div>
-					<!-- 지금 보는 브랜치의 PR. 없으면 숨는다. 조각 사이 공백 텍스트
-					     노드는 gap이 대신하므로 없어도 되지만 붙여 쓴다. -->
 					<a id="pr-chip" hidden target="_blank" rel="noopener noreferrer"
 						><span id="pr-chip-icon"></span><span id="pr-chip-number"></span
 						><span id="pr-chip-title"></span
 					></a>
 					<span id="status"></span>
-					<!-- 전체 변경량. 개수만으로는 규모를 못 읽는다 — 176 file(s)가
-					     한 줄씩 고친 것인지 통째로 새로 쓴 것인지 갈린다. 조각
-					     사이에 공백 텍스트 노드가 생기면 안 된다(#change-del이
-					     구분자를 품고 온다). -->
+					<!-- 조각 사이에 공백 텍스트 노드를 두지 않는다(#change-del이 구분자를
+					     품는다). -->
 					<span id="change-totals"
 						><span id="change-add"></span><span id="change-del"></span
 					></span>
@@ -1198,10 +1049,6 @@
 							✕
 						</button>
 					</search>
-					<!-- 순간 동작(찾기·새로고침)과 상태 토글(렌더 방식·트리 보임)이
-					     여기서 갈린다. 새로고침이 찾기 바로 뒤인 것은 두 번째
-					     제약 때문이다 — 찾기가 첫 자리를 못 내주므로(바로 아래
-					     주석) 정보 사슬에 가장 가까이 설 수 있는 자리가 여기다. -->
 					<button
 						id="refresh"
 						type="button"

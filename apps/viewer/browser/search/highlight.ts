@@ -3,12 +3,8 @@ export interface MatchRange {
 	length: number;
 }
 
-/**
- * Case-insensitive plain-substring match ranges within `text`.
- * Non-overlapping, left-to-right. Empty query → []. Shared by the search
- * index (searchIndex.ts) and the DOM highlighter (highlightDom.ts) so both
- * agree on what counts as a match.
- */
+// Shared by searchIndex.ts (counting) and highlightDom.ts (painting) so both
+// agree on what a match is.
 export const findRanges = (text: string, query: string): MatchRange[] => {
 	if (query === "") return [];
 	const haystack = text.toLowerCase();
