@@ -9,7 +9,7 @@
  * 숫자 필드다. `FileDiffMetadata`에도 동명의 `additionLines`/`deletionLines`가
  * 있지만 그건 `string[]`이고 뷰어처럼 파일 전량으로 파싱한 diff에서는 새/옛
  * 파일의 **전체 내용**이라, 세면 변경량이 아니라 파일 길이가 나온다(그 착각이
- * 실제로 대형 파일 자동 접힘을 오작동시킨 적이 있다 — CLAUDE.md).
+ * 실제로 대형 파일 자동 접힘을 오작동시킨 적이 있다 — .claude/rules/viewer.md).
  */
 import type { Hunk } from "@diffdeck/diffs";
 

@@ -29,7 +29,7 @@ export interface LoadErrorModel {
 	action: { kind: LoadErrorActionKind; label: string } | null;
 	/**
 	 * 툴바 `#status` 문구. 이미 diff가 떠 있으면 카드를 못 그리므로(CodeView
-	 * 컨테이너를 덮어쓰면 안 된다 — CLAUDE.md) 이유는 여기에만 남는다.
+	 * 컨테이너를 덮어쓰면 안 된다 — .claude/rules/viewer.md) 이유는 여기에만 남는다.
 	 */
 	status: string;
 }

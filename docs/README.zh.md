@@ -15,7 +15,7 @@
 
 diffdeck 最初是内置在 [cc-statusline](https://github.com/say8425/cc-statusline) 中的本地 diff 查看器，现已被拆分为独立产品。相比继续依赖上游的 Pierre 包——它们迭代很快（`@pierre/diffs` 变动频繁；`@pierre/trees` 仍处于 1.0 之前的 beta 阶段），而我们又已经深度耦合了它们的内部标记结构——diffdeck **从这些包的 source map 中还原出原始 TypeScript 并将其 vendor（内置）进来**，从而完全掌握渲染引擎的所有权。
 
-最终形成了一个 Bun workspace monorepo：与框架无关、已高度成熟稳定的 diff 引擎（Pierre 的 `CodeView`，即 `packages/diffs` 的约 29.5k 行代码）保持原样，而我们自定义的部分则保存在自己的代码中。
+最终形成了一个 Bun workspace monorepo：与框架无关、已高度成熟稳定的 diff 引擎（Pierre 的 `CodeView`，即 `packages/diffs` 的约 3 万行代码）保持原样，而我们自定义的部分则保存在自己的代码中。
 
 ## 功能
 
@@ -29,27 +29,28 @@ diff 渲染引擎提供的功能：
 - **虚拟化渲染**，在大型 diff 下仍保持流畅，并带有粘性（sticky）文件头。
 - **每个文件独立的 Shadow DOM 封装**，确保查看器的样式不会泄漏到页面中。
 
-包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新，以及可搜索的对比基准选择器——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/` 中。
+包裹这一引擎的交互式查看器外壳——点击折叠、复制路径、应用内搜索、watch/自动刷新——沿用自 [cc-statusline](https://github.com/say8425/cc-statusline) 的查看器，现已移入 diffdeck 的 `apps/viewer/`，并新增了可搜索的工作树与分支选择器、拉取请求徽章和 Grab。
 
 ![diffdeck 查看器 —— 带 git 状态徽章的文件树与语法高亮 diff](screenshot.png)
 
-### 与任意分支对比
+### 查看任意分支或工作树
 
-工具栏的选择器决定 diff 以什么为基准：尚未提交的改动(**Working tree**)，或任意本地／远程分支。输入即可筛选。
+工具栏左侧的选择器决定你要看什么，它的标签始终说明你当前所在的位置：主工作树中为 `repo · branch`，链接的工作树中为 `repo / worktree · branch`。输入即可按名称、PR 编号或 PR 标题筛选。
 
-![打开的对比基准选择器，同时列出 Working tree 与仓库中的分支](ref-picker.png)
+![打开的选择器，列出仓库的工作树与分支](ref-picker.png)
 
-两个标签可以省下一次困惑。当前工作树检出的分支带 `HEAD` —— 那正是你所在的位置，与它对比永远看起来是空的。仓库的默认分支带 `default`，常用的选择一眼可见。
+- 选择**工作树**会打开该工作树的改动。
+- 选择**分支**会显示该分支自从 base 分叉以来的提交。base 通常是仓库的默认分支，在列表中带有 `default` 标签。
 
-选定分支后，对比的是 **merge base**，也就是你的工作分叉出去的那个提交。因此你只会看到自己改动的部分，而不会混入分叉之后落到对方分支上的内容。
+没有未提交改动的工作树会直接打开其分支相对 base 的提交，而不是一个空白页面。有拉取请求的分支会在列表中显示 PR 编号和标题；查看该分支时，选择器旁的徽章可在 GitHub 上打开该 PR。
 
 ### Grab — 把 diff 选区交给编码智能体
 
-在 diff 中拖选代码并松开，提示输入框会就地打开。按 <kbd>Enter</kbd>，diffdeck 会把文件引用、你选中的确切行以及你的提示**合成一段**复制到剪贴板，可直接粘贴到 Claude Code、Codex 或任意对话中。只想要代码？按 <kbd>⌥</kbd><kbd>Enter</kbd>（Windows/Linux 为 <kbd>Alt</kbd><kbd>Enter</kbd>），diffdeck 只复制你选中的行 —— 不带提示、代码围栏和文件头 —— 可直接粘贴进编辑器。不过跨越 diff 两侧的选区不会带上 `+`/`-` 标记，因此同一行的旧版本与新版本会前后相邻。
+在 diff 中选中代码，提示输入框会在你完成选择的位置打开。按 <kbd>Enter</kbd>，diffdeck 会把文件引用、你选中的确切行以及你的提示**合成一段**复制到剪贴板，可直接粘贴到 Claude Code、Codex 或任意对话中。只想要代码？按 <kbd>⌥</kbd><kbd>Enter</kbd>（Windows/Linux 为 <kbd>Alt</kbd><kbd>Enter</kbd>），diffdeck 只复制你选中的行 —— 不带提示、代码围栏和文件头 —— 可直接粘贴进编辑器。不过跨越 diff 两侧的选区不会带上 `+`/`-` 标记，因此同一行的旧版本与新版本会前后相邻。
 
 ![Grab — diff 中高亮的行，以及旁边打开的提示输入框](grab.png)
 
-两种入口：**拖选代码文本**，或使用行号槽的行选择与 `+` 按钮。文本拖选只复制你高亮的字符；行号槽路径则取整行。无论哪种，高亮都精确显示将被复制的范围。
+两种入口：**选中代码文本**（拖选、双击或三击），或使用行号槽的行选择与 `+` 按钮。文本选区只复制你高亮的字符；行号槽路径则取整行。无论哪种，高亮都精确显示将被复制的范围。
 
 复制到剪贴板的内容：
 
@@ -79,7 +80,7 @@ bunx @say8425/diffdeck
 bun install -g @say8425/diffdeck
 ```
 
-需要 [Bun](https://bun.sh)；`PATH` 中需包含 `git`（以及用于分支与 base 对比检测的 `gh`）。
+需要 [Bun](https://bun.sh)，且 `PATH` 中需包含 `git`。[`gh`](https://cli.github.com) 为可选项：有了它，diffdeck 会根据拉取请求选择对比基准，并显示 PR 徽章。
 
 ## CLI
 
@@ -96,7 +97,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | 参数               | 说明                                                       |
 | ------------------ | ---------------------------------------------------------- |
 | `--port <n>`        | 监听端口（默认：`$DIFFDECK_PORT` 或 `49573`）               |
-| `--no-open`         | 不自动打开浏览器（会打印 URL）                              |
+| `--no-open`         | 不自动打开浏览器（仍会打印 URL）                            |
 | `--untracked`       | 启动时包含未跟踪文件                                        |
 | `--watch`           | 启动时开启 watch（自动刷新）                                |
 | `--no-flatten`      | 启动时文件树不进行 flatten（默认开启 flatten）               |

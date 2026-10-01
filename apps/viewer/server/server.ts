@@ -159,7 +159,7 @@ const createHandler = (cfg: {
 	const diffFlight = createSingleFlight<PayloadCacheEntry>(cfg.flightTimeoutMs);
 	// 피커 목록. baseCache와 달리 **핸들러 스코프**에 둔다 — baseCache가 모듈
 	// 스코프인 것은 flight 타임아웃 테스트 둘이 "따로 띄운 두 서버가 같은 warm
-	// 항목을 본다"에 의존하는 특수 사정 때문이고(CLAUDE.md), 여기엔 그런 요구가
+	// 항목을 본다"에 의존하는 특수 사정 때문이고(.claude/rules/server.md), 여기엔 그런 요구가
 	// 없다. 서버 인스턴스가 자기 캐시를 갖는 쪽이 격리에 낫다.
 	const refsFlight = createSingleFlight<RefsResult>(cfg.flightTimeoutMs);
 	const refsCache = new Map<string, { value: RefsResult; at: number }>();

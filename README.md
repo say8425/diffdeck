@@ -15,7 +15,7 @@ A local diff viewer, built on a vendored fork of Pierre's [`@pierre/diffs`](http
 
 diffdeck is the local diff viewer originally embedded in [cc-statusline](https://github.com/say8425/cc-statusline), extracted into its own product. Instead of depending on the upstream Pierre packages — which move fast (`@pierre/diffs` churns heavily; `@pierre/trees` is pre-1.0 beta) and whose internal markup we had already coupled to heavily — diffdeck **recovers the original TypeScript from the packages' source maps and vendors it**, so we own the rendering engine outright.
 
-The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, the ~29.5k lines of `packages/diffs`) is kept as-is, while the parts we customize live in our own code.
+The result is a Bun-workspace monorepo where a commodity-hard, framework-agnostic diff engine (Pierre's `CodeView`, the ~30k lines of `packages/diffs`) is kept as-is, while the parts we customize live in our own code.
 
 ## Features
 
@@ -29,27 +29,28 @@ What the diff-rendering engine provides:
 - **Virtualized rendering** that stays smooth on large diffs, with sticky file headers.
 - **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
 
-The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, watch/auto-refresh, and a searchable compare-base picker — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`.
+The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, and watch/auto-refresh — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`, together with a searchable worktree and branch picker, pull-request badges, and Grab.
 
 ![The diffdeck viewer — file tree with git-status badges and a syntax-highlighted diff](docs/screenshot.png)
 
-### Compare against any branch
+### Browse any branch or worktree
 
-The toolbar's picker chooses what the diff is measured against: your uncommitted work (**Working tree**), or any local or remote branch. Type to filter.
+The picker at the left of the toolbar chooses what you're looking at, and its label always says where you are: `repo · branch` in the main worktree, `repo / worktree · branch` in a linked one. Type to filter by name, PR number, or PR title.
 
-![The compare-base picker, open and listing Working tree alongside the repository's branches](docs/ref-picker.png)
+![The picker, open and listing the repository's worktrees and branches](docs/ref-picker.png)
 
-Two labels save you a puzzled moment. The branch your worktree has checked out is tagged `HEAD` — comparing against it always looks empty, because it is where you already are. The repository's default branch is tagged `default`, so the usual choice is easy to spot.
+- Picking a **worktree** opens that worktree's changes.
+- Picking a **branch** shows the commits on that branch since it forked from the base — normally the repository's default branch, tagged `default` in the list.
 
-Picking a branch compares against the **merge base** — the commit your work forked from — so you see your own changes, not everything that has landed on the other branch since you branched.
+A worktree with nothing uncommitted opens on its branch's commits against the base instead of an empty screen. Branches with a pull request show its number and title in the list, and while you are viewing one, a badge next to the picker opens the PR on GitHub.
 
 ### Grab — hand a diff selection to your coding agent
 
-Select code in the diff and a prompt box opens right where you released the drag. Press <kbd>Enter</kbd> and diffdeck copies **one block** to your clipboard — the file reference, the exact lines you picked, and your prompt — ready to paste into Claude Code, Codex, or any chat. Need only the code? Press <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> on Windows/Linux) and diffdeck copies the picked lines by themselves — no prompt, no fence, no file header — to paste straight into an editor. A selection spanning both sides of the diff comes across without its `+`/`-` markers, so the old and new versions of a line sit one after another.
+Select code in the diff and a prompt box opens right where you finished selecting. Press <kbd>Enter</kbd> and diffdeck copies **one block** to your clipboard — the file reference, the exact lines you picked, and your prompt — ready to paste into Claude Code, Codex, or any chat. Need only the code? Press <kbd>⌥</kbd><kbd>Enter</kbd> (<kbd>Alt</kbd><kbd>Enter</kbd> on Windows/Linux) and diffdeck copies the picked lines by themselves — no prompt, no fence, no file header — to paste straight into an editor. A selection spanning both sides of the diff comes across without its `+`/`-` markers, so the old and new versions of a line sit one after another.
 
 ![Grab — lines highlighted in the diff with the prompt box open beside them](docs/grab.png)
 
-Two ways in: **drag the code text**, or use the gutter's line selection and its `+` button. A text drag copies exactly the characters you highlighted; the gutter path takes whole lines. Either way the highlight shows precisely what will be copied.
+Two ways in: **select the code text** (drag, double-click, or triple-click), or use the gutter's line selection and its `+` button. A text selection copies exactly the characters you highlighted; the gutter path takes whole lines. Either way the highlight shows precisely what will be copied.
 
 What lands on your clipboard:
 
@@ -79,7 +80,7 @@ Or install it globally to get the `diffdeck` command:
 bun install -g @say8425/diffdeck
 ```
 
-Requires [Bun](https://bun.sh); `git` (and `gh` for branch-vs-base detection) on your `PATH`.
+Requires [Bun](https://bun.sh) and `git` on your `PATH`. [`gh`](https://cli.github.com) is optional: with it, diffdeck uses your pull requests to pick the comparison base and to show PR badges.
 
 ## CLI
 
@@ -97,7 +98,7 @@ Options:
 | Flag               | Description                                                      |
 | ------------------ | ---------------------------------------------------------------- |
 | `--port <n>`       | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)          |
-| `--no-open`        | Do not open a browser automatically (prints the URL)             |
+| `--no-open`        | Do not open a browser automatically (the URL is still printed)   |
 | `--untracked`      | Start with untracked files included                              |
 | `--watch`          | Start with watch (auto-refresh) on                               |
 | `--no-flatten`     | Start with the file tree un-flattened (flatten is on by default) |
