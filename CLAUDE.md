@@ -20,6 +20,7 @@ bun run test:coverage  # 같은 스위트 + apps/viewer/{browser,cli,server} 100
 bun run test:e2e       # Playwright + 시스템 Google Chrome. globalSetup이 build.ts를 돌린다
 bun run lint           # oxlint apps/ (type-aware라 devDep oxlint-tsgolint가 필요). vendored packages/는 lint·format 대상이 아니다
 bun run format         # oxfmt apps/ (CI는 format:check)
+cd apps/viewer && bun run build && bun run start   # 뷰어를 직접 띄워 본다(실행한 곳의 리포 diff)
 ```
 
 ## 작업 규칙

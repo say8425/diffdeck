@@ -2,12 +2,23 @@
 paths:
   - "apps/viewer/browser/**"
   - "apps/viewer/index.html"
+  - "apps/viewer/tsconfig.json"
+  - "apps/viewer/__tests__/viewer-*.test.ts"
+  - "apps/viewer/__tests__/empty-state.test.ts"
+  - "apps/viewer/__tests__/load-error.test.ts"
+  - "apps/viewer/e2e/diffstyle-scroll.e2e.ts"
+  - "apps/viewer/e2e/update-anchor.e2e.ts"
+  - "apps/viewer/e2e/load-failure.e2e.ts"
+  - "apps/viewer/e2e/empty-state.e2e.ts"
+  - "apps/viewer/e2e/error-cards.e2e.ts"
+  - "apps/viewer/e2e/large-file-collapse.e2e.ts"
+  - "apps/viewer/e2e/worker-highlight.e2e.ts"
 ---
 
 # 뷰어 프런트 (`apps/viewer/browser/`, `index.html`)
 
 - `bun run typecheck`는 `browser/**`를 보지 않는다(`apps/viewer/tsconfig.json`의 include는 server·cli·build뿐이다). 여기의 타입 오류는 유닛·e2e·빌드로만 드러난다. include에 넣으려면 패키지의 `*.css?inline` ambient 선언과 vendored 전역 augmentation(`Window.__INSTANCE`/`__TOGGLE`)이 앱 tsconfig에서 보이도록 먼저 배선해야 한다.
-- `main.ts`는 커버리지 게이트 밖이다. 판단·문자열 조립은 게이트 안의 모듈(`prefs.ts`·`emptyState.ts`·`loadError.ts`·`largeFile.ts`·`changeTotals.ts`·`repoLabel.ts`·`refPicker/`·`grab/` 등)에 순수 함수로 두고, `main.ts`에는 배선만 둔다. 배선은 e2e가 지킨다.
+- 판단·문자열 조립은 게이트 안의 모듈(`prefs.ts`·`emptyState.ts`·`loadError.ts`·`largeFile.ts`·`changeTotals.ts`·`repoLabel.ts`·`refPicker/`·`grab/` 등)에 순수 함수로 둔다(`main.ts`는 배선만 — 루트 CLAUDE.md의 테스트 절).
 - `bun build`는 최상위 `let`을 `var`로 바꿔 TDZ 오류를 가린다. `main.ts`의 최상위 실행 코드가 아직 선언되지 않은 `let`을 읽어도 번들에서는 조용히 돈다 — 선언 순서를 지킨다.
 - `hidden`으로 숨기는 요소에 author `display`를 선언했으면 `[hidden] { display: none }` 짝을 함께 둔다(`#grab-popover`·`#ref-picker`·`#pr-chip`). author 규칙이 UA 규칙을 이겨 영구히 보인다. happy-dom은 레이아웃이 없어 잡지 못한다.
 - "내용 없음"을 나타내는 텍스트 노드는 `hidden` 대신 빈 문자열로 둔다(위 함정을 피하고, 라이브 리전은 hidden이면 읽히지 않는다).
@@ -15,9 +26,9 @@ paths:
 ## CodeView 수명과 스크롤
 
 - CodeView는 `!codeView`일 때만 새로 만든다(첫 렌더, 빈 상태에서 복귀, 워커 로드 실패 폴백). 다시 만들면 `#diff`(= 스크롤 컨테이너)가 비워져 scrollTop이 0으로 클램프된다.
-- unified↔split 전환은 살아 있는 인스턴스에 `setOptions(codeViewOptions())` → `setItems` → `render` 순으로 태운다. `setOptions`가 먼저 레이아웃 앵커를 잡아야 전환 전 위치로 돌아온다. 순서를 뒤집어도 테스트가 바로 잡지 못한다.
+- unified↔split 전환은 살아 있는 인스턴스에 `setOptions(codeViewOptions())` → `setItems` → `render` 순으로 태운다. `setOptions`가 먼저 레이아웃 앵커를 잡아야 전환 전 위치로 돌아온다. 순서를 뒤집어도 테스트가 바로 잡지 못한다. 회귀망 `diffstyle-scroll.e2e.ts`.
 - `config.overscrollSize`(1000)는 스크롤에서 다음 rAF 렌더까지의 한 프레임 동안 뷰포트 밖을 미리 그려 둬 빈 화면이 드러나지 않게 하는 여유다(빠른 플링은 `header-mount.e2e.ts`가 확인한다). 생성할 때만 세팅해도 된다 — `setOptions`는 `config`를 건드리지 않는다.
-- refresh·watch 갱신은 `setItems` → `render`만 부르고 스크롤은 엔진의 의미론적 앵커에 맡긴다. 픽셀 `scrollTo({type: "position"})`를 얹지 않는다: 갱신마다 sticky 헤더 높이만큼 위로 밀리고, 위쪽 파일 길이가 바뀌면 읽던 줄을 잃고, 스타일 전환과 한 프레임 겹치면 앵커를 덮어쓴다. 회귀망 `diffstyle-scroll.e2e.ts`·`update-anchor.e2e.ts`.
+- refresh·watch 갱신은 `setItems` → `render`만 부르고 스크롤은 엔진의 의미론적 앵커에 맡긴다. 픽셀 `scrollTo({type: "position"})`를 얹지 않는다: 갱신마다 sticky 헤더 높이만큼 위로 밀리고, 위쪽 파일 길이가 바뀌면 읽던 줄을 잃고, 스타일 전환과 한 프레임 겹치면 앵커를 덮어쓴다. 회귀망 `update-anchor.e2e.ts`.
 - `#diff`에 innerHTML을 쓰기 전에 살아 있는 CodeView가 없는지 본다. 덮어쓰면 엔진 컨테이너가 떨어져 나가고 `setup()`이 재부착을 거부해 패널이 영구히 빈다. 그래서 `showLoadFailure`는 `!codeView`일 때만 카드를 그리고, CodeView가 살아 있으면 이유를 `#status`로만 말한다.
 - 워커 하이라이트: 렌더 옵션 5필드(theme·useTokenTransformer·tokenizeMaxLineLength·lineDiffType·maxLineDiffLength)를 바꾸려면 `getOrCreateWorkerPoolSingleton`의 `highlighterOptions`에 넣는다. CodeView 옵션으로 넘기면 워커 경로가 무시한다. 워커 스크립트 로드 실패는 엔진이 감지하지 못하므로 `recoverFromWorkerLoadFailure` 워치독이 워커 없이 재구성한다.
 - 앱 스타일을 shadow root에 직접 `<style>`로 붙이지 않는다 — `CodeView.cleanElement()`가 첫 recycle에 떼어낸다. `unsafeCSS` 옵션이나 엔진이 읽는 커스텀 프로퍼티를 쓴다. 엔진의 `--diffs-*` 토큰은 shadow root 밖(툴바)에서 해석되지 않는다.
@@ -54,5 +65,8 @@ paths:
 - 서버 표식(`x-diff-error`)·403·503 소진·네트워크 실패를 `buildLoadErrorModel`이 카드와 `#status` 문구로 접는다. 카드는 빈 상태와 같은 `.empty-card` 클래스에 `data-load-error`를 단다.
 - 실패 표시는 `showLoadFailure` 한 곳이고 `load()`와 watch의 `poll()`이 함께 부른다. watch 중에는 focus가 없어서 `poll()`이 실패를 삼키면 옛 화면이 무기한 남는다. 같은 실패가 반복되면(`loadErrorKey`) 다시 그리지 않는다(버튼 포커스 보존).
 - `fetchDiff`는 실패를 값(`{kind: "failed"}`)으로 돌려준다. 모듈 변수로 흘리면 `load()`와 `poll()`이 서로의 결과를 덮는다.
+- `fetchDiff`의 503·네트워크 실패 1회 재시도는 서버 flight 회복 장치의 일부다(`server.md`). 재시도 횟수와 `RETRY_DELAYS_MS`(= 서버의 `Retry-After`)를 따로 바꾸지 않는다.
+- 저장된 base가 사라졌으면(`unknown-base`) `recoverFromStaleBase`가 저장값만 한 번 지우고 다시 불러온다. URL에 명시된 base는 건드리지 않는다 — 그 길은 실패 카드의 `drop-base`가 준다. 그 버튼 라벨은 "default"를 약속하지 않는다(base를 걷으면 저장값이 이길 수 있다).
+- 이미지 카드의 `/api/blob`에는 재시도가 없고, 실패하면 깨진 아이콘 대신 `Couldn't load image`를 보인다.
 - 실패 카드는 `id="empty"`를 유지한다. 빈 리포에서 서버가 돌아오면 첫 응답이 304라 `enrichEmptyState`가 `#empty`를 갈아 끼우는 것으로만 복구된다.
 - 버튼(`retry`·`view-working-tree`·`drop-base`)은 누르기 전까지 URL을 바꾸지 않는다. 사라진 head도 조용히 워킹트리로 돌리지 않는다 — 링크가 요청한 것이라 말없이 바꾸면 사용자가 속는다.

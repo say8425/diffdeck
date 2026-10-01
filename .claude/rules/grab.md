@@ -36,10 +36,10 @@ paths:
 - 배치는 `open()` 때 한 번만 계산한다. `POPOVER_SIZE`는 CSS 박스의 바깥 크기(패딩·테두리 포함)이고 실제보다 작게 적으면 화면 끝에서 잘린다 — CSS 값과 같아 보이게 "정리"하지 않고, 줄을 더하면 높이도 올린다.
 - 구성: 라벨 줄(`.grab-head` — 닫기 버튼 `.grab-close`가 이 줄 안에 산다) + 입력 상자(`.grab-field`, 보내기 버튼 포함) + 단축키 각주(`.grab-keys`). 닫기 버튼을 라벨 줄 밖으로 빼면 팝오버 높이가 바뀐다.
 - `.grab-send`는 배경 없이 색으로만 상태를 말한다(`data-state`: idle → ready → ok → fail). 아이콘은 전부 DOM에 두고 CSS로 하나만 보인다. 빈 프롬프트도 복사되므로 `disabled`로 만들지 않는다.
-- `.grab-hint`(`role="status"`)는 sr-only다. 보이는 줄로 두면 복사할 때마다 창이 자라 코드가 밀린다. "상태 없음"은 `hidden`이 아니라 빈 텍스트로 둔다(hidden이면 라이브 리전이 읽히지 않는다).
+- `.grab-hint`(`role="status"`)는 sr-only다. 보이는 줄로 두면 복사할 때마다 창이 자라 코드가 밀린다. "상태 없음"은 빈 텍스트로 둔다(`viewer.md`).
 - radius는 앱에 있는 세 값만 쓴다: 8px 떠 있는 패널, 6px(`--vd-radius`) 표준 컨트롤, 4px 컨테이너 안 버튼. `999px`은 토글 스위치 전용이다.
 - 버튼의 `mousedown`은 `preventDefault`한다 — 입력이 포커스를 잃으면 IME 조합 중인 글자가 확정·누락된다.
-- 닫힘: Esc, 팝오버 바깥 pointerdown, `renderPatch`, 복사 성공 후 잠시 뒤. 스크롤로는 닫지 않는다.
+- 닫힘: Esc, 닫기 버튼(`.grab-close`), 팝오버 바깥 pointerdown, `renderPatch`, 복사 성공 후 잠시 뒤. 모두 같은 `close()` 경로를 탄다. 스크롤로는 닫지 않는다.
 
 ## 키
 

@@ -82,11 +82,11 @@ Read it as an **exact pointer**, not as loose context.
 - `Lines:` — the exact range, which side it came from, and which diff was on
   screen. `new side` = the version **after** the change, `old side` = **before**;
   a selection spanning both reads `old A / new B`. The diff is `working diff`
-  (uncommitted changes) or `base diff vs <base>` (commits since the branch forked
-  from `<base>`; plain `base diff` when no base was found). ` on <branch>` follows
-  when the human was viewing another branch rather than the working tree (e.g.
-  `base diff vs main on feat/x`). An added, deleted, or untracked file appends its
-  status (e.g. `, added`).
+  (uncommitted changes) or `base diff vs <base>` (everything since the branch
+  forked from `<base>`, uncommitted changes included; plain `base diff` when no
+  base was found). ` on <branch>` follows when the human was viewing another
+  branch rather than the working tree (e.g. `base diff vs main on feat/x`). An
+  added, deleted, or untracked file appends its status (e.g. `, added`).
 - The fenced body is the code. In a cross-side block **every** line is prefixed
   with `-`, `+`, or a space (unchanged context) — strip that first character to
   get the file text.
@@ -95,9 +95,9 @@ Answer about **that** range in **that** file: for a `new side` range you can go
 straight to those line numbers instead of searching for the code. Things not to
 assume, though:
 
-- With ` on <branch>`, the lines are that branch's **committed** version — read
-  them with `git show <branch>:<path>`. Your checkout may be on another branch or
-  hold different contents at that path.
+- With ` on <branch>` (whatever mode word comes before it), the lines are that
+  branch's **committed** version — read them with `git show <branch>:<path>`.
+  Your checkout may be on another branch or hold different contents at that path.
 - **`old side` numbers index the pre-change file**, so they need not match the
   working tree (and with `, deleted` the path may be gone).
 - The prompt is **optional**: a block with nothing after the fence means the human

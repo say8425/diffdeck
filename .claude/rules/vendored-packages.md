@@ -3,6 +3,10 @@ paths:
   - "packages/**"
   - "scripts/**"
   - "tsconfig.base.json"
+  - "apps/viewer/e2e/header-mount.e2e.ts"
+  - "apps/viewer/e2e/lockfile-freeze.e2e.ts"
+  - "apps/viewer/e2e/retokenize-cache.e2e.ts"
+  - "apps/viewer/e2e/tree-path-tooltip.e2e.ts"
 ---
 
 # vendored 패키지 (`packages/*`)

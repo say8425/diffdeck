@@ -6,6 +6,13 @@ paths:
   - "apps/viewer/browser/prBadge.ts"
   - "apps/viewer/browser/changeTotals.ts"
   - "apps/viewer/index.html"
+  - "apps/viewer/__tests__/repo-label.test.ts"
+  - "apps/viewer/__tests__/ref-picker-model.test.ts"
+  - "apps/viewer/__tests__/pr-badge.test.ts"
+  - "apps/viewer/__tests__/change-totals.test.ts"
+  - "apps/viewer/e2e/toolbar-*.e2e.ts"
+  - "apps/viewer/e2e/ref-picker.e2e.ts"
+  - "apps/viewer/e2e/pr-badge.e2e.ts"
 ---
 
 # 툴바와 피커
@@ -33,7 +40,7 @@ paths:
 - 고르는 컨트롤이 곧 지금 상태의 표시다. 같은 정보를 말하는 별도 라벨을 두지 않는다(둘은 어긋날 수 있다). 툴바에는 base도 표시하지 않는다 — 옛 `#base-label`(`vs main`)은 사용자가 고를 수 없는 값을 말해서 걷어냈다. 미커밋 변경만 보는지 브랜치 전체를 보는지 가르는 표시가 필요해지면 옛 라벨을 되살리지 말고 새로 설계한다.
 - 트리거는 "어느 리포의 어느 워크트리에서 무엇을 보는가"를 말한다. 메인 워크트리는 `repo · branch`, 링크된 워크트리는 `repo / worktree · branch`, 브랜치를 head로 보면 워크트리 조각 없이 `repo · head`(브랜치 이름이 `/`를 품으므로 여기서는 ` / `를 쓰지 않는다). 색은 구별되는 조각(`#picker-name`)만 밝힌다. 탭 제목에는 리포 접두를 넣지 않는다.
 - 구분자는 조각의 텍스트가 품는다(`"repo / "`, `" · main"`). 마크업의 span 사이에 공백 텍스트 노드를 넣지 않는다.
-- detached는 `detached @ <7자>`.
+- detached는 `detached @ <7자>`. bare 리포의 루트 이름은 관례적 `.git` 접미를 벗긴다(`repoLabel.ts`).
 - 지금 어느 워크트리인지는 `findWorktree`(`repoLabel.ts`) 하나로 판정한다 — 세그먼트 경계 최장 접두 일치(하위 디렉토리에서 기동, 중첩 워크트리). 라벨과 피커(정렬·체크)가 같은 함수를 쓴다.
 - 갱신 시점은 `load()`, 피커 열림, watch의 `poll()` 셋이다. `poll()`을 빼면 watch 중 브랜치를 갈아탈 때 툴바가 옛 브랜치에 굳는다. 워킹트리가 깨끗하면 지문이 같아 304로 흐르므로 "내용이 바뀐 폴에서만" 갱신하는 조건도 쓸 수 없다.
 
@@ -55,7 +62,7 @@ paths:
 - 상태 4종(Open·Draft·Merged·Closed)은 색과 모양이 모두 다른 아이콘으로 말한다(글자로 되풀이하지 않는다, 아이콘에 `role="img"` + `aria-label`).
 - PR 데이터는 `/api/prs`로 따로 받아 도착하는 대로 얹는다(`refreshPrs` — 라벨과 같은 세 시점). 응답 원문이 직전과 같으면(`lastPrsRaw`) 아무것도 다시 그리지 않는다 — 열린 피커를 다시 세우면 누르는 중인 행 노드가 바뀌어 click이 사라진다. 맵 조회는 `Object.hasOwn`이다(`prFor`).
 - 원격 행(`origin/feat/x`)은 원격 접두를 벗긴 이름의 PR을 단다(`prBranchOf`). head가 원격인지는 이름이 아니라 `/api/refs` 목록으로 판정한다(`viewedPrBranch`) — 첫 세그먼트를 무조건 벗기면 로컬 `fix/foo`가 `foo`의 PR을 단다. `head=HEAD`는 워크트리의 브랜치로 읽는다. 원격 이름에 `/`가 있으면 대개 PR을 못 찾는다(알고 둔 한계).
-- CSS: `#toolbar #pr-chip`에 `[hidden]` 짝을 둔다. 줄어드는 순서가 계약이다 — 칩 제목이 먼저, 트리거가 나중이다(`flex: 0 100000 auto`; 1000으로는 트리거가 1px씩 잘렸다). 칩의 바닥 폭(아이콘 + 번호)은 `applyPrChip`이 재서 인라인 `min-width`로 걸고, 웹폰트가 늦게 오면 `document.fonts`의 `loadingdone`에서 다시 잰다.
+- CSS: `#toolbar #pr-chip`에 `[hidden]` 짝을 둔다. 줄어드는 순서가 계약이다 — 칩 제목이 먼저, 트리거가 나중이다(`flex: 0 100000 auto`; 1000으로는 트리거가 1px씩 잘렸다). 칩의 바닥 폭(아이콘 + 번호)은 `applyPrChip`이 재서 인라인 `min-width`로 걸고, 웹폰트가 늦게 오면 다시 잰다(`fonts.md`).
 - 피커의 선택 체크 규칙은 `#ref-picker .ref-row > svg`다. 자식 결합자가 빠지면 둘째 줄의 PR 아이콘까지 체크 자리로 날아간다.
 
 ## 변경량 (`#change-totals`)

@@ -6,7 +6,7 @@ paths:
 
 # e2e (Playwright)
 
-- 스펙 이름은 `*.e2e.ts`다. `bun test`는 `*.test.ts`와 `*.spec.ts`를 수집하므로 다른 이름이면 Playwright 스펙이 bun에서 돈다.
+- 스펙 이름은 `*.e2e.ts`다. Playwright는 `*.e2e.ts`만 보고(`testMatch`), `bun test`는 `*.test.ts`와 `*.spec.ts`를 수집한다 — Playwright 관례대로 `*.spec.ts`로 지으면 bun이 그 스펙을 돌린다.
 - Playwright는 스펙·fixture·globalSetup을 항상 Node로 실행한다(`bunx playwright test`로 띄워도). `Bun` 전역과 `$`를 쓸 수 없고, bun이 필요하면 `spawn`으로 PATH의 `bun`을 부른다.
 - fixtures: `repo.ts`(임시 git 리포 빌더), `app.ts`(`launchViewer` — 실제 `dist/cli.js`를 띄운다, 넷째 인자 `extraEnv`), `proc.ts`(child_process 래퍼), `drag.ts`(합성 드래그 제스처).
 - 픽스처에 `git remote add`를 쓰지 않는다. 원격이 생기면 base 해석의 `gh pr view`가 GitHub를 찾느라 스펙마다 수십 초가 걸린다. default 브랜치가 필요하면 `update-ref` + `symbolic-ref`로 원격 HEAD symref만 세운다.

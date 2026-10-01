@@ -19,4 +19,4 @@ UI는 Pretendard, 코드는 JetBrains Mono, 코드 안의 한글은 D2Coding이�
 - Pretendard와 JetBrains Mono 정체는 `<link rel="preload" … crossorigin>`으로 미리 받는다(`crossorigin`이 없으면 @font-face 요청과 캐시 항목이 갈린다). D2Coding은 미리 받지 않는다.
 - `font-display: swap`이라 폰트가 도착하면 폭이 바뀐다. 폭을 재서 고정하는 곳(PR 칩의 최소 폭)은 `document.fonts`의 `loadingdone`에서 다시 잰다.
 - SIL OFL 1.1이라 라이선스 원문을 함께 배포한다: `build.ts`가 `*.woff2`와 `OFL-*.txt`를 `dist/viewer/fonts/`로 복사한다(`fonts/README.md`는 싣지 않는다). `apps/viewer/NOTICE`와 루트 `NOTICE`에도 고지한다.
-- `fonts.e2e.ts`의 "한자만으로는 D2Coding을 부르지 않는다" 스펙의 기준 글자를 바꿀 때는 두 폰트의 cmap을 확인한다(JetBrains Mono에 없고 D2Coding에 있어야 판별력이 있다). 계산된 폰트는 `expect.poll`로 읽는다.
+- `fonts.e2e.ts`의 "한자만으로는 D2Coding을 부르지 않는다" 스펙의 기준 글자를 바꿀 때는 두 폰트의 cmap을 확인한다(JetBrains Mono에 없고 D2Coding에 있어야 판별력이 있다).

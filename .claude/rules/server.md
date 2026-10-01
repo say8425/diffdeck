@@ -3,6 +3,12 @@ paths:
   - "apps/viewer/server/**"
   - "apps/viewer/cli.ts"
   - "apps/viewer/cli/**"
+  - "apps/viewer/__tests__/diff-*.test.ts"
+  - "apps/viewer/__tests__/git-*.test.ts"
+  - "apps/viewer/__tests__/prs.test.ts"
+  - "apps/viewer/__tests__/repo-check.test.ts"
+  - "apps/viewer/e2e/self-heal.e2e.ts"
+  - "apps/viewer/e2e/daemon-cwd.e2e.ts"
 ---
 
 # 뷰어 서버 (`apps/viewer/server/`)와 CLI
@@ -27,7 +33,7 @@ paths:
 - git 호출 두 번: `for-each-ref`(필드 구분자 NUL — refname에 `|`가 들어갈 수 있다)와 `worktree list --porcelain -z`.
 - `for-each-ref` 출력은 레코드 사이에 개행이 하나 끼므로 필드마다 선행 개행 하나만 벗기고, 후행 빈 항목은 정확히 하나만 벗긴다(전부 벗기면 빈 `symref` 레코드가 사라진다).
 - 죽은 워크트리(`prunable`)와 `bare`는 목록에서 뺀다. git은 디렉토리가 지워진 워크트리도 브랜치와 함께 계속 내보낸다.
-- 리포 루트는 `parseRepoRoot`가 `worktree list` 원본의 첫 레코드에서 읽는다. 걸러낸 `parseWorktreeList` 결과를 쓰면 bare 리포에서 첫 항목이 링크된 워크트리가 된다. bare 루트의 `.git` 접미는 벗긴다.
+- 리포 루트는 `parseRepoRoot`가 `worktree list` 원본의 첫 레코드에서 읽는다. 걸러낸 `parseWorktreeList` 결과를 쓰면 bare 리포에서 첫 항목이 링크된 워크트리가 된다.
 
 ## `/api/prs` (`prs.ts`)
 
@@ -47,8 +53,10 @@ paths:
 ## Bun `$`와 git 출력 크기
 
 - Bun 1.3.x의 `$`는 64KB가 넘는 stdout을 받으면 resolve도 reject도 없이 영원히 pending일 수 있다(호출이 겹치면 거의 확정, 1.4.0에서 수정). 출력이 리포 크기를 따라 커질 수 있는 git 호출은 `gitOutput.ts`의 `gitBytes`/`gitText`(`Bun.spawn`)로 쓴다. `$`는 `rev-parse`·`merge-base`처럼 출력이 작은 호출에만 남긴다. 되돌리지 않는다.
-- 그 회귀망(`git-output`·`git-large-output`·`git-cat-file-batch` 테스트)은 최신 Bun에서는 `$`로도 통과하고, Bun 1.3.14로 고정한 CI 잡 `test-bun13`에서만 판별력이 있다. `summary.ts`와 `worktree list`가 `$`로 돌아가는 것은 어떤 테스트도 잡지 못한다.
+- 그 회귀망은 Bun 1.3.x(CI 잡 `test-bun13`)에서만 판별력이 있다(`testing.md`). `summary.ts`와 `worktree list`가 `$`로 돌아가는 것은 어떤 테스트도 잡지 못한다.
+- 서버 코드는 npm 패키지를 import하지 않는다(지금은 Bun과 node 빌트인만 쓴다). `test-bun13`은 `bun install` 없이 `diff.ts`·`gitOutput.ts`·`refs.ts`·`fingerprint.ts`·`mapLimit.ts`를 직접 import한다.
 - flight가 매달려도 회복하는 장치 셋은 함께여야 동작한다: ① `singleFlight`가 flight를 타임아웃과 race해 키를 풀고(`SingleFlightTimeoutError`), ② `awaitFlight`가 타임아웃만 503 + `Retry-After`로 바꾸고(다른 에러는 다시 던진다), ③ 브라우저 `fetchDiff`가 503·네트워크 실패를 한 번 재시도한다(403·400은 재시도하지 않는다). 키를 풀지 않으면 재시도가 같은 죽은 프라미스에 합류한다. 회귀망은 `diff-server.test.ts`의 실제 HTTP 503 경로와 `self-heal.e2e.ts`다.
+- 큰 출력의 `$`를 전부 옮겼어도 flight 타임아웃은 지우지 않는다. 원인을 가리지 않는 안전망이다(예: base 해석의 `gh pr view`는 네트워크를 기다린다).
 - `Retry-After`(1초)와 브라우저의 `RETRY_DELAYS_MS`는 같은 값으로 맞춰 둔다 — fetch는 `Retry-After`를 저절로 지키지 않는다.
 - `/api/diff`는 base 해석 flight와 diff flight를 순서대로 기다린다. 두 타임아웃의 합(45+45초)이 `Bun.serve`의 `idleTimeout`(120초)보다 작아야 한다.
 - 재시도 횟수를 늘리거나 prewarm을 동시에 돌리지 않는다. 큰 blob이 많은 diff는 파일별 git 프로세스가 `BUILD_CONCURRENCY`(호출당 상한)만큼 뜨므로, 시도가 겹치면 프로세스가 배로 늘어난다.
