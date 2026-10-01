@@ -43,3 +43,21 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+Fonts (SIL Open Font License 1.1)
+
+The viewer ships these font files unmodified under dist/viewer/fonts/. Each
+font's full license text is distributed next to it (OFL-*.txt).
+
+  Pretendard (PretendardVariable.woff2)
+  Copyright (c) 2021, Kil Hyung-jin, with Reserved Font Name 'Pretendard'.
+  https://github.com/orioncactus/pretendard — see OFL-Pretendard.txt
+
+  JetBrains Mono (JetBrainsMono-wght.woff2, JetBrainsMono-Italic-wght.woff2)
+  Copyright 2020 The JetBrains Mono Project Authors.
+  https://github.com/JetBrains/JetBrainsMono — see OFL-JetBrainsMono.txt
+
+  D2Coding (d2coding-full.woff2)
+  Copyright (c) 2015, NAVER Corporation, with Reserved Font Name D2Coding.
+  https://github.com/naver/d2codingfont — see OFL-D2Coding.txt

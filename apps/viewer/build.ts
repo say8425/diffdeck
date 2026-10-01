@@ -4,7 +4,8 @@
 //                         import `../style.css?inline`, so the css-inline plugin
 //                         must stay attached (parity with the harness build.ts).
 // Layout mirrors cc-statusline: dist/cli.js + dist/viewer/{main.js,index.html}.
-import { chmodSync } from "node:fs";
+// dist/viewer/fonts/ carries the vendored fonts (apps/viewer/fonts/README.md).
+import { chmodSync, rmSync } from "node:fs";
 import { cssInlineBundlerPlugin } from "../../scripts/css-inline-plugin.ts";
 
 const dist = `${import.meta.dir}/dist`;
@@ -63,6 +64,20 @@ await Bun.write(
 	`${dist}/viewer/index.html`,
 	Bun.file(`${import.meta.dir}/index.html`),
 );
+
+// 폰트 파일과 그 라이선스(OFL은 폰트와 함께 배포하도록 요구한다).
+// fonts/README.md는 출처 기록이라 싣지 않는다. 먼저 비운다 — 파일을 바꾸거나
+// 지운 뒤 로컬에서 빌드·배포하면 옛 폰트가 tarball에 섞여 나간다(실측: 서브셋
+// 4개가 남아 20개 파일이 됐다).
+rmSync(`${dist}/viewer/fonts`, { recursive: true, force: true });
+for await (const name of new Bun.Glob("*.{woff2,txt}").scan(
+	`${import.meta.dir}/fonts`,
+)) {
+	await Bun.write(
+		`${dist}/viewer/fonts/${name}`,
+		Bun.file(`${import.meta.dir}/fonts/${name}`),
+	);
+}
 
 await Bun.write(
 	`${dist}/skills/diffdeck/SKILL.md`,

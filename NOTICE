@@ -3,3 +3,7 @@ diffdeck bundles source recovered from and derived from:
   Copyright The Pierre Computer Company.
 Files under packages/ are modified from the originals.
 See packages/*/LICENSE and packages/trees/NOTICE.md for full terms.
+
+diffdeck also ships unmodified font files under apps/viewer/fonts/ (SIL Open
+Font License 1.1): Pretendard, JetBrains Mono and D2Coding. Their license texts
+are the OFL-*.txt files in that directory; provenance is in its README.md.
