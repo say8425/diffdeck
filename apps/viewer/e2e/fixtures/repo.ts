@@ -36,6 +36,12 @@ export interface FixtureRepoOptions {
 	bulkFiles?: number;
 	/** 이 줄 수의 `pnpm-lock.yaml`을 커밋하고 일부를 고친다(lockfile은 접혀서 뜬다). */
 	lockfileLines?: number;
+	/**
+	 * 작은 `.github/ci.yaml`을 커밋하고 한 줄 고친다. 목록 맨 위에 떠서 접힌
+	 * lockfile보다 먼저 yaml 문법을 하이라이터에 붙인다. 확장자는 lockfile과 같은
+	 * `.yaml`이어야 한다 — 엔진은 `.yml`을 다른 언어 id로 본다.
+	 */
+	yamlFile?: boolean;
 	/** 단일 자식 디렉토리 사슬(`src/mid/deep/nested.ts`) — 사이드바 flatten의 대상. */
 	nestedChainFile?: boolean;
 	/**
@@ -98,6 +104,9 @@ const lockfileContents = (lines: number, mutate: boolean): string => {
 	return `${out.join("\n")}\n`;
 };
 
+const ciYaml = (marker: string): string =>
+	`name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${marker}\n`;
+
 export const makeFixtureRepo = (
 	options: FixtureRepoOptions = {},
 ): FixtureRepo => {
@@ -132,6 +141,10 @@ export const makeFixtureRepo = (
 			join(dir, "pnpm-lock.yaml"),
 			lockfileContents(lockfileLines, false),
 		);
+	}
+	if (options.yamlFile) {
+		mkdirSync(join(dir, ".github"), { recursive: true });
+		writeFileSync(join(dir, ".github", "ci.yaml"), ciYaml("base"));
 	}
 	const bigFileLines = options.bigFileLines ?? 0;
 	if (bigFileLines > 0) {
@@ -207,6 +220,9 @@ export const makeFixtureRepo = (
 				join(dir, "pnpm-lock.yaml"),
 				lockfileContents(lockfileLines, true),
 			);
+		}
+		if (options.yamlFile) {
+			writeFileSync(join(dir, ".github", "ci.yaml"), ciYaml("edited"));
 		}
 		if (bigFileLines > 0) {
 			writeFileSync(

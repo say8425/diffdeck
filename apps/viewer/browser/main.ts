@@ -653,6 +653,7 @@ const codeViewOptions = (): ConstructorParameters<
 	collapsedContextThreshold: 3,
 	// 엔진 기본값(100k줄)보다 낮춘 하이라이트 상한(넘으면 plain text) —
 	// 하이라이트는 범위와 무관하게 파일 전체를 토크나이즈한다.
+	// lockfile-freeze.e2e.ts의 픽스처들이 이 값의 아래·위에 맞춰져 있다.
 	tokenizeMaxLength: 20_000,
 	expandUnchanged: expandAll,
 	// renderGutterUtility는 onGutterUtilityClick과 함께 쓰면 엔진이 throw한다.
