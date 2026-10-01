@@ -25,7 +25,7 @@ paths:
 ## 현재 예외 (1~3·5는 `packages/diffs`, 4는 `packages/trees`)
 
 1. `DiffHunksRenderer.recycle()`이 하이라이터를 생성자와 같은 조건으로 동기 재획득한다(`getHighlighterIfLoaded()`). 빠른 스크롤 때 헤더 없는 0높이 프레임이 깜박이던 것을 막는다. 회귀망 `header-mount.e2e.ts`.
-2. 빈 렌더 윈도우(접힌 파일)를 plain-text + zero-range로 렌더한다. 하이라이트 렌더가 범위를 무시하고 파일 전체를 동기 토크나이즈해 대형 lockfile 마운트가 수 초 멈추던 것을 막는다. sync/async 두 경로 + `RenderedDiffASTCache.emptyWindow` 표식(빈 결과를 펼침 렌더가 재사용하면 `processDiffResult`가 throw하므로 펼칠 때 다시 렌더하게 한다). 회귀망 `lockfile-freeze.e2e.ts`.
+2. 빈 렌더 윈도우(접힌 파일)를 plain-text + zero-range로 렌더한다. 하이라이트 렌더가 범위를 무시하고 파일 전체를 동기 토크나이즈해 대형 lockfile 마운트가 수 초 멈추던 것을 막는다. sync/async 두 경로 + `RenderedDiffASTCache.emptyWindow` 표식(빈 결과를 펼침 렌더가 재사용하면 `processDiffResult`가 throw하므로 펼칠 때 다시 렌더하게 한다). 회귀망 `lockfile-freeze.e2e.ts`는 sync 경로만 지킨다 — 하이라이터가 로드되기 전에 마운트될 때 타는 async 경로는 지키는 테스트가 없다.
 3. `recycle()`이 하이라이트가 끝난(비-emptyWindow) renderCache를 언마운트 뒤에도 보존한다. 오버스캔 재진입마다 파일 전체를 다시 토크나이즈하지 않게 한다 — 워커가 없으면 프레임이 멈추고, 워커 경로에서는 워커가 답할 때까지 하이라이트 없이 그려진다. 스테일은 `renderDiff`의 diff·options 동등성 검사가 무효화한다. 회귀망 `retokenize-cache.e2e.ts`(워커 경로에서는 재진입 직후의 하이라이트 단언이 가른다).
 4. 파일트리 flatten 행을 GitHub처럼 끝에서 한 번만 말줄임하고(`[data-item-flattened-subitems]` 래퍼 안의 `[data-item-flattened-clip]`에 `text-overflow`), 모든 행 버튼에 전체 경로 `title`을 단다(`renderRowVanilla.ts`·`style.css`). flatten이 아닌 행의 확장자 보존 가운데 말줄임은 그대로다. 회귀망 `tree-path-tooltip.e2e.ts`·`renderRowVanilla.test.ts`.
 5. `InteractionManager`의 `enableLineSelectionDrag` 옵션(기본 `true` = upstream 동작)과 `CodeView`의 옵션 키 목록 2곳. `false`면 라인넘버 pointerdown을 `pendingLineSelect`로 미뤘다가, 포인터가 다른 번호 셀로 넘어가면 취소하고(드래그는 아무것도 선택하지 않는다) 제자리에서 놓으면 클릭으로 확정한다. 클릭 선택·shift+클릭 확장·재클릭 해제는 드래그를 켠 경로와 같은 함수(`extendSelectionFromShiftClick`/`selectSingleLineFromPoint`)를 쓴다. 회귀망은 `grab.e2e.ts`의 ⑯·⑱이다(`grab.md`).
