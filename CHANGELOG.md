@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.6.0...diffdeck-v1.7.0) (2026-10-01)
+
+
+### Features
+
+* grab 프롬프트 팝오버 오른쪽 상단에 닫기 버튼을 둔다 ([#90](https://github.com/say8425/diffdeck/issues/90)) ([b3f0aec](https://github.com/say8425/diffdeck/commit/b3f0aec9dca1c483992cc439e709b4b933cf0802))
+* UI는 Pretendard, 코드는 JetBrains Mono(한글은 D2Coding)로 통일한다 ([#89](https://github.com/say8425/diffdeck/issues/89)) ([91f97bc](https://github.com/say8425/diffdeck/commit/91f97bc2a638b8ed28b98742abc251324cb696b6))
+* 피커와 툴바에 브랜치의 PR 번호·제목을 보인다 ([#87](https://github.com/say8425/diffdeck/issues/87)) ([72de298](https://github.com/say8425/diffdeck/commit/72de2988ad6d5a2e9ca70c4f1e271249f3d1f8de))
+
+
+### Bug Fixes
+
+* OS가 라이트 모드면 파일 트리만 하얗게 그려지던 것을 다크로 고정한다 ([#92](https://github.com/say8425/diffdeck/issues/92)) ([b4e4c7a](https://github.com/say8425/diffdeck/commit/b4e4c7aa0a586028599d0054692368c581313dd3))
+* 피커 목록이 길면 PR 줄이 있는 행이 눌려 겹치던 것을 고친다 ([#93](https://github.com/say8425/diffdeck/issues/93)) ([0f56596](https://github.com/say8425/diffdeck/commit/0f56596b422bc5d17c985f19bbdef97ae7fe0c24))
+
 ## [1.6.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.5.1...diffdeck-v1.6.0) (2026-09-27)
 
 
