@@ -7,7 +7,7 @@ import { gitRun, gitText } from "../server/gitOutput.ts";
 import { mapWithLimit } from "../server/mapLimit.ts";
 
 // gitText/gitBytes 헬퍼 자체의 회귀망이다. 행업 단언은 Bun 1.3.x에서만
-// 갈린다(CI test-bun13, testing.md). git-large-output.test.ts가 지키지 못하는
+// 갈린다(testing.md). git-large-output.test.ts가 지키지 못하는
 // 호출처(summary.ts·worktree list)가 있어 헬퍼를 직접 찌른다.
 
 const FILES = 12;
