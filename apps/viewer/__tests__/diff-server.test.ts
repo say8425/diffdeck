@@ -954,3 +954,56 @@ describe("head selection over HTTP", () => {
 		expect(await res.text()).toBe("from the branch\n");
 	});
 });
+
+// main(A) ─ dup(B: b.txt) ─ feat(C: c.txt), 태그 dup은 A에 붙는다.
+const branchAndTag = async (): Promise<void> => {
+	await $`git -C ${repo} commit -qam a`;
+	await $`git -C ${repo} branch -M main`;
+	await $`git -C ${repo} checkout -qb dup`;
+	writeFileSync(join(repo, "b.txt"), "on the branch\n");
+	await $`git -C ${repo} add b.txt`;
+	await $`git -C ${repo} commit -qm b`;
+	await $`git -C ${repo} checkout -qb feat`;
+	writeFileSync(join(repo, "c.txt"), "on feat\n");
+	await $`git -C ${repo} add c.txt`;
+	await $`git -C ${repo} commit -qm c`;
+	await $`git -C ${repo} tag dup main`;
+};
+
+// 피커는 브랜치만 내놓는데 git은 같은 이름이면 태그를 먼저 해석한다. 태그를 브랜치와
+// 다른 커밋에 붙여야 판별력이 있다 — 같은 커밋이면 어느 쪽으로 풀려도 같은 diff다.
+describe("a branch and a tag with the same name", () => {
+	const diffUrl = (query: string): string =>
+		`${base}/api/diff?repo=${encodeURIComponent(repo)}&token=${handle.token}&${query}`;
+	const names = async (query: string): Promise<string[]> => {
+		const res = await fetch(diffUrl(query));
+		expect(res.status).toBe(200);
+		return ((await res.json()) as { name: string }[])
+			.map((f) => f.name)
+			.toSorted();
+	};
+
+	test("head picks the branch, not the tag", async () => {
+		await branchAndTag();
+		expect(await names("base=main&head=dup")).toEqual(["b.txt"]);
+	});
+
+	test("base picks the branch, not the tag", async () => {
+		await branchAndTag();
+		expect(await names("base=dup&head=feat")).toEqual(["c.txt"]);
+	});
+
+	// 태그 main을 지금 HEAD에 붙이면 merge-base가 HEAD 자신이 되어 c.txt가 사라진다.
+	test("the auto base picks the default branch, not a same-named tag", async () => {
+		await branchAndTag();
+		await $`git -C ${repo} tag main feat`;
+		expect(await names("base=@auto&head=feat")).toEqual(["b.txt", "c.txt"]);
+	});
+
+	// 브랜치가 없으면 태그·SHA는 예전처럼 그대로 git에 간다.
+	test("a tag with no same-named branch still resolves", async () => {
+		await branchAndTag();
+		await $`git -C ${repo} tag only-tag refs/heads/dup`;
+		expect(await names("base=only-tag&head=feat")).toEqual(["c.txt"]);
+	});
+});

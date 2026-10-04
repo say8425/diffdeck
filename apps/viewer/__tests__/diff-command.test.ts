@@ -236,7 +236,7 @@ describe("resolveBaseRef", () => {
 		await $`git -C ${repo} branch -M main`;
 		const { base, ref } = await resolveBaseRef(repo);
 		expect(base).toBe("main");
-		expect(ref).toBe("main");
+		expect(ref).toBe("refs/heads/main");
 	});
 
 	test("returns null ref when nothing resolvable", async () => {

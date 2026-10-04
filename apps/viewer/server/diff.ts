@@ -22,6 +22,23 @@ const refExists = async (repo: string, ref: string): Promise<boolean> => {
 };
 
 /**
+ * 짧은 이름을 브랜치의 전체 refname으로 고정한다. git은 같은 이름이면 태그를 브랜치보다
+ * 먼저 해석하는데, 피커가 내놓는 것은 브랜치다. 브랜치가 아니면(태그·SHA·`HEAD~1`)
+ * 이름을 그대로 둔다.
+ */
+const qualifyRef = async (
+	repo: string,
+	ref: string,
+): Promise<string | null> => {
+	for (const full of [`refs/heads/${ref}`, `refs/remotes/${ref}`, ref]) {
+		// 로컬 → 원격 → 이름 그대로의 우선순위라 순차다.
+		// oxlint-disable-next-line no-await-in-loop
+		if (await refExists(repo, full)) return full;
+	}
+	return null;
+};
+
+/**
  * 사용자가 고른 ref(base·head)를 검증하고 표시명을 만든다. 보안 경계다: `$`도
  * `Bun.spawn`도 git의 옵션 파싱을 막지 않아, `-`로 시작하는 ref가 `git diff`에 닿으면
  * `--output=<path>`로 아무 파일이나 쓸 수 있다. `rev-parse --verify`의 거부에만
@@ -33,10 +50,11 @@ export const verifyBaseRef = async (
 	ref: string,
 ): Promise<{ base: string; ref: string } | null> => {
 	if (ref === "" || ref.startsWith("-")) return null;
-	if (!(await refExists(repo, ref))) return null;
+	const full = await qualifyRef(repo, ref);
+	if (full === null) return null;
 	return {
 		base: ref.startsWith("origin/") ? ref.slice("origin/".length) : ref,
-		ref,
+		ref: full,
 	};
 };
 
@@ -75,13 +93,16 @@ export const resolveBaseRef = async (
 	const candidates = named
 		? [`origin/${named}`, named]
 		: ["origin/main", "origin/master", "main", "master"];
-	for (const ref of candidates) {
+	for (const name of candidates) {
+		const ref = name.startsWith("origin/")
+			? `refs/remotes/${name}`
+			: `refs/heads/${name}`;
 		// 우선순위 순서대로 첫 매치에서 멈춰야 하므로 의도적으로 순차 실행.
 		// oxlint-disable-next-line no-await-in-loop
 		if (await refExists(repo, ref)) {
-			const base = ref.startsWith("origin/")
-				? ref.slice("origin/".length)
-				: ref;
+			const base = name.startsWith("origin/")
+				? name.slice("origin/".length)
+				: name;
 			return { base, ref };
 		}
 	}
