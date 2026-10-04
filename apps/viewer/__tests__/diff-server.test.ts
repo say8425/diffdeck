@@ -1000,6 +1000,16 @@ describe("a branch and a tag with the same name", () => {
 		expect(await names("base=@auto&head=feat")).toEqual(["b.txt", "c.txt"]);
 	});
 
+	// git에 넘기는 전체 refname이 빈 상태 카드의 "on <branch>"로 새면 안 된다.
+	test("the summary names the head by the short name the user picked", async () => {
+		await branchAndTag();
+		const res = await fetch(
+			`${base}/api/summary?repo=${encodeURIComponent(repo)}&token=${handle.token}&base=main&head=dup`,
+		);
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { branch: string }).branch).toBe("dup");
+	});
+
 	// 브랜치가 없으면 태그·SHA는 예전처럼 그대로 git에 간다.
 	test("a tag with no same-named branch still resolves", async () => {
 		await branchAndTag();

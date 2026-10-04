@@ -291,6 +291,7 @@ const createHandler = (cfg: {
 				base,
 				ref,
 				head: headResult.head,
+				...(sel.head.kind === "ref" ? { headName: sel.head.ref } : {}),
 			});
 			return new Response(JSON.stringify(summary), {
 				headers: { "content-type": "application/json; charset=utf-8" },
