@@ -16,10 +16,9 @@ paths:
 
 ## PR 체크 (`.github/workflows/pr-check.yml`)
 
-- 잡 6개(lint — format:check 스텝 포함 · typecheck · test · coverage · e2e · test-bun13)가 `main` 룰셋의 필수 체크다. 잡 이름을 바꾸거나 지우면 룰셋도 같이 고친다 — 룰셋은 이름으로 기다려서, 없어진 이름 때문에 모든 PR이 막힌다. 룰셋: `gh api repos/say8425/diffdeck/rulesets/18998573`.
+- 잡 5개(lint — format:check 스텝 포함 · typecheck · test · coverage · e2e)가 `main` 룰셋의 필수 체크다. 잡 이름을 바꾸거나 지우면 룰셋도 같이 고친다 — 룰셋은 이름으로 기다려서, 없어진 이름 때문에 모든 PR이 막힌다. 룰셋: `gh api repos/say8425/diffdeck/rulesets/18998573`.
 - 우회자(`bypass_actors`)가 없어 관리자도 빨간 CI로 머지하지 못한다. `strict`(최신 `main` 포함 요구)는 끈다 — 켜면 머지마다 열린 PR의 e2e를 다시 돌려야 한다. flake는 `gh run rerun <id> --failed`로 다시 돌린다.
-- Bun 버전을 고정하는 잡은 `test-bun13`(1.3.14)뿐이고, 나머지는 setup-bun 기본값(최신)을 따른다. 루트 `package.json`에 `packageManager`나 `engines.bun`을 넣으면 그 다섯 잡의 Bun이 조용히 바뀐다.
-- `test-bun13`은 최신 Bun에서는 보이지 않는 `$` 행업 회귀망을 돈다. 이 잡에는 `bun install`을 넣지 않는다 — 최신 Bun이 lockfile 포맷을 바꾸는 날 회귀와 무관하게 빨개진다. 지원 하한이 Bun 1.4 이상이 되면 잡과 룰셋 항목을 함께 지운다.
+- 모든 잡이 Bun 버전을 고정하지 않고 setup-bun 기본값(최신)을 따른다. 지원 하한은 Bun 1.4다. 루트 `package.json`에 `packageManager`나 `engines.bun`을 넣으면 모든 잡의 Bun이 조용히 바뀐다.
 - 나머지 잡은 `bun install --frozen-lockfile`로 설치한다. e2e 잡은 Node를 고정하고 `playwright install --with-deps chrome`으로 실제 Chrome을 깐다(`channel: "chrome"`). 실패하면 `apps/viewer/test-results/`를 아티팩트로 올린다.
 - e2e는 골라 돌리지 않고 전부 돈다 — 어느 계약이 깨질지 미리 알 수 없다.
 

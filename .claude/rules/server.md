@@ -53,8 +53,8 @@ paths:
 ## Bun `$`와 git 출력 크기
 
 - Bun 1.3.x의 `$`는 64KB가 넘는 stdout을 받으면 resolve도 reject도 없이 영원히 pending일 수 있다(호출이 겹치면 거의 확정, 1.4.0에서 수정). 출력이 리포 크기를 따라 커질 수 있는 git 호출은 `gitOutput.ts`의 `gitBytes`/`gitText`(`Bun.spawn`)로 쓴다. `$`는 `rev-parse`·`merge-base`처럼 출력이 작은 호출에만 남긴다. 되돌리지 않는다.
-- 그 회귀망은 Bun 1.3.x(CI 잡 `test-bun13`)에서만 판별력이 있다(`testing.md`). `summary.ts`와 `worktree list`가 `$`로 돌아가는 것은 어떤 테스트도 잡지 못한다.
-- 서버 코드는 npm 패키지를 import하지 않는다(지금은 Bun과 node 빌트인만 쓴다). `test-bun13`은 `bun install` 없이 `diff.ts`·`gitOutput.ts`·`refs.ts`·`fingerprint.ts`·`mapLimit.ts`를 직접 import한다.
+- 그 회귀망은 Bun 1.3.x에서만 판별력이 있어 지원 하한(1.4)에서 도는 CI는 행업을 잡지 못한다(`testing.md`). `summary.ts`와 `worktree list`가 `$`로 돌아가는 것은 어떤 테스트도 잡지 못한다.
+- 서버 코드는 npm 패키지를 import하지 않는다(지금은 Bun과 node 빌트인만 쓴다).
 - flight가 매달려도 회복하는 장치 셋은 함께여야 동작한다: ① `singleFlight`가 flight를 타임아웃과 race해 키를 풀고(`SingleFlightTimeoutError`), ② `awaitFlight`가 타임아웃만 503 + `Retry-After`로 바꾸고(다른 에러는 다시 던진다), ③ 브라우저 `fetchDiff`가 503·네트워크 실패를 한 번 재시도한다(403·400은 재시도하지 않는다). 키를 풀지 않으면 재시도가 같은 죽은 프라미스에 합류한다. 회귀망은 `diff-server.test.ts`의 실제 HTTP 503 경로와 `self-heal.e2e.ts`다.
 - 큰 출력의 `$`를 전부 옮겼어도 flight 타임아웃은 지우지 않는다. 원인을 가리지 않는 안전망이다(예: base 해석의 `gh pr view`는 네트워크를 기다린다).
 - `Retry-After`(1초)와 브라우저의 `RETRY_DELAYS_MS`는 같은 값으로 맞춰 둔다 — fetch는 `Retry-After`를 저절로 지키지 않는다.
