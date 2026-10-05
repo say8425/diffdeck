@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.7.0...diffdeck-v1.7.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* 같은 이름의 태그가 있어도 고른 브랜치로 diff한다 ([#98](https://github.com/say8425/diffdeck/issues/98)) ([5ee8749](https://github.com/say8425/diffdeck/commit/5ee87496cfd7805b5ed0f18e0ea640584d5934df))
+
 ## [1.7.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.6.0...diffdeck-v1.7.0) (2026-10-04)
 
 
