@@ -24,6 +24,7 @@ paths:
   - 갈림점은 `merge-base(base, head)`로 잰다. 워크트리의 HEAD로 재면 base가 그 사이 만든 파일이 "head에서 삭제됨"으로 섞인다.
   - 커밋된 head에는 untracked가 없다(토글이 켜져 있어도 건너뛴다). 그때 `/api/summary`의 `workingFiles`·`untrackedFiles`는 0이 아니라 `null`이다 — 재지 않은 값을 0으로 적으면 카드가 "볼 것이 없다"고 주장한다.
 - 사용자가 고른 base·head는 `verifyBaseRef`(`diff.ts`)를 통과시킨다. 보안 경계다: Bun `$`도 `Bun.spawn` 인자 배열도 git의 옵션 파싱을 막지 않아서, `-`로 시작하는 ref가 `git diff`에 닿으면 `--output=<path>`로 아무 파일이나 쓸 수 있다. `rev-parse --verify`가 옵션 꼴을 거부하더라도 `-` 접두 검사를 따로 둔다.
+- `verifyBaseRef`는 짧은 이름을 브랜치의 전체 refname으로 고정해 git에 넘긴다(`refs/heads/` → `refs/remotes/` → 이름 그대로). git은 같은 이름이면 태그를 브랜치보다 먼저 해석하는데 피커가 고르는 것은 브랜치다. auto base(`resolveBaseRef`)도 같은 이유로 전체 refname을 쓴다. wire·URL은 짧은 이름 그대로다. 회귀망은 `diff-server.test.ts`의 동명 브랜치·태그 픽스처다(태그를 브랜치와 다른 커밋에 붙여야 판별력이 있다).
 - 존재하지 않거나 옵션 꼴인 ref는 400이고 `x-diff-error`가 `unknown-base`/`unknown-head`로 어느 축인지 가른다. 조용히 auto로 바꾸지 않는다(고르지 않은 기준의 diff가 에러보다 나쁘다). 브라우저 목록과 대조하지는 않으므로 존재하는 태그·SHA·`HEAD~1`은 통과한다.
 - `git diff`의 ref 인자 뒤에는 `--`를 붙인다. ref 이름이 트래킹된 경로(`docs`·`src`)와 같으면 git이 `ambiguous argument`로 죽는데, 출력을 버리는 호출이라 "변경 없음" 화면이 된다. 회귀망은 `diff-command.test.ts`의 "브랜치 이름 = 트래킹된 디렉토리 이름" 픽스처다(평범한 `feat`/`main` 픽스처로는 원리적으로 못 잡는다). `summary.ts`의 카드 카운트용 `diff --name-only`도 같은 계약인데 그쪽은 회귀 테스트가 없다.
 - `selectionCacheKey`에는 flight가 실제로 읽는 입력을 빠짐없이, 그것만 넣는다. 해석된 base ref는 이름으로 넣는다(OID를 넣으면 커밋마다 슬롯이 늘어 LRU가 헛돈다 — 내용 변화는 head rev를 포함한 지문이 잡는다). 워킹트리 뷰의 키에는 해석된 auto ref를 넣지 않는다(origin/HEAD가 움직일 때마다 캐시가 날아간다).

@@ -7,7 +7,7 @@ export interface RepoSummary {
 	head: string;
 	/** 표시용 이름 — origin/ 접두가 벗겨져 있다. */
 	base: string | null;
-	/** baseFiles를 잰 참조. `base`와 달리 `origin/` 접두가 남아 있다. */
+	/** baseFiles를 잰 참조. git에 넘긴 전체 refname이다(`refs/remotes/origin/main`). */
 	ref: string | null;
 	/**
 	 * 미커밋 변경 파일 수. head가 커밋된 리비전이면 null이다 — 재지 않은 값을 0으로
@@ -25,10 +25,17 @@ const countZ = (out: string): number =>
 
 export const getRepoSummary = async (
 	repo: string,
-	opts: { base: string | null; ref: string | null; head?: string },
+	opts: {
+		base: string | null;
+		ref: string | null;
+		/** git에 넘기는 전체 refname. */
+		head?: string;
+		/** 카드에 보일 이름 — 사용자가 고른 짧은 이름이다. */
+		headName?: string;
+	},
 ): Promise<RepoSummary> => {
 	const branch = opts.head
-		? opts.head
+		? (opts.headName ?? opts.head)
 		: (await gitText(["-C", repo, "branch", "--show-current"])).trim();
 	const head = (
 		await gitText(["-C", repo, "rev-parse", "--short", opts.head ?? "HEAD"])
