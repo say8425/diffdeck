@@ -7,12 +7,14 @@ root = "."
 preload = ["./scripts/parity/preload.ts"]
 
 # 100% gate on owned runtime code (apps/viewer/{browser,cli,server}); applies only with
-# `--coverage` (`bun run test:coverage`). main.ts is covered by e2e instead.
+# `--coverage` (`bun run test:coverage`). main.ts is covered by e2e instead; the preview
+# recorder entry (apps/preview/cli.ts) runs in the preview workflow on every PR.
 coverageThreshold = { lines = 1, functions = 1, statements = 1 }
 coveragePathIgnorePatterns = [
 	"packages/**",
 	"scripts/**",
 	"apps/viewer/browser/main.ts",
+	"apps/preview/cli.ts",
 	"apps/viewer/build.ts",
 	"apps/viewer/e2e/**",
 	"**/*.test.ts",

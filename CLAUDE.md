@@ -6,6 +6,7 @@
 
 - `packages/` — vendored 포크(workspace로 쓰고 npm에서 받지 않는다): `path-store`(트리 순수 로직) · `theming`(테마 + shiki 테마 JSON) · `diffs`(CodeView diff 렌더 엔진) · `trees`(FileTree, vanilla 렌더)
 - `apps/viewer/` — 배포되는 유일한 패키지 `@say8425/diffdeck`: `server/`(데이터 API) · `browser/`(뷰어, `main.ts`가 배선) · `index.html` · `cli.ts` + `cli/` · `build.ts` · `fonts/` · `__tests__/` · `e2e/`
+- `apps/preview/` — PR 프리뷰 Cloudflare Worker와 녹화기. 배포 패키지가 아니다.
 - `skills/diffdeck/SKILL.md` — 배포되는 에이전트 스킬. `build.ts`가 `dist/skills/`로 복사한다. 플러그인 매니페스트는 `.claude-plugin/`·`.codex-plugin/`·`.agents/plugins/`에 있다.
 - `scripts/` — 소스맵 복원 도구, css-inline Bun 플러그인, 렌더 패리티 하니스(`scripts/parity/`)
 - `docs/` — README 번역 4종과 스크린샷. `docs/superpowers/`는 gitignore된 로컬 계획 문서다.
@@ -66,6 +67,7 @@ cd apps/viewer && bun run build && bun run start   # 뷰어를 직접 띄워 본
 | `vendored-packages.md` | 포크 원칙과 현재 예외, shiki 번프 |
 | `testing.md` · `e2e.md` | `bun test` 함정, Playwright 함정과 판별력 |
 | `ci-release.md` | 필수 체크, 릴리스, 배포 산출물 |
+| `preview.md` | PR 프리뷰(녹화·재생 Worker, `preview.yml`) |
 | `docs-sync.md` | CLI 플래그·SKILL.md·README 번역 동기화 |
 
 ## 이 문서를 고칠 때
