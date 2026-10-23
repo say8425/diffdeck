@@ -19,7 +19,7 @@
 		"@diffdeck/diffs": "workspace:*",
 		"@diffdeck/trees": "workspace:*",
 		"@playwright/test": "1.63.0",
-		"@types/bun": "1.4.2",
+		"@types/bun": "1.4.4",
 		"oxfmt": "0.71.0",
 		"oxlint": "1.86.0",
 		"oxlint-tsgolint": "7.0.2003",
