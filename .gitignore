@@ -7,3 +7,5 @@ scripts/parity/out/
 docs/superpowers/
 test-results/
 playwright-report/
+apps/preview/site/
+.wrangler/

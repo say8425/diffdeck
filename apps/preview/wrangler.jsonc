@@ -1,0 +1,12 @@
+{
+	"name": "diffdeck-preview",
+	"main": "worker.ts",
+	"compatibility_date": "2026-09-01",
+	"assets": {
+		// record.ts가 만든다(빌드된 뷰어 + _snapshot/).
+		"directory": "./site",
+		"binding": "ASSETS",
+		// 맨 주소의 리디렉션과 /api/* 재생을 워커가 맡는다.
+		"run_worker_first": true,
+	},
+}

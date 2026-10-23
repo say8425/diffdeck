@@ -1,0 +1,110 @@
+name: Preview
+
+# PR마다 그 브랜치의 뷰어를 Cloudflare Worker로 띄운다(preview.md).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+  # 시크릿을 처음 넣은 뒤 Worker를 만들 때 손으로 한 번 돌린다(preview.md).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  WRANGLER_VERSION: 4.137.0
+
+jobs:
+  # 포크 PR에는 시크릿이 오지 않고, 시크릿을 넣기 전에는 배포할 곳이 없다.
+  # 그때는 실패 대신 건너뛴다(필수 체크가 아니다).
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - id: check
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; skipping the preview."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.ok == 'true' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 머지 커밋이 아니라 브랜치를 받는다 — 뷰어 라벨과 auto base(`gh pr view`)가
+          # 브랜치 이름을 읽는다. fetch-depth 0이어야 origin/main이 생긴다.
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        working-directory: apps/viewer
+      - name: Record the snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # main에는 PR이 없어 auto base가 자기 자신이 된다. 마지막 머지 커밋을 보인다.
+          BASE: ${{ github.event_name == 'pull_request' && '@auto' || 'HEAD~1' }}
+        run: bun apps/preview/cli.ts --base "$BASE"
+      - name: Deploy the PR preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          out="$(bunx "wrangler@$WRANGLER_VERSION" preview --config apps/preview/wrangler.jsonc --name "pr-$PR" --json)"
+          url="$(printf '%s' "$out" | jq -er '.preview.urls[0]')"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Comment the preview URL
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.preview.outputs.url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          body="$(printf '프리뷰: %s\n\n커밋 %s의 뷰어입니다. 이 브랜치를 auto base와 견준 첫 화면의 API 응답을 녹화해 재생합니다. 피커로 다른 브랜치를 고르면 녹화하지 않은 diff라 열리지 않습니다.' "$URL" "$SHA")"
+          gh pr comment "$PR" --edit-last --create-if-none --body "$body"
+      - name: Deploy main
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx "wrangler@$WRANGLER_VERSION" deploy --config apps/preview/wrangler.jsonc
+
+  cleanup:
+    needs: gate
+    if: needs.gate.outputs.ok == 'true' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.pull_request.number }}
+        run: bunx "wrangler@$WRANGLER_VERSION" preview delete --config apps/preview/wrangler.jsonc --name "pr-$PR" --skip-confirmation
