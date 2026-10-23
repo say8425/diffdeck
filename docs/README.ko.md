@@ -80,7 +80,7 @@ bunx @say8425/diffdeck
 bun install -g @say8425/diffdeck
 ```
 
-[Bun](https://bun.sh)과, `PATH`에 `git`이 있어야 합니다. [`gh`](https://cli.github.com)는 선택 사항입니다 — 있으면 풀 리퀘스트를 보고 비교 기준을 고르고 PR 배지를 보여줍니다.
+[Bun](https://bun.sh) 1.4 이상과, `PATH`에 `git`이 있어야 합니다. [`gh`](https://cli.github.com)는 선택 사항입니다 — 있으면 풀 리퀘스트를 보고 비교 기준을 고르고 PR 배지를 보여줍니다.
 
 ## CLI
 

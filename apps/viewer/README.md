@@ -10,6 +10,8 @@ with syntax highlighting, a file tree, and inline image diffs.
 bunx @say8425/diffdeck
 ```
 
+Requires [Bun](https://bun.sh) 1.4 or later and `git`.
+
 Run it from inside a git repository. It starts a local server on
 `127.0.0.1:49573` (override with `--port`) and opens the viewer in your
 default browser.
