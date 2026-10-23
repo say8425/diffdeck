@@ -3,13 +3,21 @@ import {
 	type Getter,
 	DEFAULT_TREE_WIDTH,
 	FLATTEN_KEY,
+	FONT_SCALE_KEY,
+	MAX_FONT_SCALE,
+	MIN_FONT_SCALE,
 	MAX_TREE_WIDTH,
 	MIN_TREE_WIDTH,
 	TREE_SIDE_KEY,
 	TREE_WIDTH_KEY,
+	clampFontScale,
 	clampTreeWidth,
+	codeMetrics,
 	compareBaseKey,
+	fontScaleAnnouncement,
+	fontScaleLabel,
 	readFlatten,
+	readFontScale,
 	readTreeSide,
 	readTreeWidth,
 	resolveCompareBase,
@@ -20,6 +28,7 @@ import {
 	resolveTreeSide,
 	resolveUntracked,
 	resolveWatch,
+	stepFontScale,
 } from "../browser/prefs.ts";
 
 const fake =
@@ -191,5 +200,63 @@ describe("compare base preference", () => {
 		const get = store({ [compareBaseKey("/a")]: "main" });
 		expect(resolveCompareBase(null, get, "/a")).toBe("main");
 		expect(resolveCompareBase(null, get, "/b")).toBeNull();
+	});
+});
+
+describe("font scale", () => {
+	test("clamps to the range and rounds to one decimal", () => {
+		expect(clampFontScale(0.5)).toBe(MIN_FONT_SCALE);
+		expect(clampFontScale(3)).toBe(MAX_FONT_SCALE);
+		expect(clampFontScale(1.24)).toBe(1.2);
+		expect(clampFontScale(1.1 + 0.1)).toBe(1.2);
+	});
+
+	test("falls back to x1 for a value that is not a number", () => {
+		expect(clampFontScale(Number.NaN)).toBe(1);
+		expect(clampFontScale(Number.POSITIVE_INFINITY)).toBe(1);
+	});
+
+	test("reads x1 when nothing is stored", () => {
+		expect(readFontScale(fake({}))).toBe(1);
+	});
+
+	test("reads a stored value and clamps it", () => {
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "1.3" }))).toBe(1.3);
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "9" }))).toBe(MAX_FONT_SCALE);
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "bogus" }))).toBe(1);
+	});
+
+	// Number("")은 0이라 그대로 두면 최솟값으로 읽힌다.
+	test("reads x1 for an empty stored value", () => {
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "" }))).toBe(1);
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "  " }))).toBe(1);
+	});
+
+	test("steps by 0.1 without float drift and stops at the ends", () => {
+		expect(stepFontScale(1, 1)).toBe(1.1);
+		expect(stepFontScale(1.1, 1)).toBe(1.2);
+		expect(stepFontScale(0.9, -1)).toBe(0.8);
+		expect(stepFontScale(MIN_FONT_SCALE, -1)).toBe(MIN_FONT_SCALE);
+		expect(stepFontScale(MAX_FONT_SCALE, 1)).toBe(MAX_FONT_SCALE);
+	});
+
+	test("labels drop a trailing .0", () => {
+		expect(fontScaleLabel(1)).toBe("×1");
+		expect(fontScaleLabel(1.2)).toBe("×1.2");
+		expect(fontScaleLabel(2)).toBe("×2");
+	});
+
+	test("announces the scale as a percentage", () => {
+		expect(fontScaleAnnouncement(1)).toBe("Font size 100%");
+		expect(fontScaleAnnouncement(1.2)).toBe("Font size 120%");
+		expect(fontScaleAnnouncement(0.8)).toBe("Font size 80%");
+	});
+
+	test("code metrics scale 13px/20px and keep the line height whole", () => {
+		expect(codeMetrics(1)).toEqual({ fontSize: 13, lineHeight: 20 });
+		expect(codeMetrics(0.8)).toEqual({ fontSize: 10.4, lineHeight: 16 });
+		expect(codeMetrics(0.9)).toEqual({ fontSize: 11.7, lineHeight: 18 });
+		expect(codeMetrics(1.3)).toEqual({ fontSize: 16.9, lineHeight: 26 });
+		expect(codeMetrics(2)).toEqual({ fontSize: 26, lineHeight: 40 });
 	});
 });

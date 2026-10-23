@@ -38,6 +38,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       # Trusted publishing (OIDC) needs Node >= 22.14.0 and npm >= 11.5.1.
       - uses: actions/setup-node@v7
         with:

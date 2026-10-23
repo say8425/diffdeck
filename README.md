@@ -29,7 +29,7 @@ What the diff-rendering engine provides:
 - **Virtualized rendering** that stays smooth on large diffs, with sticky file headers.
 - **Shadow-DOM encapsulation** per file, so the viewer's styles never leak into the page.
 
-The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, and watch/auto-refresh — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`, together with a searchable worktree and branch picker, pull-request badges, and Grab.
+The interactive viewer chrome that wraps this engine — click-to-fold, copy-path, in-app search, adjustable code font size, and watch/auto-refresh — comes from the [cc-statusline](https://github.com/say8425/cc-statusline) viewer and now lives in diffdeck's `apps/viewer/`, together with a searchable worktree and branch picker, pull-request badges, and Grab.
 
 ![The diffdeck viewer — file tree with git-status badges and a syntax-highlighted diff](docs/screenshot.png)
 

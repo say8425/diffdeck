@@ -6,6 +6,7 @@ import {
 	DIFFS_TITLE_ATTR,
 } from "../index";
 import { createFileHeaderElement } from "../utils/createFileHeaderElement";
+import { createSeparator } from "../utils/createSeparator";
 import type { Element as HASTElement } from "hast";
 
 // Contract values the viewer (apps/viewer/browser) hard-depends on. If the
@@ -82,5 +83,29 @@ describe("createFileHeaderElement emits data-prev-name for renames", () => {
 
 	test("a node carries data-prev-name", () => {
 		expect(nodesWithAttr(header, "data-prev-name").length).toBeGreaterThan(0);
+	});
+});
+
+// apps/viewer/browser/main.ts pins hunk separators to the header's font size
+// through an unsafeCSS `[data-separator]` selector (a literal, like
+// data-prev-name above). A rename would let separator text scale with code.
+describe("createSeparator emits data-separator", () => {
+	test("a line-info separator carries it", () => {
+		const separator = createSeparator({
+			type: "line-info",
+			content: "3 unmodified lines",
+			isFirstHunk: false,
+			isLastHunk: false,
+		});
+		expect(separator.properties?.["data-separator"]).toBe("line-info");
+	});
+
+	test("an empty separator falls back to simple", () => {
+		const separator = createSeparator({
+			type: "line-info",
+			isFirstHunk: false,
+			isLastHunk: false,
+		});
+		expect(separator.properties?.["data-separator"]).toBe("simple");
 	});
 });

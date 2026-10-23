@@ -71,6 +71,50 @@ export const readTreeWidth = (get: Getter): number => {
 	return stored === null ? DEFAULT_TREE_WIDTH : clampTreeWidth(Number(stored));
 };
 
+export const FONT_SCALE_KEY = "diffdeck:font-scale";
+export const MIN_FONT_SCALE = 0.8;
+export const MAX_FONT_SCALE = 2;
+// 엔진 기본값(style.css의 --diffs-font-size·--diffs-line-height 폴백)과 같아야
+// ×1이 지금 화면과 같다.
+export const BASE_CODE_FONT_SIZE = 13;
+export const BASE_CODE_LINE_HEIGHT = 20;
+
+// 0.1 단위로 반올림한다 — 1.1 + 0.1 같은 부동소수 오차가 저장값과 라벨에
+// 새지 않게.
+export const clampFontScale = (scale: number): number =>
+	Number.isFinite(scale)
+		? Math.min(
+				MAX_FONT_SCALE,
+				Math.max(MIN_FONT_SCALE, Math.round(scale * 10) / 10),
+			)
+		: 1;
+
+// No URL layer: there is no launch flag for font size.
+export const readFontScale = (get: Getter): number => {
+	const stored = get(FONT_SCALE_KEY);
+	return stored === null || stored.trim() === ""
+		? 1
+		: clampFontScale(Number(stored));
+};
+
+export const stepFontScale = (scale: number, direction: 1 | -1): number =>
+	clampFontScale(scale + direction / 10);
+
+export const fontScaleLabel = (scale: number): string => `×${scale}`;
+
+// 라벨의 "×1.2"는 스크린 리더가 맥락 없이 읽으므로 따로 문장을 둔다.
+export const fontScaleAnnouncement = (scale: number): string =>
+	`Font size ${Math.round(scale * 100)}%`;
+
+// 줄 높이는 정수로 둔다 — 엔진의 가상화가 같은 값을 itemMetrics.lineHeight로
+// 받아 아직 그리지 않은 줄의 높이를 추정한다.
+export const codeMetrics = (
+	scale: number,
+): { fontSize: number; lineHeight: number } => ({
+	fontSize: Math.round(BASE_CODE_FONT_SIZE * scale * 10) / 10,
+	lineHeight: Math.round(BASE_CODE_LINE_HEIGHT * scale),
+});
+
 // 리포 경로로 네임스페이스한다 — 워크트리마다 기준이 다르다.
 export const compareBaseKey = (repo: string): string =>
 	`diffdeck:compare-base:${repo}`;
