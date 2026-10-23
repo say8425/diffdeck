@@ -43,6 +43,33 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun test
 
+  # 다른 잡은 .bun-version으로 돈다. 사용자는 지원 하한까지의 어느 Bun으로든 배포물을
+  # 돌리므로, 릴리스와 같은 Bun으로 빌드한 dist/cli.js와 테스트 스위트를 하한 Bun에서
+  # 돌린다(ci-release.md).
+  bun-floor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BUN_FLOOR: 1.4.0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      # 설치와 빌드는 고정 Bun으로 한다. 잠금 파일 포맷이 하한 Bun을 앞서도 이 잡이
+      # 하한과 무관하게 빨개지지 않는다.
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        working-directory: apps/viewer
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_FLOOR }}
+      - name: Check the floor Bun is on PATH
+        run: test "$(bun --version)" = "$BUN_FLOOR"
+      - run: bun test
+      - name: Smoke the release bundle
+        run: scripts/smoke-cli.sh
+
   coverage:
     runs-on: ubuntu-latest
     steps:

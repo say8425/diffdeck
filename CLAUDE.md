@@ -8,7 +8,7 @@
 - `apps/viewer/` — 배포되는 유일한 패키지 `@say8425/diffdeck`: `server/`(데이터 API) · `browser/`(뷰어, `main.ts`가 배선) · `index.html` · `cli.ts` + `cli/` · `build.ts` · `fonts/` · `__tests__/` · `e2e/`
 - `apps/preview/` — PR 프리뷰 Cloudflare Worker와 녹화기. 배포 패키지가 아니다.
 - `skills/diffdeck/SKILL.md` — 배포되는 에이전트 스킬. `build.ts`가 `dist/skills/`로 복사한다. 플러그인 매니페스트는 `.claude-plugin/`·`.codex-plugin/`·`.agents/plugins/`에 있다.
-- `scripts/` — 소스맵 복원 도구, css-inline Bun 플러그인, 렌더 패리티 하니스(`scripts/parity/`)
+- `scripts/` — 소스맵 복원 도구, css-inline Bun 플러그인, 렌더 패리티 하니스(`scripts/parity/`), 배포 번들 스모크(`smoke-cli.sh`)
 - `docs/` — README 번역 4종과 스크린샷. `docs/superpowers/`는 gitignore된 로컬 계획 문서다.
 
 ## 명령
@@ -26,7 +26,7 @@ cd apps/viewer && bun run build && bun run start   # 뷰어를 직접 띄워 본
 
 ## 작업 규칙
 
-- `main`에 직접 push하지 않는다. 브랜치 → PR → 사람이 리뷰·머지한다. 필수 체크 5개(lint·typecheck·test·coverage·e2e)가 초록이어야 머지된다.
+- `main`에 직접 push하지 않는다. 브랜치 → PR → 사람이 리뷰·머지한다. 필수 체크 6개(lint·typecheck·test·bun-floor·coverage·e2e)가 초록이어야 머지된다.
 - 커밋 메시지는 Conventional Commits다. release-please가 이것으로 버전·CHANGELOG·릴리스를 만든다(`feat`→minor, `fix`→patch, `!`·`BREAKING CHANGE`→major, `docs`·`chore`·`test`·`ci` 등은 릴리스 없음).
 - `packages/*`에서는 import 경로와 재구성 타입만 고친다. 렌더·로직 변경은 합의된 예외일 때만 한다(`vendored-packages.md`). CodeView 엔진은 재작성하지 않는다.
 - 외부 의존성은 정확한 버전으로 핀한다(`^`·`~` 금지).
