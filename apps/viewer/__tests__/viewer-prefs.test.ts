@@ -14,6 +14,7 @@ import {
 	clampTreeWidth,
 	codeMetrics,
 	compareBaseKey,
+	fontScaleAnnouncement,
 	fontScaleLabel,
 	readFlatten,
 	readFontScale,
@@ -225,6 +226,12 @@ describe("font scale", () => {
 		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "bogus" }))).toBe(1);
 	});
 
+	// Number("")은 0이라 그대로 두면 최솟값으로 읽힌다.
+	test("reads x1 for an empty stored value", () => {
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "" }))).toBe(1);
+		expect(readFontScale(fake({ [FONT_SCALE_KEY]: "  " }))).toBe(1);
+	});
+
 	test("steps by 0.1 without float drift and stops at the ends", () => {
 		expect(stepFontScale(1, 1)).toBe(1.1);
 		expect(stepFontScale(1.1, 1)).toBe(1.2);
@@ -237,6 +244,12 @@ describe("font scale", () => {
 		expect(fontScaleLabel(1)).toBe("×1");
 		expect(fontScaleLabel(1.2)).toBe("×1.2");
 		expect(fontScaleLabel(2)).toBe("×2");
+	});
+
+	test("announces the scale as a percentage", () => {
+		expect(fontScaleAnnouncement(1)).toBe("Font size 100%");
+		expect(fontScaleAnnouncement(1.2)).toBe("Font size 120%");
+		expect(fontScaleAnnouncement(0.8)).toBe("Font size 80%");
 	});
 
 	test("code metrics scale 13px/20px and keep the line height whole", () => {

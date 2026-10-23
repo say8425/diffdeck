@@ -480,6 +480,18 @@
 				color: var(--vd-fg-muted);
 				font-variant-numeric: tabular-nums;
 			}
+			/* 스크린리더 전용 라이브 리전(#grab-popover .grab-hint와 같은 이유). */
+			#font-scale-status {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				padding: 0;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
+			}
 			#font-scale .font-scale-buttons {
 				display: flex;
 				gap: 6px;
@@ -1172,8 +1184,9 @@
 							>
 								<div class="font-scale-head">
 									<span id="font-scale-label">Font size</span>
-									<span id="font-scale-value" aria-live="polite"></span>
+									<span id="font-scale-value" aria-hidden="true"></span>
 								</div>
+								<span id="font-scale-status" aria-live="polite"></span>
 								<div class="font-scale-buttons">
 									<button
 										id="font-scale-dec"
@@ -1197,8 +1210,8 @@
 									<button
 										id="font-scale-reset"
 										type="button"
-										aria-label="Reset font size"
-										title="Reset font size"
+										aria-label="Reset font size to ×1"
+										title="Reset font size to ×1"
 									>
 										×1
 									</button>

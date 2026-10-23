@@ -14,6 +14,7 @@ paths:
   - "apps/viewer/e2e/large-file-collapse.e2e.ts"
   - "apps/viewer/e2e/worker-highlight.e2e.ts"
   - "apps/viewer/e2e/color-scheme.e2e.ts"
+  - "apps/viewer/e2e/font-scale.e2e.ts"
 ---
 
 # 뷰어 프런트 (`apps/viewer/browser/`, `index.html`)
@@ -49,7 +50,7 @@ paths:
 ## 프리퍼런스 (`prefs.ts`)
 
 - `resolve*` 순수 함수가 값을 정한다. watch·flatten·트리 위치·Fold with tree는 URL → localStorage → 기본값, untracked·트리 숨김·Unified/Split은 URL → 기본값(저장하지 않는다)이다. 사이드바 폭은 localStorage에 저장한다. CLI 뷰 플래그는 URL로 들어와 그 실행에만 적용되고, 인앱 토글은 실제로 적용된 값을 보인다.
-- 코드 글자 크기(`⋯` 메뉴의 `#font-scale`)는 localStorage(`diffdeck:font-scale`)에만 둔다. URL 층과 CLI 플래그가 없다. 배율은 `:root`의 `--diffs-font-size`·`--diffs-line-height`로 엔진에 넘기고, 같은 줄 높이를 `itemMetrics.lineHeight`로도 넘긴다 — 빠지면 가상화가 화면 밖 파일을 옛 줄 높이로 추정한다. 파일 헤더는 `unsafeCSS`로 13px/20px에 고정한다(헤더 높이가 `1lh`를 따르는데 `diffHeaderHeight`는 44로 둔다). 회귀망 `font-scale.e2e.ts`.
+- 코드 글자 크기(`⋯` 메뉴의 `#font-scale`)는 localStorage(`diffdeck:font-scale`)에만 둔다. URL 층과 CLI 플래그가 없다. 배율은 `:root`의 `--diffs-font-size`·`--diffs-line-height`로 엔진에 넘기고, 같은 줄 높이를 `itemMetrics.lineHeight`로도 넘긴다 — 빠지면 가상화가 화면 밖 파일을 옛 줄 높이로 추정한다. 파일 헤더와 헝크 구분선은 `unsafeCSS`로 13px/20px에 고정한다(헤더 높이가 `1lh`를 따르는데 `diffHeaderHeight`는 44로 둔다. 구분선은 코드가 아니고 높이가 32px로 고정이다). 누른 버튼이 스스로 비활성화되면 포커스를 남은 버튼으로 옮긴다. 회귀망 `font-scale.e2e.ts`.
 - 트리 숨김은 툴바 버튼(`#tree-toggle-btn`)과 오버플로 메뉴 체크박스(`#toggle-tree-hidden`)가 같은 상태를 보인다.
 - 기존 `cc-statusline:*` 키는 이름을 바꾸지 않는다 — 마이그레이션 코드가 없어 사용자 설정이 조용히 초기화된다. 새 키는 `diffdeck:` 접두를 쓰고 리포별 값은 리포로 네임스페이스한다(`diffdeck:compare-base:<repo>`).
 - URL의 레거시 `mode`는 저장된 base보다 먼저 base로 승격한다(외부 링크가 `?mode=base`를 쓴다). head는 저장하지 않는다 — URL이 진실이라야 새로고침·링크가 재현된다.

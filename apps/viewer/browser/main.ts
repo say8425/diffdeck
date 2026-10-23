@@ -69,6 +69,7 @@ import {
 	FLATTEN_KEY,
 	FOLD_WITH_TREE_KEY,
 	FONT_SCALE_KEY,
+	fontScaleAnnouncement,
 	fontScaleLabel,
 	MAX_FONT_SCALE,
 	MIN_FONT_SCALE,
@@ -699,7 +700,8 @@ const codeViewOptions = (): ConstructorParameters<
 	unsafeCSS:
 		// The header is sticky and code scrolls under it, so the hover tint is
 		// mixed into the opaque --diffs-bg instead of a translucent overlay.
-		`[${DIFFS_HEADER_ATTR}]{font-size:${BASE_CODE_FONT_SIZE}px;line-height:${BASE_CODE_LINE_HEIGHT}px;cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
+		`[${DIFFS_HEADER_ATTR}],[data-separator]{font-size:${BASE_CODE_FONT_SIZE}px;line-height:${BASE_CODE_LINE_HEIGHT}px}` +
+		`[${DIFFS_HEADER_ATTR}]{cursor:pointer;transition:background-color .15s}[${DIFFS_HEADER_ATTR}]:hover{background-color:color-mix(in srgb,var(--diffs-mixer) 5%,var(--diffs-bg))}` +
 		`::highlight(${GRAB_HIGHLIGHT_NAME}){background-color:rgba(91,141,239,0.32)}` +
 		"mark.cc-find-hit{background:#e3b341;color:#000;border-radius:2px}" +
 		"mark.cc-find-hit--active{background:#f0883e;color:#000}" +
@@ -1653,6 +1655,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 const fontScaleValue = document.getElementById("font-scale-value");
+const fontScaleStatus = document.getElementById("font-scale-status");
 const fontScaleDec = document.getElementById(
 	"font-scale-dec",
 ) as HTMLButtonElement | null;
@@ -1674,6 +1677,11 @@ const applyFontScale = (next: number): void => {
 	if (fontScaleDec) fontScaleDec.disabled = fontScale <= MIN_FONT_SCALE;
 	if (fontScaleInc) fontScaleInc.disabled = fontScale >= MAX_FONT_SCALE;
 	if (fontScaleReset) fontScaleReset.disabled = fontScale === 1;
+	// 누른 버튼이 스스로 비활성화되면 포커스가 body로 떨어진다.
+	const focused = document.activeElement;
+	if (focused instanceof HTMLButtonElement && focused.disabled) {
+		[fontScaleInc, fontScaleDec].find((b) => b && !b.disabled)?.focus();
+	}
 	codeView?.setOptions(codeViewOptions());
 	codeView?.render();
 };
@@ -1683,6 +1691,9 @@ const setFontScale = (next: number): void => {
 	if (next === fontScale) return;
 	applyFontScale(next);
 	localStorage.setItem(FONT_SCALE_KEY, String(fontScale));
+	if (fontScaleStatus) {
+		fontScaleStatus.textContent = fontScaleAnnouncement(fontScale);
+	}
 };
 fontScaleDec?.addEventListener("click", () =>
 	setFontScale(stepFontScale(fontScale, -1)),

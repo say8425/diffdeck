@@ -92,13 +92,19 @@ export const clampFontScale = (scale: number): number =>
 // No URL layer: there is no launch flag for font size.
 export const readFontScale = (get: Getter): number => {
 	const stored = get(FONT_SCALE_KEY);
-	return stored === null ? 1 : clampFontScale(Number(stored));
+	return stored === null || stored.trim() === ""
+		? 1
+		: clampFontScale(Number(stored));
 };
 
 export const stepFontScale = (scale: number, direction: 1 | -1): number =>
 	clampFontScale(scale + direction / 10);
 
 export const fontScaleLabel = (scale: number): string => `×${scale}`;
+
+// 라벨의 "×1.2"는 스크린 리더가 맥락 없이 읽으므로 따로 문장을 둔다.
+export const fontScaleAnnouncement = (scale: number): string =>
+	`Font size ${Math.round(scale * 100)}%`;
 
 // 줄 높이는 정수로 둔다 — 엔진의 가상화가 같은 값을 itemMetrics.lineHeight로
 // 받아 아직 그리지 않은 줄의 높이를 추정한다.
