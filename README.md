@@ -80,7 +80,7 @@ Or install it globally to get the `diffdeck` command:
 bun install -g @say8425/diffdeck
 ```
 
-Requires [Bun](https://bun.sh) and `git` on your `PATH`. [`gh`](https://cli.github.com) is optional: with it, diffdeck uses your pull requests to pick the comparison base and to show PR badges.
+Requires [Bun](https://bun.sh) 1.4 or later and `git` on your `PATH`. [`gh`](https://cli.github.com) is optional: with it, diffdeck uses your pull requests to pick the comparison base and to show PR badges.
 
 ## CLI
 

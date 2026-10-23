@@ -80,7 +80,7 @@ bunx @say8425/diffdeck
 bun install -g @say8425/diffdeck
 ```
 
-需要 [Bun](https://bun.sh)，且 `PATH` 中需包含 `git`。[`gh`](https://cli.github.com) 为可选项：有了它，diffdeck 会根据拉取请求选择对比基准，并显示 PR 徽章。
+需要 [Bun](https://bun.sh) 1.4 或更高版本，且 `PATH` 中需包含 `git`。[`gh`](https://cli.github.com) 为可选项：有了它，diffdeck 会根据拉取请求选择对比基准，并显示 PR 徽章。
 
 ## CLI
 
