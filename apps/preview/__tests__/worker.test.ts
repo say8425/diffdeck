@@ -157,10 +157,11 @@ describe("preview worker", () => {
 		expect(await res.text()).toBe("png");
 	});
 
-	test("refuses a picked head instead of showing the recorded comparison", async () => {
+	test("refuses a picked head the way the server refuses an unknown one", async () => {
 		const env = fakeEnv({});
 		const res = await call("/api/diff?head=feat-x", env);
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(400);
+		expect(res.headers.get("x-diff-error")).toBe("unknown-head");
 		expect(env.seen).toEqual([]);
 	});
 

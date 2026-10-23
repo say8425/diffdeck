@@ -48,13 +48,14 @@ describe("recordSnapshot", () => {
 
 	afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-	const record = (base: string) =>
+	const record = (base: string, maxAssetBytes?: number) =>
 		recordSnapshot({
 			repo,
 			viewerDir,
 			outDir,
 			base,
 			listPrs: () => Promise.resolve({}),
+			...(maxAssetBytes === undefined ? {} : { maxAssetBytes }),
 		});
 
 	test("records the first-screen API calls against the real server", async () => {
@@ -114,5 +115,26 @@ describe("recordSnapshot", () => {
 		expect(
 			Object.keys(manifest.entries).some((k) => k.startsWith("/api/blob")),
 		).toBe(false);
+	});
+
+	test("keeps the server token out of the user's cache directory", async () => {
+		const userCache = join(root, "user-cache");
+		const saved = process.env.XDG_CACHE_HOME;
+		process.env.XDG_CACHE_HOME = userCache;
+		try {
+			await record("main");
+		} finally {
+			if (saved === undefined) delete process.env.XDG_CACHE_HOME;
+			else process.env.XDG_CACHE_HOME = saved;
+		}
+		expect(existsSync(join(userCache, "diffdeck"))).toBe(false);
+	});
+
+	test("fails with a clear message when a response is over the asset limit", async () => {
+		const error = await record("main", 64).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(Error);
+		expect((error as Error).message).toMatch(
+			/^\/api\/\w+ response is \d+ bytes, over the 64-byte asset limit$/,
+		);
 	});
 });

@@ -27,8 +27,15 @@ const replay = async (
 	env: Env,
 ): Promise<Response> => {
 	// 피커로 다른 브랜치를 고르면 녹화하지 않은 diff다. 녹화본을 대신 주면
-	// 고른 것과 다른 비교를 보여 준다.
-	if (url.searchParams.get("head")) return notInSnapshot();
+	// 고른 것과 다른 비교를 보여 준다. 서버의 unknown-head로 답해야 뷰어가
+	// 상태 줄에 이유를 쓰고, 새로 열면 워킹트리(녹화본)로 돌아갈 길을 준다.
+	const head = url.searchParams.get("head");
+	if (head) {
+		return new Response(`not in this preview snapshot: ${head}`, {
+			status: 400,
+			headers: { "x-diff-error": "unknown-head" },
+		});
+	}
 	const key = snapshotKey(url);
 	if (!key) return notInSnapshot();
 	const manifest = await loadManifest(env, url.origin);

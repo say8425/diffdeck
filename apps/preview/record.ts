@@ -13,6 +13,10 @@ import {
 	snapshotKey,
 } from "./snapshot.ts";
 
+// Workers 정적 에셋의 파일 하나 상한이다. /api/diff 본문은 바뀐 파일의 old·new
+// 전문을 싣으므로 큰 파일을 건드린 PR에서 넘을 수 있다.
+export const MAX_ASSET_BYTES = 25 * 1024 * 1024;
+
 export interface RecordOptions {
 	repo: string;
 	/** 빌드된 뷰어(`apps/viewer/dist/viewer`). 사이트 루트로 복사한다. */
@@ -20,6 +24,7 @@ export interface RecordOptions {
 	outDir: string;
 	base: string;
 	listPrs?: (repo: string) => Promise<PrsByBranch | null>;
+	maxAssetBytes?: number;
 }
 
 // 실제 서버를 띄워 뷰어가 첫 화면에서 부르는 API를 그대로 불러 담는다.
@@ -62,6 +67,12 @@ export const recordSnapshot = async (
 		}
 		const index = Object.keys(entries).length;
 		const file = res.status === 204 ? null : `${index}.bin`;
+		const limit = opts.maxAssetBytes ?? MAX_ASSET_BYTES;
+		if (body.byteLength > limit) {
+			throw new Error(
+				`${url.pathname} response is ${body.byteLength} bytes, over the ${limit}-byte asset limit`,
+			);
+		}
 		if (file) writeFileSync(join(snapshotDir, file), body);
 		const key = snapshotKey(url);
 		if (!key) throw new Error(`no snapshot key for ${url.pathname}`);
@@ -74,10 +85,7 @@ export const recordSnapshot = async (
 		await record("/api/refs");
 		await record("/api/prs");
 		await record("/api/summary", { base: opts.base });
-		const diff = await record("/api/diff", {
-			base: opts.base,
-			untracked: "0",
-		});
+		const diff = await record("/api/diff", { base: opts.base });
 		if (diff.status === 200) {
 			const files = JSON.parse(
 				new TextDecoder().decode(diff.body),
