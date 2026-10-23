@@ -18,7 +18,7 @@ paths:
 - import 경로와 재구성 타입만 고친다. 렌더·로직은 바꾸지 않는다(Foundation 원칙). CodeView 엔진은 재작성하지 않는다.
 - 예외는 건별 합의 + 이탈 지점의 `[diffdeck]` 주석 + e2e 회귀망을 모두 갖출 때만 둔다. 새 예외를 만들면 아래 목록에 더한다.
 - 동작을 바꾸고 싶으면 먼저 엔진이 열어 둔 확장점(옵션, `var(--…)` 커스텀 프로퍼티, `unsafeCSS`)으로 해결한다.
-- 뷰어가 기대는 엔진 마크업(data 속성)은 `constants.ts`의 `DIFFS_*_ATTR`로 export하고 `markup-contract.test.ts`가 지킨다. `packages/diffs`의 테스트는 이것 하나라서 엔진 동작은 e2e로만 확인된다.
+- 뷰어가 기대는 엔진 마크업(data 속성)은 `markup-contract.test.ts`가 지킨다. 엔진 코드가 이미 상수로 쓰는 속성(`constants.ts`의 `DIFFS_*_ATTR`)은 뷰어도 그 상수를 import한다. 그 밖의 속성은 상수를 새로 만들지 않고 뷰어에 문자열로 둔다. 새로 기대는 속성에는 엔진이 그 속성을 내보내는지 확인하는 카나리를 `markup-contract.test.ts`에 더한다(`data-prev-name`·`data-separator`) — 엔진 코드를 고치지 않고도 이름이 바뀌면 `bun test`가 실패한다. `data-line` 등 카나리가 아직 없는 속성은 e2e만 지킨다. `packages/diffs`의 테스트는 이것 하나라서 엔진 동작은 e2e로만 확인된다.
 - 라이선스 파일(`packages/*/LICENSE`, `packages/trees/NOTICE.md`, 루트 `NOTICE`)과 수정 고지를 유지한다.
 - lint·format 대상이 아니다(Pierre 원본 스타일을 유지한다).
 
