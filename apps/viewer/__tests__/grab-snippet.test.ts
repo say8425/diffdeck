@@ -79,6 +79,34 @@ describe("buildGrabRows", () => {
 		});
 		expect(() => buildGrabRows(meta)).not.toThrow();
 	});
+	test("범위 밖 인덱스의 malformed context 행은 건너뛴다", () => {
+		const meta = fd(OLD, NEW);
+		// 첫 hunk에 넣으면 커서가 밀려 hunk 사이 gap까지 빠진다.
+		meta.hunks.at(-1)!.hunkContent.push({
+			type: "context",
+			lines: 1,
+			deletionLineIndex: 9999,
+			additionLineIndex: 9999,
+		});
+		expect(buildGrabRows(meta)).toEqual(buildGrabRows(fd(OLD, NEW)));
+	});
+	// 편집이 파일 앞쪽에 있어야 마지막 hunk가 EOF 전에 끝나 뒤 context가 남는다.
+	test("마지막 hunk 뒤의 unchanged 줄도 양측 번호로 붙는다", () => {
+		const tail = Array.from({ length: 12 }, (_, i) => `t${i + 1}`);
+		const rows = buildGrabRows(
+			fd(
+				["a", "b-old", ...tail].join("\n"),
+				["a", "b-new", ...tail].join("\n"),
+			),
+		);
+		expect(rows.length).toBe(1 + 14);
+		expect(rows.at(-1)).toEqual({
+			marker: " ",
+			text: "t12",
+			oldNo: 14,
+			newNo: 14,
+		});
+	});
 });
 
 describe("extractSnippet — side", () => {
