@@ -53,11 +53,12 @@ jobs:
       BUN_FLOOR: 1.4.0
     steps:
       - uses: actions/checkout@v7
+      # 두 setup-bun이 같은 경로에 깔린다. 캐시를 켜면 이 스텝의 post가 하한 바이너리를
+      # 고정 버전 키로 저장할 수 있다.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
-      # 설치와 빌드는 고정 Bun으로 한다. 잠금 파일 포맷이 하한 Bun을 앞서도 이 잡이
-      # 하한과 무관하게 빨개지지 않는다.
+          no-cache: true
       - run: bun install --frozen-lockfile
       - run: bun run build
         working-directory: apps/viewer
@@ -66,9 +67,10 @@ jobs:
           bun-version: ${{ env.BUN_FLOOR }}
       - name: Check the floor Bun is on PATH
         run: test "$(bun --version)" = "$BUN_FLOOR"
-      - run: bun test
+      # bun test보다 먼저 돈다. cli-smoke.test.ts가 PATH의 bun으로 dist를 다시 빌드한다.
       - name: Smoke the release bundle
         run: scripts/smoke-cli.sh
+      - run: bun test
 
   coverage:
     runs-on: ubuntu-latest

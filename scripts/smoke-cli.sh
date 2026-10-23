@@ -15,7 +15,8 @@ repo="$work/repo"
 git init -q "$repo"
 printf 'one\n' >"$repo/a.txt"
 git -C "$repo" add a.txt
-git -C "$repo" -c user.email=smoke@example.com -c user.name=smoke commit -q -m init
+git -C "$repo" -c user.email=smoke@example.com -c user.name=smoke -c commit.gpgsign=false \
+	commit -q -m init
 printf 'two\n' >"$repo/a.txt"
 
 echo "bun $(bun --version)"
@@ -40,10 +41,12 @@ fi
 
 origin="${url%%/\?*}"
 query="${url#*\?}"
-curl -fsS -o /dev/null "$origin/api/ping?$query"
-curl -fsS -o /dev/null "$origin/api/summary?$query"
-curl -fsS "$origin/api/diff?$query" | grep -q '"a.txt"'
-curl -fsS -o /dev/null "$url"
-curl -fsS -o /dev/null "$origin/main.js"
-curl -fsS -o /dev/null "$origin/worker.js"
+get() { curl -fsS --max-time 30 "$@"; }
+get -o /dev/null "$origin/api/ping?$query"
+get -o /dev/null "$origin/api/summary?$query"
+diff="$(get "$origin/api/diff?$query")"
+grep -q '"a.txt"' <<<"$diff" || { echo "/api/diff has no a.txt: $diff" >&2; exit 1; }
+get -o /dev/null "$url"
+get -o /dev/null "$origin/main.js"
+get -o /dev/null "$origin/worker.js"
 echo "smoke ok"

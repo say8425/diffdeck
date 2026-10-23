@@ -21,7 +21,9 @@ paths:
 - 잡 6개(lint — format:check 스텝 포함 · typecheck · test · bun-floor · coverage · e2e)가 `main` 룰셋의 필수 체크다. 잡 이름을 바꾸거나 지우면 룰셋도 같이 고친다 — 룰셋은 이름으로 기다려서, 없어진 이름 때문에 모든 PR이 막힌다. 룰셋: `gh api repos/say8425/diffdeck/rulesets/18998573`.
 - 우회자(`bypass_actors`)가 없어 관리자도 빨간 CI로 머지하지 못한다. `strict`(최신 `main` 포함 요구)는 끈다 — 켜면 머지마다 열린 PR의 e2e를 다시 돌려야 한다. flake는 `gh run rerun <id> --failed`로 다시 돌린다.
 - setup-bun 스텝은 `bun-version-file: .bun-version`으로 같은 Bun을 쓴다(`bun-floor`의 두 번째 스텝만 예외). 고정하지 않으면 새 Bun이 나올 때마다 PR과 무관하게 결과가 바뀐다 — Bun의 line coverage 집계가 버전마다 달라 coverage 게이트가 갑자기 실패할 수 있다. 올릴 때는 `.bun-version`과 devDep `@types/bun`을 같이 바꾸고, 그 버전으로 `bun run test:coverage`를 로컬에서 먼저 돌린다.
-- 지원 하한은 Bun 1.4.0이다(README와 번역 4종의 요구 사항 줄). `.bun-version`을 올리면 `@types/bun`도 올라가 하한에 없는 API가 타입 검사와 다른 잡을 통과한다. 그래서 `bun-floor` 잡이 고정 Bun으로 설치·빌드한 뒤 `BUN_FLOOR` Bun으로 `bun test`와 `scripts/smoke-cli.sh`(빌드된 `dist/cli.js`를 띄워 첫 화면 API를 부른다)를 돈다. 설치를 하한 Bun으로 하지 않는 것은, 잠금 파일 포맷이 하한을 앞서는 날 하한과 무관하게 빨개지지 않게 하려는 것이다. 하한을 올리면 `BUN_FLOOR`, README 다섯 곳, 이 줄을 같은 PR에서 바꾼다.
+- 지원 하한은 Bun 1.4.0이다(README·번역 4종·`apps/viewer/README.md`의 요구 사항 줄). `.bun-version`을 올리면 `@types/bun`도 올라가 하한에 없는 API가 타입 검사와 다른 잡을 통과한다. 그래서 `bun-floor` 잡이 고정 Bun으로 설치·빌드한 뒤 `BUN_FLOOR` Bun으로 `scripts/smoke-cli.sh`(빌드된 `dist/cli.js`를 띄워 첫 화면 API를 부른다)와 `bun test`를 돈다. 설치를 하한 Bun으로 하지 않는 것은, 잠금 파일 포맷이 하한을 앞서는 날 하한과 무관하게 빨개지지 않게 하려는 것이다.
+- 스모크는 `bun test`보다 먼저 돈다. `cli-smoke.test.ts`가 PATH의 bun(하한)으로 `dist`를 다시 빌드하므로, 순서를 바꾸면 릴리스 번들 대신 하한 Bun이 빌드한 번들을 스모크한다. 같은 이유로 `build.ts`도 하한 Bun에서 돌아야 한다.
+- `bun-floor`가 테스트 코드에서만 빨개지면(새 `bun:test` 매처, `bunfig.toml` 키 등) 테스트를 고친다. 사용자는 테스트를 돌리지 않으므로 그 때문에 하한을 올리지 않는다. 하한을 올리면 `BUN_FLOOR`, README 여섯 곳(`apps/viewer/README.md` 포함), 이 줄을 같은 PR에서 바꾼다.
 - 모든 잡은 `bun install --frozen-lockfile`로 설치한다. e2e 잡은 Node를 고정하고 `playwright install --with-deps chrome`으로 실제 Chrome을 깐다(`channel: "chrome"`). 실패하면 `apps/viewer/test-results/`를 아티팩트로 올린다.
 - e2e는 골라 돌리지 않고 전부 돈다 — 어느 계약이 깨질지 미리 알 수 없다.
 
