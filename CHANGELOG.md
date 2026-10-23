@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.7.1...diffdeck-v1.8.0) (2026-10-23)
+
+
+### Features
+
+* ⋯ 메뉴에서 코드 글자 크기를 키우고 줄이고 ×1로 되돌린다 ([#100](https://github.com/say8425/diffdeck/issues/100)) ([18d8509](https://github.com/say8425/diffdeck/commit/18d8509888d4b57d92c8e539807906fdd21219d3))
+
 ## [1.7.1](https://github.com/say8425/diffdeck/compare/diffdeck-v1.7.0...diffdeck-v1.7.1) (2026-10-05)
 
 
