@@ -423,7 +423,7 @@
 				display: flex;
 				flex-direction: column;
 				gap: 10px;
-				min-width: 180px;
+				min-width: 208px;
 				padding: 12px;
 				background: var(--vd-bg);
 				border: 1px solid var(--vd-border);
@@ -464,6 +464,35 @@
 			}
 			#overflow-menu #version-value {
 				font-variant-numeric: tabular-nums;
+			}
+			#font-scale {
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+			}
+			#font-scale .font-scale-head {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+			}
+			#font-scale-value {
+				color: var(--vd-fg-muted);
+				font-variant-numeric: tabular-nums;
+			}
+			#font-scale .font-scale-buttons {
+				display: flex;
+				gap: 6px;
+			}
+			#toolbar #font-scale .font-scale-buttons button {
+				flex: 1 1 0;
+				justify-content: center;
+				padding: 0;
+			}
+			#toolbar #font-scale .font-scale-buttons button:disabled {
+				opacity: 0.38;
+				cursor: default;
+				background: var(--vd-inset);
 			}
 			/* 피커는 오버플로 메뉴처럼 툴바에 앵커한 절대 위치 패널이다(grab의
 			   computePlacement를 쓰지 않는다). */
@@ -1135,6 +1164,66 @@
 								><input type="checkbox" id="toggle-fold-with-tree" /> Fold with
 								tree</label
 							>
+							<div class="menu-divider"></div>
+							<div
+								id="font-scale"
+								role="group"
+								aria-labelledby="font-scale-label"
+							>
+								<div class="font-scale-head">
+									<span id="font-scale-label">Font size</span>
+									<span id="font-scale-value" aria-live="polite"></span>
+								</div>
+								<div class="font-scale-buttons">
+									<button
+										id="font-scale-dec"
+										type="button"
+										aria-label="Decrease font size"
+										title="Decrease font size"
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											aria-hidden="true"
+										>
+											<line x1="5" y1="12" x2="19" y2="12" />
+										</svg>
+									</button>
+									<button
+										id="font-scale-reset"
+										type="button"
+										aria-label="Reset font size"
+										title="Reset font size"
+									>
+										×1
+									</button>
+									<button
+										id="font-scale-inc"
+										type="button"
+										aria-label="Increase font size"
+										title="Increase font size"
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											aria-hidden="true"
+										>
+											<line x1="5" y1="12" x2="19" y2="12" />
+											<line x1="12" y1="5" x2="12" y2="19" />
+										</svg>
+									</button>
+								</div>
+							</div>
 							<div class="menu-divider"></div>
 							<a
 								id="version-link"

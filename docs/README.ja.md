@@ -29,7 +29,7 @@ diff レンダリングエンジンが提供する機能:
 - **仮想化レンダリング**: 大規模な diff でもスムーズに動作し、ファイルヘッダーは sticky。
 - **ファイル単位の Shadow DOM カプセル化**: ビューアのスタイルがページに漏れ出すことはありません。
 
-このエンジンをラップするインタラクティブなビューア chrome — クリックでの折りたたみ、パスのコピー、アプリ内検索、watch(自動更新) — は [cc-statusline](https://github.com/say8425/cc-statusline) のビューアに由来し、現在は検索可能なワークツリー・ブランチピッカー、プルリクエストバッジ、Grab とともに diffdeck の `apps/viewer/` に置かれています。
+このエンジンをラップするインタラクティブなビューア chrome — クリックでの折りたたみ、パスのコピー、アプリ内検索、コードの文字サイズ調整、watch(自動更新) — は [cc-statusline](https://github.com/say8425/cc-statusline) のビューアに由来し、現在は検索可能なワークツリー・ブランチピッカー、プルリクエストバッジ、Grab とともに diffdeck の `apps/viewer/` に置かれています。
 
 ![diffdeck ビューア — git ステータスバッジ付きのファイルツリーとシンタックスハイライトされた diff](screenshot.png)
 

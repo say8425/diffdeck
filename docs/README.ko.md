@@ -29,7 +29,7 @@ diff 렌더링 엔진이 제공하는 기능:
 - 큰 diff에서도 부드럽게 동작하는 **가상화 렌더링**, sticky 파일 헤더 포함.
 - 파일마다 적용되는 **shadow DOM 캡슐화**로 뷰어 스타일이 페이지로 새어나가지 않습니다.
 
-이 엔진을 감싸는 인터랙티브 뷰어 chrome — 클릭으로 접기, 경로 복사, 인앱 검색, watch/자동 새로고침 — 은 [cc-statusline](https://github.com/say8425/cc-statusline) 뷰어에서 왔으며, 지금은 검색 가능한 워크트리·브랜치 피커, 풀 리퀘스트 배지, Grab과 함께 diffdeck의 `apps/viewer/`에 있습니다.
+이 엔진을 감싸는 인터랙티브 뷰어 chrome — 클릭으로 접기, 경로 복사, 인앱 검색, 코드 글자 크기 조절, watch/자동 새로고침 — 은 [cc-statusline](https://github.com/say8425/cc-statusline) 뷰어에서 왔으며, 지금은 검색 가능한 워크트리·브랜치 피커, 풀 리퀘스트 배지, Grab과 함께 diffdeck의 `apps/viewer/`에 있습니다.
 
 ![diffdeck 뷰어 — git 상태 배지가 있는 파일 트리와 구문 강조된 diff](screenshot.png)
 

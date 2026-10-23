@@ -29,7 +29,7 @@ Lo que ofrece el motor de renderizado de diffs:
 - **Renderizado virtualizado** que se mantiene fluido en diffs grandes, con cabeceras de archivo fijas (sticky).
 - **Encapsulación con Shadow DOM** por archivo, de modo que los estilos del visor nunca se filtran a la página.
 
-El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada y watch/auto-actualización — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck, junto con un selector de worktrees y ramas con búsqueda, insignias de pull request y Grab.
+El chrome interactivo del visor que envuelve este motor — plegado con clic, copiar ruta, búsqueda integrada, tamaño de letra del código ajustable y watch/auto-actualización — proviene del visor de [cc-statusline](https://github.com/say8425/cc-statusline) y ahora vive en `apps/viewer/` de diffdeck, junto con un selector de worktrees y ramas con búsqueda, insignias de pull request y Grab.
 
 ![El visor de diffdeck — árbol de archivos con insignias de estado de git y diffs con resaltado de sintaxis](screenshot.png)
 
