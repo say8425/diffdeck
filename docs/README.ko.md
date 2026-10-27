@@ -102,7 +102,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--watch`           | watch(자동 새로고침)를 켠 상태로 시작                               |
 | `--no-flatten`      | 파일 트리를 flatten하지 않은 상태로 시작(flatten은 기본적으로 켜져 있음) |
 | `--tree-right`      | 파일 트리를 오른쪽에 둔 상태로 시작                                 |
-| `--split`           | split 뷰로 시작(없으면 마지막에 고른 레이아웃)                     |
+| `--split`           | split 뷰로 시작(없으면 마지막에 고른 레이아웃, 처음에는 unified)                     |
 | `--hide-tree`       | 파일 트리를 숨긴 상태로 시작                                       |
 | `--fold-with-tree`  | 파일 트리에서 디렉토리를 접으면 diff도 함께 접히는 상태로 시작       |
 | `-h`, `--help`      | 도움말 표시                                                        |

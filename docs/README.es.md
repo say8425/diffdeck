@@ -102,7 +102,7 @@ Opciones:
 | `--watch`          | Iniciar con watch (auto-actualización) activado                                   |
 | `--no-flatten`     | Iniciar con el árbol de archivos sin aplanar (flatten está activo por defecto)    |
 | `--tree-right`     | Iniciar con el árbol de archivos a la derecha                                     |
-| `--split`          | Iniciar en vista split (si no, la última vista elegida)                           |
+| `--split`          | Iniciar en vista split (si no, la última vista elegida; unified la primera vez)                           |
 | `--hide-tree`      | Iniciar con el árbol de archivos oculto                                            |
 | `--fold-with-tree` | Iniciar con el plegado de directorios de la barra lateral sincronizado con el plegado del diff |
 | `-h`, `--help`     | Mostrar ayuda                                                                      |

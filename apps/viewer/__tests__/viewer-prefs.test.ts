@@ -89,6 +89,9 @@ describe("launch-flag resolvers (URL param → localStorage → default)", () =>
 			resolveDiffStyle(null, get({ "diffdeck:diff-style": "unified" })),
 		).toBe("unified");
 		expect(resolveDiffStyle(null, empty)).toBe("unified");
+		expect(
+			resolveDiffStyle("bogus", get({ "diffdeck:diff-style": "garbage" })),
+		).toBe("unified");
 	});
 	test("resolveFlatten: URL wins, else localStorage, else default on", () => {
 		expect(resolveFlatten("0", empty)).toBe(false);

@@ -42,6 +42,10 @@ test("--split applies without overwriting the saved layout", async ({
 }) => {
 	const viewer = await launchViewer(["--split"]);
 	try {
+		// 저장값을 먼저 둬야 "덮어쓰지 않음"과 "애초에 안 씀"을 가른다.
+		await page.addInitScript((k) => {
+			if (localStorage.getItem(k) === null) localStorage.setItem(k, "unified");
+		}, DIFF_STYLE_KEY);
 		await page.goto(viewer.url);
 		await expect(page.locator("#status")).toHaveText(/\d+ file\(s\)/);
 		await expect(
@@ -49,7 +53,7 @@ test("--split applies without overwriting the saved layout", async ({
 		).toHaveAttribute("aria-pressed", "true");
 		expect(
 			await page.evaluate((k) => localStorage.getItem(k), DIFF_STYLE_KEY),
-		).toBeNull();
+		).toBe("unified");
 	} finally {
 		await viewer.stop();
 	}
