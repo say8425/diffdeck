@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.8.0...diffdeck-v1.9.0) (2026-10-27)
+
+
+### Features
+
+* 마지막으로 고른 Unified/Split 레이아웃을 기억한다 ([#105](https://github.com/say8425/diffdeck/issues/105)) ([14108db](https://github.com/say8425/diffdeck/commit/14108dba66e1260cb139292dabfc71d58998719f))
+
 ## [1.8.0](https://github.com/say8425/diffdeck/compare/diffdeck-v1.7.1...diffdeck-v1.8.0) (2026-10-23)
 
 
