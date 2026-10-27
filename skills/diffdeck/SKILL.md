@@ -119,7 +119,7 @@ which side, before acting on it.
 - `--watch` — start with watch (auto-refresh) on.
 - `--no-flatten` — start with the file tree un-flattened (flatten is on by default).
 - `--tree-right` — start with the file tree on the right.
-- `--split` — start in split view (unified is the default).
+- `--split` — start in split view (otherwise the last layout picked in the app, unified at first).
 - `--hide-tree` — start with the file tree hidden.
 - `--fold-with-tree` — start with sidebar directory collapse synced to diff folds.
 

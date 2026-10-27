@@ -22,9 +22,19 @@ export const resolveUntracked = (urlParam: string | null): boolean =>
 export const resolveTreeHidden = (urlParam: string | null): boolean =>
 	urlParam === "0";
 
+export const DIFF_STYLE_KEY = "diffdeck:diff-style";
+
 export const resolveDiffStyle = (
 	urlParam: string | null,
-): "unified" | "split" => (urlParam === "split" ? "split" : "unified");
+	get: Getter,
+): "unified" | "split" =>
+	urlParam === "split"
+		? "split"
+		: urlParam === "unified"
+			? "unified"
+			: get(DIFF_STYLE_KEY) === "split"
+				? "split"
+				: "unified";
 
 export const resolveFlatten = (
 	urlParam: string | null,

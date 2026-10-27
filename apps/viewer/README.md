@@ -18,19 +18,19 @@ default browser.
 
 ## Options
 
-| Flag               | Description                                                |
-| ------------------ | ---------------------------------------------------------- |
-| `--port <n>`       | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)    |
-| `--no-open`        | Do not open a browser automatically (URL still printed)    |
-| `--untracked`      | Start with untracked files included                        |
-| `--watch`          | Start with watch (auto-refresh) on                         |
-| `--no-flatten`     | Start with the file tree un-flattened (flatten is on)      |
-| `--tree-right`     | Start with the file tree on the right                      |
-| `--split`          | Start in split view (unified is the default)               |
-| `--hide-tree`      | Start with the file tree hidden                            |
-| `--fold-with-tree` | Start with sidebar directory collapse synced to diff folds |
-| `-h`, `--help`     | Show help                                                  |
-| `-v`, `--version`  | Show version                                               |
+| Flag               | Description                                                             |
+| ------------------ | ----------------------------------------------------------------------- |
+| `--port <n>`       | Port to serve on (default: `$DIFFDECK_PORT` or `49573`)                 |
+| `--no-open`        | Do not open a browser automatically (URL still printed)                 |
+| `--untracked`      | Start with untracked files included                                     |
+| `--watch`          | Start with watch (auto-refresh) on                                      |
+| `--no-flatten`     | Start with the file tree un-flattened (flatten is on)                   |
+| `--tree-right`     | Start with the file tree on the right                                   |
+| `--split`          | Start in split view (else the last layout you picked; unified at first) |
+| `--hide-tree`      | Start with the file tree hidden                                         |
+| `--fold-with-tree` | Start with sidebar directory collapse synced to diff folds              |
+| `-h`, `--help`     | Show help                                                               |
+| `-v`, `--version`  | Show version                                                            |
 
 The view flags (`--untracked`, `--watch`, `--no-flatten`, `--tree-right`,
 `--split`, `--hide-tree`, `--fold-with-tree`) set the initial state for this

@@ -102,7 +102,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--watch` | watch(自動更新)を有効にした状態で開始 |
 | `--no-flatten` | ファイルツリーを未flatten状態で開始(flatten はデフォルトで有効) |
 | `--tree-right` | ファイルツリーを右側に配置した状態で開始 |
-| `--split` | split ビューで開始(デフォルトは unified) |
+| `--split` | split ビューで開始(指定しなければ前回選んだレイアウト、初回は unified) |
 | `--hide-tree` | ファイルツリーを非表示にした状態で開始 |
 | `--fold-with-tree` | サイドバーのディレクトリ折りたたみを diff の折りたたみと同期した状態で開始 |
 | `-h`, `--help` | ヘルプを表示 |
