@@ -66,6 +66,7 @@ import {
 	BASE_CODE_LINE_HEIGHT,
 	codeMetrics,
 	compareBaseKey,
+	DIFF_STYLE_KEY,
 	FLATTEN_KEY,
 	FOLD_WITH_TREE_KEY,
 	FONT_SCALE_KEY,
@@ -304,7 +305,10 @@ const refreshRepoLabel = async (): Promise<void> => {
 	}
 };
 
-let diffStyle: "unified" | "split" = resolveDiffStyle(params.get("style"));
+let diffStyle: "unified" | "split" = resolveDiffStyle(
+	params.get("style"),
+	(k) => localStorage.getItem(k),
+);
 let includeUntracked = resolveUntracked(params.get("untracked"));
 // 견줄 기준: "HEAD"는 미커밋 변경만, "@auto"는 서버가 해석한 base, 그 밖은
 // 그 참조 자체다.
@@ -1222,6 +1226,7 @@ for (const b of styleButtons) {
 		const next = b.dataset.style === "split" ? "split" : "unified";
 		if (next === diffStyle) return;
 		diffStyle = next;
+		localStorage.setItem(DIFF_STYLE_KEY, diffStyle);
 		syncStyleButtons();
 		if (lastFiles) renderPatch(lastFiles);
 		else void load();

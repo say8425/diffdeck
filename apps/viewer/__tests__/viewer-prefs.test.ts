@@ -77,10 +77,18 @@ describe("launch-flag resolvers (URL param → localStorage → default)", () =>
 		expect(resolveTreeHidden("0")).toBe(true);
 		expect(resolveTreeHidden("1")).toBe(false);
 	});
-	test("resolveDiffStyle: URL only, default unified", () => {
-		expect(resolveDiffStyle(null)).toBe("unified");
-		expect(resolveDiffStyle("split")).toBe("split");
-		expect(resolveDiffStyle("unified")).toBe("unified");
+	test("resolveDiffStyle: URL wins, else localStorage, else default unified", () => {
+		expect(resolveDiffStyle("split", empty)).toBe("split");
+		expect(
+			resolveDiffStyle("unified", get({ "diffdeck:diff-style": "split" })),
+		).toBe("unified");
+		expect(
+			resolveDiffStyle(null, get({ "diffdeck:diff-style": "split" })),
+		).toBe("split");
+		expect(
+			resolveDiffStyle(null, get({ "diffdeck:diff-style": "unified" })),
+		).toBe("unified");
+		expect(resolveDiffStyle(null, empty)).toBe("unified");
 	});
 	test("resolveFlatten: URL wins, else localStorage, else default on", () => {
 		expect(resolveFlatten("0", empty)).toBe(false);

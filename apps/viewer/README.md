@@ -26,7 +26,7 @@ default browser.
 | `--watch`          | Start with watch (auto-refresh) on                         |
 | `--no-flatten`     | Start with the file tree un-flattened (flatten is on)      |
 | `--tree-right`     | Start with the file tree on the right                      |
-| `--split`          | Start in split view (unified is the default)               |
+| `--split`          | Start in split view (else the last layout you picked)      |
 | `--hide-tree`      | Start with the file tree hidden                            |
 | `--fold-with-tree` | Start with sidebar directory collapse synced to diff folds |
 | `-h`, `--help`     | Show help                                                  |

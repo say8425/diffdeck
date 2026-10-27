@@ -102,7 +102,7 @@ bunx @say8425/diffdeck        # or `diffdeck` if installed globally
 | `--watch`           | 启动时开启 watch（自动刷新）                                |
 | `--no-flatten`      | 启动时文件树不进行 flatten（默认开启 flatten）               |
 | `--tree-right`      | 启动时文件树显示在右侧                                      |
-| `--split`           | 以 split 视图启动（默认是 unified）                          |
+| `--split`           | 以 split 视图启动（否则使用上次选择的布局）                 |
 | `--hide-tree`       | 启动时隐藏文件树                                            |
 | `--fold-with-tree`  | 启动时让侧边栏目录折叠与 diff 折叠保持同步                   |
 | `-h`, `--help`      | 显示帮助                                                    |
